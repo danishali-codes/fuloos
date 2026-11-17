@@ -103,6 +103,9 @@ async function main() {
   const baseUrl = `http://127.0.0.1:${port}`;
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "fuloos-pb-test-"));
 
+  const testMigrations = path.join(dataDir, "migrations");
+  fs.cpSync(migrationsDir, testMigrations, {recursive:true});
+  fs.writeFileSync(path.join(testMigrations,"9999999999_test_batch.js"), `migrate((app) => {const settings=app.settings(); settings.batch.enabled=true; settings.batch.maxRequests=100; app.save(settings);});`);
   console.log(`Starting PocketBase ${pbVersion} on ${baseUrl} (migrations: ${migrationsDir})`);
   const pb = spawn(
     binPath,
@@ -110,7 +113,7 @@ async function main() {
       "serve",
       `--http=127.0.0.1:${port}`,
       `--dir=${dataDir}`,
-      `--migrationsDir=${migrationsDir}`,
+      `--migrationsDir=${testMigrations}`,
       `--hooksDir=${hooksDir}`,
     ],
     {

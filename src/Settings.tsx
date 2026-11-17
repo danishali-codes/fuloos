@@ -47,6 +47,13 @@ export function SettingsDialog({
   ];
   useEffect(() => {
     dialog.current?.showModal();
+    if (new URLSearchParams(window.location.search).get("settings") === "notifications") {
+      const section = dialog.current?.querySelector("#notifications-heading") ?? dialog.current?.querySelector(".notifications-settings");
+      section?.scrollIntoView?.({block: "start"});
+      const url = new URL(window.location.href);
+      url.searchParams.delete("settings");
+      window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+    }
   }, []);
   return (
     <dialog

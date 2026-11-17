@@ -143,7 +143,7 @@ function App() {
     [view, setView] = useState("month"),
     [rangeFrom, setRangeFrom] = useState(today().slice(0, 7)),
     [hidden, setHidden] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(() => new URLSearchParams(window.location.search).get("settings") === "notifications");
   const [rulesOpen, setRulesOpen] = useState(false);
   const appStorage = useMemo<StorageLike | undefined>(() => {
     try {
@@ -224,6 +224,12 @@ function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [session, demo]);
   const generation = useRef(0);
+  const mutationKeys = useRef(new Map<string, string>());
+  function operationKey(key: string) {
+    let value = mutationKeys.current.get(key);
+    if (!value) { value = crypto.randomUUID(); mutationKeys.current.set(key, value); }
+    return value;
+  }
   // Background saves keep running while the user moves between pages.
   const queue = useMemo(() => new TaskQueue(), []);
   const owner = useRef<string | null>(null);
@@ -603,15 +609,12 @@ function App() {
       return;
     }
     if (!backend || !session) throw new Error("Please sign in.");
-    const savedTx = await backend.save("transactions", {
-      ...tx,
-      to_account_id: tx.to_account_id ?? "",
-      category_id: tx.category_id ?? "",
-    });
-    await backend.updateCapturedAlertStatus(alert.id, "imported");
+    const current = generation.current;
+    const savedTx = await backend.importCapturedAlert(alert.id, {...tx});
+    if (current !== generation.current) return;
     setLedger((l) => ({
       ...l,
-      transactions: [...l.transactions, savedTx],
+      transactions: [...l.transactions.filter((t) => t.id !== savedTx.id), savedTx],
       captured_alerts: (l.captured_alerts ?? []).map((a) =>
         a.id === alert.id ? { ...a, status: "imported" } : a,
       ),
@@ -757,27 +760,17 @@ function App() {
           goals: (l.goals ?? []).map((g) =>
             g.id === goal.id ? updatedGoal : g,
           ),
-          goal_contributions: [...(l.goal_contributions ?? []), contrib],
+          goal_contributions: [...(l.goal_contributions ?? []).filter((c) => c.id !== contrib.id), contrib],
         }));
       } else {
         if (!backend || !session) throw new Error("Please sign in.");
         const current = generation.current;
-        let createdTx: Transaction | null = null;
-        if (recordTransaction) {
-          createdTx = await backend.save("transactions", recordTransaction);
-        }
-        const contrib = await backend.save("goal_contributions", {
-          goal_id: goal.id,
-          amount,
-          date,
-          transaction_id: createdTx ? createdTx.id : "",
-          notes,
+        const key = JSON.stringify(["goal", goal.id, amount, date, notes, recordTransaction]);
+        const result = await backend.contributeGoal(goal.id, {
+          amount, date, notes, record_transaction: recordTransaction, operation_key: operationKey(key),
         });
-        const updatedGoal = await backend.save(
-          "goals",
-          { current_amount: nextAmount, status: nextStatus },
-          goal.id,
-        );
+        mutationKeys.current.delete(key);
+        const { goal: updatedGoal, contribution: contrib, transaction: createdTx } = result;
         if (current !== generation.current) return;
         setLedger((l) => ({
           ...l,
@@ -787,7 +780,7 @@ function App() {
           goals: (l.goals ?? []).map((g) =>
             g.id === goal.id ? updatedGoal : g,
           ),
-          goal_contributions: [...(l.goal_contributions ?? []), contrib],
+          goal_contributions: [...(l.goal_contributions ?? []).filter((c) => c.id !== contrib.id), contrib],
         }));
       }
       setGoalContributeTarget(null);
@@ -808,10 +801,11 @@ function App() {
       if (!demo) {
         if (!backend || !session) throw new Error("Please sign in.");
         const current = generation.current;
-        await backend.remove("goal_contributions", c.id);
-        if (goal && nextAmount !== null) {
-          await backend.save("goals", { current_amount: nextAmount }, goal.id);
-        }
+        const updated = await backend.removeGoalContribution(c.id);
+        if (current !== generation.current) return;
+        setLedger((l) => ({...l, goals: (l.goals ?? []).map((g) => g.id === updated.id ? updated : g),
+          goal_contributions: (l.goal_contributions ?? []).filter((item) => item.id !== c.id)}));
+        return;
         if (current !== generation.current) return;
       }
       setLedger((l) => ({
@@ -861,25 +855,17 @@ function App() {
       }
       if (!backend || !session) throw new Error("Please sign in.");
       const current = generation.current;
-      const saved = await backend.save("net_worth_items", draft, id);
-      let initialSnap: NetWorthSnapshot | null = null;
-      if (!id) {
-        initialSnap = await backend.save("net_worth_snapshots", {
-          item_id: saved.id,
-          value: saved.current_value,
-          date: saved.as_of_date,
-          notes: "Initial valuation",
-        });
-      }
+      const key = JSON.stringify(["net-worth-item", id, draft]);
+      const result = await backend.saveNetWorthItemAtomic({...draft}, id, operationKey(key));
+      mutationKeys.current.delete(key);
+      const saved = result.item;
       if (current !== generation.current) return;
       setLedger((l) => ({
         ...l,
         net_worth_items: id
           ? (l.net_worth_items ?? []).map((i) => (i.id === id ? saved : i))
           : [...(l.net_worth_items ?? []), saved],
-        net_worth_snapshots: initialSnap
-          ? [...(l.net_worth_snapshots ?? []), initialSnap]
-          : l.net_worth_snapshots,
+        net_worth_snapshots: [...(l.net_worth_snapshots ?? []).filter((snap) => snap.item_id !== saved.id), ...result.snapshots],
       }));
       setNetWorthModal(null);
     } catch (e) {
@@ -947,21 +933,14 @@ function App() {
       }
       if (!backend || !session) throw new Error("Please sign in.");
       const current = generation.current;
-      const snap = await backend.save("net_worth_snapshots", {
-        item_id: item.id,
-        value,
-        date,
-        notes,
-      });
-      const updated = await backend.save(
-        "net_worth_items",
-        { current_value: nextVal, as_of_date: nextAsOf },
-        item.id,
-      );
+      const key = JSON.stringify(["valuation", item.id, value, date, notes]);
+      const result = await backend.saveNetWorthValuationAtomic(item.id, value, date, notes, operationKey(key));
+      mutationKeys.current.delete(key);
+      const updated = result.item;
       if (current !== generation.current) return;
       setLedger((l) => ({
         ...l,
-        net_worth_snapshots: [...(l.net_worth_snapshots ?? []), snap],
+        net_worth_snapshots: [...(l.net_worth_snapshots ?? []).filter((snap) => snap.item_id !== item.id), ...result.snapshots],
         net_worth_items: (l.net_worth_items ?? []).map((i) =>
           i.id === item.id ? updated : i,
         ),
@@ -981,15 +960,19 @@ function App() {
       if (!demo) {
         if (!backend || !session) throw new Error("Please sign in.");
         const current = generation.current;
-        await backend.remove("net_worth_snapshots", snap.id);
+        const result = await backend.deleteNetWorthSnapshotAtomic(snap.id);
         if (current !== generation.current) return;
+        setLedger((l) => ({...l,
+          net_worth_items: (l.net_worth_items ?? []).map((i) => i.id === result.item.id ? result.item : i),
+          net_worth_snapshots: [...(l.net_worth_snapshots ?? []).filter((s) => s.item_id !== result.item.id), ...result.snapshots]}));
+        return;
       }
-      setLedger((l) => ({
-        ...l,
-        net_worth_snapshots: (l.net_worth_snapshots ?? []).filter(
-          (s) => s.id !== snap.id,
-        ),
-      }));
+      const remaining = (ledgerRef.current.net_worth_snapshots ?? []).filter((s) => s.item_id === snap.item_id && s.id !== snap.id).sort((a,b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+      if (!remaining.length) throw new Error("Keep at least one valuation for this item.");
+      const latest = remaining[0];
+      setLedger((l) => ({...l,
+        net_worth_items: (l.net_worth_items ?? []).map((i) => i.id === snap.item_id ? {...i, current_value: latest.value, as_of_date: latest.date} : i),
+        net_worth_snapshots: (l.net_worth_snapshots ?? []).filter((s) => s.id !== snap.id)}));
     } catch (e) {
       setError(errorMessage(e));
     } finally {

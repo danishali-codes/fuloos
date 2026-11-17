@@ -39,6 +39,8 @@ export interface Account {
 }
 export interface Category {
   id: string;
+  household_id?: string | null;
+  user_id?: string;
   name: string;
   description: string;
   color: string;

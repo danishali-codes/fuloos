@@ -198,7 +198,7 @@ test("bulk updates use 100 PATCH operations per request, normalize relations and
     requests[0].url,
     "/api/collections/fuloos_transactions/records/record0",
   );
-  assert.equal(requests[0].body.user_id, "user-a");
+  assert.equal(requests[0].body.user_id, undefined);
   assert.equal(requests[0].body.category_id, "");
   assert.equal(requests[0].body.id, undefined);
 });

@@ -36,6 +36,7 @@ export function HouseholdSettings({
   onRemoveMember,
   onToggleAccountShare,
   onToggleBudgetShare,
+  onToggleCategoryShare,
   onReloadLedger,
 }: {
   demo: boolean;
@@ -72,6 +73,7 @@ export function HouseholdSettings({
     budgetId: string,
     householdId: string | null,
   ) => Promise<void>;
+  onToggleCategoryShare?: (categoryId:string,householdId:string|null) => Promise<void>;
   onReloadLedger?: () => Promise<void>;
 }) {
   const effectiveUserId = demo ? "demo-user" : (userId ?? "");
@@ -553,6 +555,24 @@ export function HouseholdSettings({
                 </div>
               )}
 
+              {canShare && categories.length > 0 && onToggleCategoryShare && (
+                <div>
+                  <div className="household-section-label">Shared categories</div>
+                  <p className="muted small">Share categories before using them on shared accounts. Category names are visible to all household members.</p>
+                  <div className="household-share-list">
+                    {categories.filter(c => (!c.user_id || c.user_id === effectiveUserId) && (!c.household_id || c.household_id === hh.id)).map(c => (
+                      <label className="household-share-item" key={c.id}>
+                        <input type="checkbox" checked={c.household_id === hh.id} disabled={disabled} onChange={async () => {
+                          setWorking(true); setError("");
+                          try { await onToggleCategoryShare(c.id,c.household_id === hh.id ? null : hh.id); }
+                          catch(err) { setError(errorMessage(err)); } finally {setWorking(false);}
+                        }} />
+                        <span>{c.emoji} {c.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
               {canShare && budgets.length > 0 && onToggleBudgetShare && (
                 <div>
                   <div className="household-section-label">Shared budgets</div>

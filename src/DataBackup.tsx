@@ -1,3 +1,4 @@
+import { backend } from "./client";
 import { useRef, useState } from "react";
 import { Download, FileJson, FileSpreadsheet, Upload } from "lucide-react";
 import {
@@ -16,11 +17,13 @@ import { downloadBlob, transactionsToCsv } from "./export";
 
 export function DataBackup({
   ledger,
+  demo = false,
   presetStore,
   busy,
   onRestore,
 }: {
   ledger: Ledger;
+  demo?: boolean;
   presetStore: Pick<PresetStore, "load" | "save">;
   busy?: boolean;
   onRestore: (backup: FuloosBackup, mode: RestoreMode) => Promise<void>;
@@ -71,6 +74,29 @@ export function DataBackup({
     try {
       const { presets } = await presetStore.load();
       const backup = createBackup(ledger, presets);
+      const api = demo ? null : backend;
+      if (api) {
+        const [notifications, households] = await Promise.all([api.loadNotificationPrefs(), api.loadHouseholds()]);
+        if (notifications.supported) backup.data.notification_prefs = notifications.prefs;
+        const session = await api.getSession();
+        if (households.supported) backup.data.households = households.households.filter(h => h.owner_id === session?.user.id);
+      }
+      let totalReceiptBytes = 0;
+      for (const tx of ledger.transactions) {
+        if (!tx.receipt) continue;
+        const blob = api
+          ? await api.getReceiptBlob(tx.id, tx.receipt)
+          : await fetch(tx.receipt).then(r => r.blob());
+        totalReceiptBytes += blob.size;
+        if (totalReceiptBytes > 50 * 1024 * 1024) throw new Error("Receipts exceed 50 MB. Export smaller groups or keep a server backup.");
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result).split(",")[1]);
+          reader.onerror = () => reject(new Error("Could not read receipt."));
+          reader.readAsDataURL(blob);
+        });
+        backup.data.attachments!.push({transaction_id:tx.id,filename:tx.receipt,mime:blob.type,base64});
+      }
       downloadBlob(
         serializeBackup(backup),
         `fuloos-backup-${today()}.json`,
@@ -134,8 +160,10 @@ export function DataBackup({
           <p className="muted small">
             Export your transactions as CSV or download a full JSON backup
             (accounts, categories, transactions, recurring schedules,
-            occurrences, preferences, budgets, and CSV presets). AI learning
-            logs and settings are excluded for privacy.
+            occurrences, preferences, budgets, goals, rules, net worth,
+            alerts, receipts and CSV presets). AI learning data, access tokens
+            and other household members are excluded. Restored household groups
+            need new invitations. Browser push must be enabled again.
           </p>
         </div>
       </div>

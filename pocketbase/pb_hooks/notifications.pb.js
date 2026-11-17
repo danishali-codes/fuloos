@@ -82,13 +82,12 @@ cronAdd("fuloos_notifications_hourly", "0 * * * *", () => {
       : undefined,
   });
 
-  const prefRecords = $app.findRecordsByFilter(
-    "fuloos_notification_prefs",
-    "email_enabled = true || channels != ''",
-    "",
-    500,
-    0,
-  );
+  const prefRecords = [];
+  for (let offset = 0; ; offset += 500) {
+    const rows = $app.findRecordsByFilter("fuloos_notification_prefs", "email_enabled = true || channels != ''", "id", 500, offset);
+    prefRecords.push(...rows);
+    if (rows.length < 500) break;
+  }
 
   for (const prefRec of prefRecords) {
     try {
@@ -168,19 +167,17 @@ cronAdd("fuloos_notifications_hourly", "0 * * * *", () => {
         amount: t.getInt("amount"),
         category_id: t.getString("category_id") || null,
         date: t.getString("date"),
+        splits: t.get("splits") || [],
       });
 
       const loadAll = (collection, mapper) => {
         try {
-          const rows = $app.findRecordsByFilter(
-            collection,
-            "user_id = {:uid}",
-            "",
-            2000,
-            0,
-            { uid: userId },
-          );
-          return rows.map(mapper);
+          const all = [];
+          for (let offset = 0; ; offset += 500) {
+            const rows = $app.findRecordsByFilter(collection, "user_id = {:uid}", "id", 500, offset, { uid: userId });
+            all.push(...rows.map(mapper));
+            if (rows.length < 500) return all;
+          }
         } catch (_) {
           return [];
         }

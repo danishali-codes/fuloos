@@ -310,13 +310,11 @@
     var spentByCat = {};
     for (var i = 0; i < transactions.length; i++) {
       var t = transactions[i];
-      if (
-        t.type === "expense" &&
-        t.category_id &&
-        typeof t.date === "string" &&
-        t.date.slice(0, 7) === month
-      ) {
-        spentByCat[t.category_id] = (spentByCat[t.category_id] || 0) + t.amount;
+      if (t.type !== "expense" || typeof t.date !== "string" || t.date.slice(0, 7) !== month) continue;
+      var allocations = Array.isArray(t.splits) && t.splits.length ? t.splits : [{category_id: t.category_id, amount: t.amount}];
+      for (var ai = 0; ai < allocations.length; ai++) {
+        var allocation = allocations[ai];
+        if (allocation.category_id) spentByCat[allocation.category_id] = (spentByCat[allocation.category_id] || 0) + allocation.amount;
       }
     }
 

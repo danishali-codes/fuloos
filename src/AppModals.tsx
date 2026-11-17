@@ -307,6 +307,12 @@ export function AppModals({
                   ? (memberId) => backend!.removeHouseholdMember(memberId)
                   : undefined
               }
+              onToggleCategoryShare={async (id, household_id) => {
+                if (demo) {setLedger({...ledger,categories:ledger.categories.map(c=>c.id===id?{...c,household_id}:c)}); return;}
+                if (!backend) return;
+                await backend.save("categories",{household_id},id);
+                await load();
+              }}
               onToggleAccountShare={async (accountId, householdId) => {
                 if (demo) {
                   setLedger({
@@ -320,16 +326,8 @@ export function AppModals({
                   return;
                 }
                 if (!backend) return;
-                const updated = await backend.shareAccountWithHousehold(
-                  accountId,
-                  householdId,
-                );
-                setLedger({
-                  ...ledger,
-                  accounts: ledger.accounts.map((a) =>
-                    a.id === accountId ? updated : a,
-                  ),
-                });
+                await backend.shareAccountWithHousehold(accountId,householdId);
+                await load();
               }}
               onToggleBudgetShare={async (budgetId, householdId) => {
                 if (demo) {
@@ -344,16 +342,8 @@ export function AppModals({
                   return;
                 }
                 if (!backend) return;
-                const updated = await backend.shareBudgetWithHousehold(
-                  budgetId,
-                  householdId,
-                );
-                setLedger({
-                  ...ledger,
-                  budgets: (ledger.budgets ?? []).map((b) =>
-                    b.id === budgetId ? updated : b,
-                  ),
-                });
+                await backend.shareBudgetWithHousehold(budgetId,householdId);
+                await load();
               }}
               onReloadLedger={!demo && backend ? load : undefined}
             />
@@ -361,6 +351,7 @@ export function AppModals({
           dataBackup={
             <DataBackup
               ledger={ledger}
+              demo={demo}
               presetStore={presetStore}
               busy={busy}
               onRestore={restoreBackup}

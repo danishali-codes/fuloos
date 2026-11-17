@@ -1038,7 +1038,7 @@ export function Editor({
                 </select>
               </label>
               <label>
-                Currency <span className="muted">Optional</span>
+                Original purchase currency <span className="muted">Optional</span>
                 <select
                   name="currency"
                   defaultValue={normalizeCurrencyCode(modal.item?.currency)}
@@ -1051,6 +1051,7 @@ export function Editor({
                 </select>
               </label>
             </div>
+            <p className="form-hint">All balances and transfers are recorded in AED. The currency above is a purchase reference, not a native-currency account balance. Enter your bank’s actual conversion rate for foreign purchases.</p>
             <div className="form-row">
               <label>
                 Balance (AED) <span className="muted">Optional</span>
