@@ -75,9 +75,16 @@ export function AppLockScreen({
           <Lock size={24} />
         </div>
         <h1 id="applock-title">{uiText("Fuloos is locked")}</h1>
-        <p className="muted small"> {uiText("Signed in as")} <b>{email}</b>{uiText(". Enter your PIN to view your workspace.")} </p>
+        <p className="muted small">
+          {" "}
+          {uiText("Signed in as")} <b>{email}</b>
+          {uiText(". Enter your PIN to view your workspace.")}{" "}
+        </p>
         <form onSubmit={submit} className="applock-form">
-          <label> {uiText("PIN")} <input
+          <label>
+            {" "}
+            {uiText("PIN")}{" "}
+            <input
               autoFocus
               required
               type="password"
@@ -97,7 +104,11 @@ export function AppLockScreen({
               {error}
             </div>
           )}
-          <button type="submit" className="primary" disabled={busy || pin.length < 4}>
+          <button
+            type="submit"
+            className="primary"
+            disabled={busy || pin.length < 4}
+          >
             {busy ? uiText("Checking…") : uiText("Unlock")}
           </button>
         </form>
@@ -108,13 +119,21 @@ export function AppLockScreen({
             disabled={busy}
             onClick={onSignOut}
           >
-            <LogOut size={15} /> {uiText("Sign out")} </button>
+            <LogOut size={15} /> {uiText("Sign out")}{" "}
+          </button>
           {attempts > 0 && (
-            <span className="muted small"> {uiText("Failed attempts:")} {attempts} / {MAX_PIN_ATTEMPTS}
+            <span className="muted small">
+              {" "}
+              {uiText("Failed attempts:")} {attempts} / {MAX_PIN_ATTEMPTS}
             </span>
           )}
         </div>
-        <p className="applock-note muted small"> {uiText("Privacy screen only — hides financial data in this browser when idle or reopened; does not encrypt local storage.")} </p>
+        <p className="applock-note muted small">
+          {" "}
+          {uiText(
+            "Privacy screen only — hides financial data in this browser when idle or reopened; does not encrypt local storage.",
+          )}{" "}
+        </p>
       </div>
     </div>
   );

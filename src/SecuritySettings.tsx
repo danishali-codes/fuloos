@@ -295,7 +295,9 @@ export function SecuritySettings({
       <div className="security-block">
         <div className="security-row">
           <div>
-            <b>{uiText("Signed in as")} {session.user.email}</b>
+            <b>
+              {uiText("Signed in as")} {session.user.email}
+            </b>
             <p className="muted small">
               {session.user.verified === true
                 ? uiText("Email verified")
@@ -312,7 +314,8 @@ export function SecuritySettings({
                 disabled={busy}
                 onClick={sendVerification}
               >
-                <Mail size={14} /> {uiText("Verify email")} </button>
+                <Mail size={14} /> {uiText("Verify email")}{" "}
+              </button>
             )}
             <button
               type="button"
@@ -323,13 +326,17 @@ export function SecuritySettings({
                 onCloseSettings();
               }}
             >
-              <LogOut size={14} /> {uiText("Sign out")} </button>
+              <LogOut size={14} /> {uiText("Sign out")}{" "}
+            </button>
             <button
               type="button"
               className="secondary danger-outline"
               disabled={busy}
               onClick={handleSignOutEverywhere}
-            > {uiText("Sign out everywhere")} </button>
+            >
+              {" "}
+              {uiText("Sign out everywhere")}{" "}
+            </button>
           </div>
         </div>
 
@@ -340,17 +347,25 @@ export function SecuritySettings({
               className="text-button"
               onClick={() => setVerifyOpen((v) => !v)}
             >
-              {verifyOpen ? uiText("Hide token entry") : uiText("Have a verification token?")}
+              {verifyOpen
+                ? uiText("Hide token entry")
+                : uiText("Have a verification token?")}
             </button>
             {verifyOpen && (
-              <form onSubmit={submitVerifyToken} className="security-inline-form">
+              <form
+                onSubmit={submitVerifyToken}
+                className="security-inline-form"
+              >
                 <input
                   required
                   value={verifyToken}
                   onChange={(e) => setVerifyToken(e.target.value)}
                   placeholder={uiText("Paste verification token")}
                 />
-                <button type="submit" className="primary" disabled={busy}> {uiText("Confirm")} </button>
+                <button type="submit" className="primary" disabled={busy}>
+                  {" "}
+                  {uiText("Confirm")}{" "}
+                </button>
               </form>
             )}
           </div>
@@ -377,8 +392,12 @@ export function SecuritySettings({
             <b>{uiText("Two-factor authentication (Email OTP)")}</b>
             <p className="muted small">
               {session.user.mfaEnabled
-                ? uiText("Enabled — password sign-in requires a one-time email code.")
-                : uiText("Optional — require a one-time email code on sign-in (requires server SMTP).")}
+                ? uiText(
+                    "Enabled — password sign-in requires a one-time email code.",
+                  )
+                : uiText(
+                    "Optional — require a one-time email code on sign-in (requires server SMTP).",
+                  )}
             </p>
           </div>
           <button
@@ -388,7 +407,9 @@ export function SecuritySettings({
             onClick={toggleMfa}
           >
             <ShieldCheck size={14} />{" "}
-            {session.user.mfaEnabled ? uiText("Disable 2FA") : uiText("Enable 2FA")}
+            {session.user.mfaEnabled
+              ? uiText("Disable 2FA")
+              : uiText("Enable 2FA")}
           </button>
         </div>
       </div>
@@ -397,7 +418,12 @@ export function SecuritySettings({
         <div className="security-row">
           <div>
             <b>{uiText("App lock (PIN privacy screen)")}</b>
-            <p className="muted small"> {uiText("Client-side privacy screen only — hides balances and transactions in the DOM when idle or reopened. Does not encrypt data.")} </p>
+            <p className="muted small">
+              {" "}
+              {uiText(
+                "Client-side privacy screen only — hides balances and transactions in the DOM when idle or reopened. Does not encrypt data.",
+              )}{" "}
+            </p>
           </div>
           <div className="security-actions">
             {lockConfig && (
@@ -410,7 +436,8 @@ export function SecuritySettings({
                   onLockNow();
                 }}
               >
-                <Lock size={14} /> {uiText("Lock now")} </button>
+                <Lock size={14} /> {uiText("Lock now")}{" "}
+              </button>
             )}
             <button
               type="button"
@@ -429,7 +456,10 @@ export function SecuritySettings({
                 className="secondary danger-outline"
                 disabled={busy}
                 onClick={removePin}
-              > {uiText("Remove PIN")} </button>
+              >
+                {" "}
+                {uiText("Remove PIN")}{" "}
+              </button>
             )}
           </div>
         </div>
@@ -467,7 +497,10 @@ export function SecuritySettings({
         {pinFormOpen && (
           <form onSubmit={savePin} className="security-sub-form">
             <div className="security-grid">
-              <label> {uiText("New PIN (4–8 digits)")} <input
+              <label>
+                {" "}
+                {uiText("New PIN (4–8 digits)")}{" "}
+                <input
                   required
                   type="password"
                   inputMode="numeric"
@@ -480,7 +513,10 @@ export function SecuritySettings({
                   placeholder={uiText("4–8 digits")}
                 />
               </label>
-              <label> {uiText("Confirm PIN")} <input
+              <label>
+                {" "}
+                {uiText("Confirm PIN")}{" "}
+                <input
                   required
                   type="password"
                   inputMode="numeric"
@@ -497,12 +533,18 @@ export function SecuritySettings({
               </label>
             </div>
             <div className="security-actions">
-              <button type="submit" className="primary" disabled={busy}> {uiText("Save PIN")} </button>
+              <button type="submit" className="primary" disabled={busy}>
+                {" "}
+                {uiText("Save PIN")}{" "}
+              </button>
               <button
                 type="button"
                 className="secondary"
                 onClick={() => setPinFormOpen(false)}
-              > {uiText("Cancel")} </button>
+              >
+                {" "}
+                {uiText("Cancel")}{" "}
+              </button>
             </div>
           </form>
         )}
@@ -512,7 +554,12 @@ export function SecuritySettings({
         <div className="security-row">
           <div>
             <b>{uiText("Password & email")}</b>
-            <p className="muted small"> {uiText("Update your sign-in password or change your account email.")} </p>
+            <p className="muted small">
+              {" "}
+              {uiText(
+                "Update your sign-in password or change your account email.",
+              )}{" "}
+            </p>
           </div>
           <div className="security-actions">
             <button
@@ -525,7 +572,8 @@ export function SecuritySettings({
                 setEmailOpen(false);
               }}
             >
-              <KeyRound size={14} /> {uiText("Change password")} </button>
+              <KeyRound size={14} /> {uiText("Change password")}{" "}
+            </button>
             <button
               type="button"
               className="secondary"
@@ -536,13 +584,17 @@ export function SecuritySettings({
                 setPwOpen(false);
               }}
             >
-              <Mail size={14} /> {uiText("Change email")} </button>
+              <Mail size={14} /> {uiText("Change email")}{" "}
+            </button>
           </div>
         </div>
 
         {pwOpen && (
           <form onSubmit={submitPasswordChange} className="security-sub-form">
-            <label> {uiText("Current password")} <input
+            <label>
+              {" "}
+              {uiText("Current password")}{" "}
+              <input
                 required
                 type="password"
                 autoComplete="current-password"
@@ -551,7 +603,10 @@ export function SecuritySettings({
               />
             </label>
             <div className="security-grid">
-              <label> {uiText("New password")} <input
+              <label>
+                {" "}
+                {uiText("New password")}{" "}
+                <input
                   required
                   type="password"
                   minLength={8}
@@ -561,7 +616,10 @@ export function SecuritySettings({
                   placeholder={uiText("At least 8 characters")}
                 />
               </label>
-              <label> {uiText("Confirm new password")} <input
+              <label>
+                {" "}
+                {uiText("Confirm new password")}{" "}
+                <input
                   required
                   type="password"
                   minLength={8}
@@ -572,19 +630,28 @@ export function SecuritySettings({
               </label>
             </div>
             <div className="security-actions">
-              <button type="submit" className="primary" disabled={busy}> {uiText("Update password")} </button>
+              <button type="submit" className="primary" disabled={busy}>
+                {" "}
+                {uiText("Update password")}{" "}
+              </button>
               <button
                 type="button"
                 className="secondary"
                 onClick={() => setPwOpen(false)}
-              > {uiText("Cancel")} </button>
+              >
+                {" "}
+                {uiText("Cancel")}{" "}
+              </button>
             </div>
           </form>
         )}
 
         {emailOpen && (
           <div className="security-sub-form">
-            <form onSubmit={submitEmailRequest} className="security-inline-form">
+            <form
+              onSubmit={submitEmailRequest}
+              className="security-inline-form"
+            >
               <input
                 required
                 type="email"
@@ -592,19 +659,33 @@ export function SecuritySettings({
                 onChange={(e) => setNewEmail(e.target.value)}
                 placeholder={uiText("New email address")}
               />
-              <button type="submit" className="primary" disabled={busy}> {uiText("Send change link")} </button>
+              <button type="submit" className="primary" disabled={busy}>
+                {" "}
+                {uiText("Send change link")}{" "}
+              </button>
             </form>
             <form onSubmit={submitEmailConfirm} className="security-sub-form">
-              <p className="muted small"> {uiText("Already have an email change token? Confirm it below (you will need to sign in again):")} </p>
+              <p className="muted small">
+                {" "}
+                {uiText(
+                  "Already have an email change token? Confirm it below (you will need to sign in again):",
+                )}{" "}
+              </p>
               <div className="security-grid">
-                <label> {uiText("Email change token")} <input
+                <label>
+                  {" "}
+                  {uiText("Email change token")}{" "}
+                  <input
                     required
                     value={emailToken}
                     onChange={(e) => setEmailToken(e.target.value)}
                     placeholder={uiText("Token from email")}
                   />
                 </label>
-                <label> {uiText("Current password")} <input
+                <label>
+                  {" "}
+                  {uiText("Current password")}{" "}
+                  <input
                     required
                     type="password"
                     autoComplete="current-password"
@@ -613,7 +694,10 @@ export function SecuritySettings({
                   />
                 </label>
               </div>
-              <button type="submit" className="secondary" disabled={busy}> {uiText("Confirm email change")} </button>
+              <button type="submit" className="secondary" disabled={busy}>
+                {" "}
+                {uiText("Confirm email change")}{" "}
+              </button>
             </form>
           </div>
         )}

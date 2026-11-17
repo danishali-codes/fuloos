@@ -161,7 +161,9 @@ export function Auth({
       setResetPassword("");
       setResetPasswordConfirm("");
       setPassword("");
-      setNotice("Your password has been updated. Sign in with your new password.");
+      setNotice(
+        "Your password has been updated. Sign in with your new password.",
+      );
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -247,12 +249,8 @@ export function Auth({
           <span className="auth-tag">
             <Leaf size={16} /> {t("auth.welcome")}
           </span>
-          <h2>
-            {signup ? t("auth.signUpTitle") : t("auth.signInTitle")}
-          </h2>
-          <p>
-            {signup ? t("auth.signUpSubtitle") : t("auth.signInSubtitle")}
-          </p>
+          <h2>{signup ? t("auth.signUpTitle") : t("auth.signInTitle")}</h2>
+          <p>{signup ? t("auth.signUpSubtitle") : t("auth.signInSubtitle")}</p>
           <button
             type="button"
             className="google-sign-in"
@@ -284,8 +282,16 @@ export function Auth({
           )}
           {mfa ? (
             <form onSubmit={submitMfa} className="auth-mfa-form">
-              <p className="muted small"> {uiText("Two-factor verification is enabled for")} <b>{mfa.email}</b>{uiText(". Enter the one-time code sent to your email.")} </p>
-              <label> {uiText("Verification code")} <input
+              <p className="muted small">
+                {" "}
+                {uiText("Two-factor verification is enabled for")}{" "}
+                <b>{mfa.email}</b>
+                {uiText(". Enter the one-time code sent to your email.")}{" "}
+              </p>
+              <label>
+                {" "}
+                {uiText("Verification code")}{" "}
+                <input
                   required
                   autoFocus
                   autoComplete="one-time-code"
@@ -315,7 +321,10 @@ export function Auth({
                   className="text-button"
                   disabled={busy}
                   onClick={resendOtp}
-                > {uiText("Resend code")} </button>
+                >
+                  {" "}
+                  {uiText("Resend code")}{" "}
+                </button>
                 <button
                   type="button"
                   className="text-button"
@@ -326,14 +335,25 @@ export function Auth({
                     setError("");
                     setNotice("");
                   }}
-                > {uiText("Back to sign in")} </button>
+                >
+                  {" "}
+                  {uiText("Back to sign in")}{" "}
+                </button>
               </div>
             </form>
           ) : resetMode !== "none" ? (
             resetMode === "request" ? (
               <form onSubmit={submitResetRequest}>
-                <p className="muted small"> {uiText("Enter your account email and we will send a password reset link and token.")} </p>
-                <label> {uiText("Email address")} <input
+                <p className="muted small">
+                  {" "}
+                  {uiText(
+                    "Enter your account email and we will send a password reset link and token.",
+                  )}{" "}
+                </p>
+                <label>
+                  {" "}
+                  {uiText("Email address")}{" "}
+                  <input
                     required
                     type="email"
                     autoComplete="email"
@@ -366,7 +386,10 @@ export function Auth({
                       setError("");
                       setNotice("");
                     }}
-                  > {uiText("I have a reset token")} </button>
+                  >
+                    {" "}
+                    {uiText("I have a reset token")}{" "}
+                  </button>
                   <button
                     type="button"
                     className="text-button"
@@ -376,12 +399,18 @@ export function Auth({
                       setError("");
                       setNotice("");
                     }}
-                  > {uiText("Back to sign in")} </button>
+                  >
+                    {" "}
+                    {uiText("Back to sign in")}{" "}
+                  </button>
                 </div>
               </form>
             ) : (
               <form onSubmit={submitResetConfirm}>
-                <label> {uiText("Reset token")} <input
+                <label>
+                  {" "}
+                  {uiText("Reset token")}{" "}
+                  <input
                     required
                     autoComplete="off"
                     value={resetToken}
@@ -389,7 +418,10 @@ export function Auth({
                     placeholder={uiText("Paste token from email")}
                   />
                 </label>
-                <label> {uiText("New password")} <input
+                <label>
+                  {" "}
+                  {uiText("New password")}{" "}
+                  <input
                     required
                     type="password"
                     minLength={8}
@@ -399,7 +431,10 @@ export function Auth({
                     placeholder={uiText("At least 8 characters")}
                   />
                 </label>
-                <label> {uiText("Confirm new password")} <input
+                <label>
+                  {" "}
+                  {uiText("Confirm new password")}{" "}
+                  <input
                     required
                     type="password"
                     minLength={8}
@@ -433,7 +468,10 @@ export function Auth({
                       setError("");
                       setNotice("");
                     }}
-                  > {uiText("Back to sign in")} </button>
+                  >
+                    {" "}
+                    {uiText("Back to sign in")}{" "}
+                  </button>
                 </div>
               </form>
             )
@@ -530,11 +568,10 @@ export function Auth({
             <span>{t("auth.orDivider")}</span>
           </div>
           <button className="demo-button" onClick={onDemo}>
-            {t("auth.exploreDemo")} <ArrowRight size={16} className="rtl-flip" />
+            {t("auth.exploreDemo")}{" "}
+            <ArrowRight size={16} className="rtl-flip" />
           </button>
-          {!backend && (
-            <p className="setup-note">{t("auth.previewNote")}</p>
-          )}
+          {!backend && <p className="setup-note">{t("auth.previewNote")}</p>}
           <small className="auth-footnote">{t("auth.footnote")}</small>
         </div>
       </section>

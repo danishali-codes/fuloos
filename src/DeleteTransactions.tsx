@@ -9,7 +9,10 @@ import {
   type Category,
   type Transaction,
 } from "./domain";
-import { deletionTotals, type TransactionDeletionPlan } from "./transactionDeletion";
+import {
+  deletionTotals,
+  type TransactionDeletionPlan,
+} from "./transactionDeletion";
 
 const SHOWN_ROWS = 5;
 
@@ -103,7 +106,10 @@ export function DeleteTransactionsDialog({
       </h2>
       <form onSubmit={submit}>
         <div id="delete-transactions-message">
-          <ul className="delete-transactions-rows" aria-label={uiText("Transactions")}>
+          <ul
+            className="delete-transactions-rows"
+            aria-label={uiText("Transactions")}
+          >
             {rows.map((t) => (
               <li key={t.id}>
                 <span className="when">{t.date}</span>
@@ -129,7 +135,8 @@ export function DeleteTransactionsDialog({
             ))}
             {count > rows.length && (
               <li className="more">
-                +{(count - rows.length).toLocaleString()} {uiText("more")} </li>
+                +{(count - rows.length).toLocaleString()} {uiText("more")}{" "}
+              </li>
             )}
           </ul>
           <ul className="typed-confirm-list">
@@ -142,7 +149,9 @@ export function DeleteTransactionsDialog({
             {transferCount > 0 && (
               <li>
                 {single
-                  ? uiText("This is a transfer. It shows in both accounts but is one record, so both sides go.")
+                  ? uiText(
+                      "This is a transfer. It shows in both accounts but is one record, so both sides go.",
+                    )
                   : transferCount === 1
                     ? "1 is a transfer. It shows in both of its accounts but is one record, so both sides go together."
                     : `${transferCount.toLocaleString()} are transfers. Each shows in both of its accounts but is one record, so both sides go together.`}
@@ -154,14 +163,23 @@ export function DeleteTransactionsDialog({
                   occurrenceCount,
                   "was recorded for a recurring schedule",
                   "were recorded for recurring schedules",
-                )} {uiText(". Those payments will show as not recorded yet; the schedules stay.")} </li>
+                )}{" "}
+                {uiText(
+                  ". Those payments will show as not recorded yet; the schedules stay.",
+                )}{" "}
+              </li>
             )}
             {affectedAccounts.length > 0 && (
-              <li className="danger-text"> {uiText("Balances will change for")} {affectedAccounts.join(", ")}.
+              <li className="danger-text">
+                {" "}
+                {uiText("Balances will change for")}{" "}
+                {affectedAccounts.join(", ")}.
               </li>
             )}
           </ul>
-          <p className="delete-categories-final">{uiText("This can't be undone.")}</p>
+          <p className="delete-categories-final">
+            {uiText("This can't be undone.")}
+          </p>
         </div>
         {error && (
           <div className="error" role="alert">
@@ -174,7 +192,10 @@ export function DeleteTransactionsDialog({
             className="secondary"
             disabled={busy}
             onClick={close}
-          > {uiText("Cancel")} </button>
+          >
+            {" "}
+            {uiText("Cancel")}{" "}
+          </button>
           <button className="primary danger" disabled={busy || !count}>
             {busy
               ? uiText("Deleting…")

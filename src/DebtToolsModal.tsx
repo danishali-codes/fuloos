@@ -176,23 +176,35 @@ export function DebtToolsModal({
 
       <div className="debt-planner-body">
         {rows.length === 0 ? (
-          <div className="notice"> {uiText("No credit card balances or net worth liabilities with positive debt were found. Add a negative balance on a credit card or a liability in Net Worth to model payoff scenarios.")} </div>
+          <div className="notice">
+            {" "}
+            {uiText(
+              "No credit card balances or net worth liabilities with positive debt were found. Add a negative balance on a credit card or a liability in Net Worth to model payoff scenarios.",
+            )}{" "}
+          </div>
         ) : (
           <>
             <div className="debt-controls-bar">
-              <div className="debt-strategy-toggle" role="group" aria-label={uiText("Payoff strategy")}>
+              <div
+                className="debt-strategy-toggle"
+                role="group"
+                aria-label={uiText("Payoff strategy")}
+              >
                 <button
                   type="button"
                   className={strategy === "avalanche" ? "selected" : ""}
                   onClick={() => setStrategy("avalanche")}
                 >
-                  <Flame size={15} /> {uiText("Avalanche (highest APR)")} </button>
+                  <Flame size={15} /> {uiText("Avalanche (highest APR)")}{" "}
+                </button>
                 <button
                   type="button"
                   className={strategy === "snowball" ? "selected" : ""}
                   onClick={() => setStrategy("snowball")}
                 >
-                  <Snowflake size={15} /> {uiText("Snowball (smallest balance)")} </button>
+                  <Snowflake size={15} />{" "}
+                  {uiText("Snowball (smallest balance)")}{" "}
+                </button>
               </div>
               <label className="debt-extra-field">
                 <span>{uiText("Extra monthly payment (AED)")}</span>
@@ -317,8 +329,13 @@ export function DebtToolsModal({
                     <Calculator size={16} />
                     <div>
                       {extraFils > 0 && interestSavedVsBaseline > 0 && (
-                        <span> {uiText("Adding")} {concealed(extraFils)}{uiText("/mo saves")}{" "}
-                          <b>{concealed(interestSavedVsBaseline)}</b> {uiText("in interest")} {baselineResult.paidOff && activeResult.paidOff
+                        <span>
+                          {" "}
+                          {uiText("Adding")} {concealed(extraFils)}
+                          {uiText("/mo saves")}{" "}
+                          <b>{concealed(interestSavedVsBaseline)}</b>{" "}
+                          {uiText("in interest")}{" "}
+                          {baselineResult.paidOff && activeResult.paidOff
                             ? ` and ${formatMonths(Math.max(0, baselineResult.months - activeResult.months))} vs minimums only`
                             : ""}
                           .{" "}
@@ -326,14 +343,30 @@ export function DebtToolsModal({
                       )}
                       {interestDiffVsOther > 0 && (
                         <span>
-                          {strategy === "avalanche" ? uiText("Avalanche") : uiText("Snowball")}{" "} {uiText("saves")} <b>{concealed(interestDiffVsOther)}</b> {uiText("in interest compared to")}{" "}
-                          {strategy === "avalanche" ? uiText("Snowball") : uiText("Avalanche")}.
+                          {strategy === "avalanche"
+                            ? uiText("Avalanche")
+                            : uiText("Snowball")}{" "}
+                          {uiText("saves")}{" "}
+                          <b>{concealed(interestDiffVsOther)}</b>{" "}
+                          {uiText("in interest compared to")}{" "}
+                          {strategy === "avalanche"
+                            ? uiText("Snowball")
+                            : uiText("Avalanche")}
+                          .
                         </span>
                       )}
                       {interestDiffVsOther < 0 && (
                         <span>
-                          {strategy === "avalanche" ? uiText("Snowball") : uiText("Avalanche")}{" "} {uiText("costs")} <b>{concealed(-interestDiffVsOther)}</b> {uiText("more in interest than")}{" "}
-                          {strategy === "avalanche" ? uiText("Snowball") : uiText("Avalanche")}.
+                          {strategy === "avalanche"
+                            ? uiText("Snowball")
+                            : uiText("Avalanche")}{" "}
+                          {uiText("costs")}{" "}
+                          <b>{concealed(-interestDiffVsOther)}</b>{" "}
+                          {uiText("more in interest than")}{" "}
+                          {strategy === "avalanche"
+                            ? uiText("Snowball")
+                            : uiText("Avalanche")}
+                          .
                         </span>
                       )}
                     </div>
@@ -341,18 +374,29 @@ export function DebtToolsModal({
                 ) : null}
 
                 {!activeResult.paidOff && (
-                  <div className="notice"> {uiText("With the current minimum payments and extra payment,")}{" "}
-                    {concealed(activeResult.remainingDebtFils)} {uiText("remains after")}{" "}
-                    {activeResult.months} {uiText("months. Increase your monthly payment to pay off the balance.")} </div>
+                  <div className="notice">
+                    {" "}
+                    {uiText(
+                      "With the current minimum payments and extra payment,",
+                    )}{" "}
+                    {concealed(activeResult.remainingDebtFils)}{" "}
+                    {uiText("remains after")} {activeResult.months}{" "}
+                    {uiText(
+                      "months. Increase your monthly payment to pay off the balance.",
+                    )}{" "}
+                  </div>
                 )}
 
                 {activeResult.payoffOrder.length > 0 && (
                   <div className="debt-payoff-order">
-                    <span className="field-label">{uiText("Payoff order")}</span>
+                    <span className="field-label">
+                      {uiText("Payoff order")}
+                    </span>
                     <div className="debt-order-chips">
                       {activeResult.payoffOrder.map((ev, idx) => (
                         <span className="debt-order-chip" key={ev.id}>
-                          <b>#{idx + 1}</b> {ev.name} {uiText("· Month")} {ev.month}
+                          <b>#{idx + 1}</b> {ev.name} {uiText("· Month")}{" "}
+                          {ev.month}
                         </span>
                       ))}
                     </div>
@@ -361,7 +405,9 @@ export function DebtToolsModal({
 
                 {previewRows.length > 0 && (
                   <div className="debt-schedule-wrap">
-                    <span className="field-label">{uiText("Schedule preview")}</span>
+                    <span className="field-label">
+                      {uiText("Schedule preview")}
+                    </span>
                     <table className="debt-table compact">
                       <thead>
                         <tr>
@@ -379,7 +425,9 @@ export function DebtToolsModal({
                           return (
                             <tr key={pt.month}>
                               <td>
-                                {isJump ? `… Month ${pt.month}` : `Month ${pt.month}`}
+                                {isJump
+                                  ? `… Month ${pt.month}`
+                                  : `Month ${pt.month}`}
                               </td>
                               <td className="num">{concealed(pt.paidFils)}</td>
                               <td className="num">
@@ -402,7 +450,10 @@ export function DebtToolsModal({
       </div>
 
       <div className="modal-actions">
-        <button type="button" className="primary" onClick={onClose}> {uiText("Done")} </button>
+        <button type="button" className="primary" onClick={onClose}>
+          {" "}
+          {uiText("Done")}{" "}
+        </button>
       </div>
     </dialog>
   );

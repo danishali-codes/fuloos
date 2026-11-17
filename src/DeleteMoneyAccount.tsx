@@ -88,13 +88,22 @@ export function DeleteMoneyAccountDialog({
       <span className="confirm-icon" aria-hidden="true">
         <AlertTriangle size={24} />
       </span>
-      <h2 id="delete-money-account-title">{uiText("Delete")} {account.name}?</h2>
+      <h2 id="delete-money-account-title">
+        {uiText("Delete")} {account.name}?
+      </h2>
       <form onSubmit={submit}>
         <div id="delete-money-account-message">
-          <p className="typed-confirm-warning"> {uiText("All transactions relating to this account will be deleted.")} </p>
+          <p className="typed-confirm-warning">
+            {" "}
+            {uiText(
+              "All transactions relating to this account will be deleted.",
+            )}{" "}
+          </p>
           <p>{uiText("This will permanently delete:")}</p>
           <ul className="typed-confirm-list">
-            <li> {uiText("The account")} <b>{account.name}</b>
+            <li>
+              {" "}
+              {uiText("The account")} <b>{account.name}</b>
             </li>
             <li>
               {count
@@ -102,17 +111,29 @@ export function DeleteMoneyAccountDialog({
                 : uiText("No transactions (this account has none)")}
             </li>
             {plan.transferCount > 0 && (
-              <li> {uiText("Including")} {plural(plan.transferCount, "transfer")} {uiText("to or from other accounts, which also disappear from those accounts and change their balances")} </li>
+              <li>
+                {" "}
+                {uiText("Including")} {plural(plan.transferCount, "transfer")}{" "}
+                {uiText(
+                  "to or from other accounts, which also disappear from those accounts and change their balances",
+                )}{" "}
+              </li>
             )}
             {plan.recurringIds.length > 0 && (
               <li>
-                {plural(plan.recurringIds.length, "recurring schedule")} {uiText("on this account")} </li>
+                {plural(plan.recurringIds.length, "recurring schedule")}{" "}
+                {uiText("on this account")}{" "}
+              </li>
             )}
           </ul>
           <p>{uiText("This can't be undone.")}</p>
         </div>
         <label>
-          <span> {uiText("Type")} <b className="confirm-phrase">{phrase}</b> {uiText("to confirm")} </span>
+          <span>
+            {" "}
+            {uiText("Type")} <b className="confirm-phrase">{phrase}</b>{" "}
+            {uiText("to confirm")}{" "}
+          </span>
           <input
             autoFocus
             autoComplete="off"
@@ -124,7 +145,13 @@ export function DeleteMoneyAccountDialog({
           />
         </label>
         {counting && (
-          <p className="typed-confirm-countdown" role="status"> {uiText("Deleting in")} {countdown}{uiText("… Press Cancel to stop. Progress will show in the corner once it starts.")} </p>
+          <p className="typed-confirm-countdown" role="status">
+            {" "}
+            {uiText("Deleting in")} {countdown}
+            {uiText(
+              "… Press Cancel to stop. Progress will show in the corner once it starts.",
+            )}{" "}
+          </p>
         )}
         {error && (
           <div className="error" role="alert">

@@ -122,16 +122,23 @@ export function Editor({
     () => txItem?.account_id ?? ledger.accounts[0]?.id ?? "",
   );
   const initialAccountCurrency = normalizeCurrencyCode(
-    ledger.accounts.find((a) => a.id === (txItem?.account_id ?? ledger.accounts[0]?.id))
-      ?.currency,
+    ledger.accounts.find(
+      (a) => a.id === (txItem?.account_id ?? ledger.accounts[0]?.id),
+    )?.currency,
   );
   const [foreignEnabled, setForeignEnabled] = useState(() =>
     txItem
-      ? Boolean(txItem.original_currency && txItem.original_currency !== DEFAULT_CURRENCY)
+      ? Boolean(
+          txItem.original_currency &&
+          txItem.original_currency !== DEFAULT_CURRENCY,
+        )
       : initialAccountCurrency !== DEFAULT_CURRENCY,
   );
   const [originalCurrency, setOriginalCurrency] = useState(() => {
-    if (txItem?.original_currency && txItem.original_currency !== DEFAULT_CURRENCY) {
+    if (
+      txItem?.original_currency &&
+      txItem.original_currency !== DEFAULT_CURRENCY
+    ) {
       return txItem.original_currency;
     }
     return initialAccountCurrency !== DEFAULT_CURRENCY
@@ -235,7 +242,14 @@ export function Editor({
       }
     }
     setReceiptPreviewUrl("");
-  }, [receiptFile, removeReceipt, txItem?.id, txItem?.receipt, onLoadReceiptUrl, demo]);
+  }, [
+    receiptFile,
+    removeReceipt,
+    txItem?.id,
+    txItem?.receipt,
+    onLoadReceiptUrl,
+    demo,
+  ]);
 
   const parsedParentAmount = useMemo(() => {
     try {
@@ -408,7 +422,10 @@ export function Editor({
           if (!originalAmountText.trim()) {
             throw new Error("Enter the original currency amount.");
           }
-          const origMinor = parseCurrencyMinor(originalAmountText, originalCurrency);
+          const origMinor = parseCurrencyMinor(
+            originalAmountText,
+            originalCurrency,
+          );
           const fxRate = Number(fxRateText);
           if (!Number.isFinite(fxRate) || fxRate <= 0) {
             throw new Error("Enter an exchange rate greater than zero.");
@@ -481,11 +498,18 @@ export function Editor({
         {modal.kind === "transaction" ? (
           <>
             {ledger.accounts.length === 0 && (
-              <div className="notice"> {uiText("Create an account first to start adding transactions.")} </div>
+              <div className="notice">
+                {" "}
+                {uiText(
+                  "Create an account first to start adding transactions.",
+                )}{" "}
+              </div>
             )}
             {linkedOccurrence && (
               <div className="notice linked-banner">
-                <span> {uiText("Linked to")}{" "}
+                <span>
+                  {" "}
+                  {uiText("Linked to")}{" "}
                   <b>{linkedSchedule?.name ?? "recurring schedule"}</b> (
                   {linkedOccurrence.occurrence_date})
                 </span>
@@ -495,7 +519,8 @@ export function Editor({
                   disabled={busy}
                   onClick={() => onUnlinkOccurrence(linkedOccurrence.id)}
                 >
-                  <Unlink size={13} /> {uiText("Unlink")} </button>
+                  <Unlink size={13} /> {uiText("Unlink")}{" "}
+                </button>
               </div>
             )}
             <div className="type-switch">
@@ -520,7 +545,9 @@ export function Editor({
                 </button>
               ))}
             </div>
-            <label> {uiText("Amount")} <span className="muted">AED</span>
+            <label>
+              {" "}
+              {uiText("Amount")} <span className="muted">AED</span>
               <input
                 name="amount"
                 autoFocus
@@ -553,13 +580,18 @@ export function Editor({
                   <span>{uiText("Foreign currency")}</span>
                 </label>
                 {foreignEnabled && (
-                  <span className="muted small">{uiText("Explicit FX to AED")}</span>
+                  <span className="muted small">
+                    {uiText("Explicit FX to AED")}
+                  </span>
                 )}
               </div>
               {foreignEnabled && (
                 <>
                   <div className="form-row">
-                    <label> {uiText("Currency")} <select
+                    <label>
+                      {" "}
+                      {uiText("Currency")}{" "}
+                      <select
                         name="original_currency"
                         value={originalCurrency}
                         disabled={busy}
@@ -584,7 +616,10 @@ export function Editor({
                         ))}
                       </select>
                     </label>
-                    <label> {uiText("Original amount (")}{originalCurrency})
+                    <label>
+                      {" "}
+                      {uiText("Original amount (")}
+                      {originalCurrency})
                       <input
                         name="original_amount"
                         inputMode="decimal"
@@ -602,7 +637,10 @@ export function Editor({
                         }}
                       />
                     </label>
-                    <label> {uiText("Rate (1")} {originalCurrency} {uiText("= AED)")} <input
+                    <label>
+                      {" "}
+                      {uiText("Rate (1")} {originalCurrency} {uiText("= AED)")}{" "}
+                      <input
                         name="fx_rate"
                         inputMode="decimal"
                         placeholder="3.6725"
@@ -626,7 +664,9 @@ export function Editor({
             </div>
             <div className="form-row">
               <label>
-                {kind === "transfer" ? uiText("From account") : uiText("Account")}
+                {kind === "transfer"
+                  ? uiText("From account")
+                  : uiText("Account")}
                 <select
                   name="account_id"
                   required
@@ -662,12 +702,18 @@ export function Editor({
                 </select>
               </label>
               {kind === "transfer" ? (
-                <label> {uiText("To account")} <select
+                <label>
+                  {" "}
+                  {uiText("To account")}{" "}
+                  <select
                     name="to_account_id"
                     required
                     defaultValue={modal.item?.to_account_id ?? ""}
                   >
-                    <option value="" disabled> {uiText("Choose account")} </option>
+                    <option value="" disabled>
+                      {" "}
+                      {uiText("Choose account")}{" "}
+                    </option>
                     {ledger.accounts.map((a) => (
                       <option value={a.id} key={a.id}>
                         {a.name}
@@ -676,7 +722,10 @@ export function Editor({
                   </select>
                 </label>
               ) : (
-                <label> {uiText("Category")} <select
+                <label>
+                  {" "}
+                  {uiText("Category")}{" "}
+                  <select
                     key={kind}
                     name="category_id"
                     value={categoryId}
@@ -684,7 +733,9 @@ export function Editor({
                     onChange={(e) => setCategoryId(e.target.value)}
                   >
                     <option value="">
-                      {splits.length > 0 ? uiText("Split across categories") : uiText("Uncategorized")}
+                      {splits.length > 0
+                        ? uiText("Split across categories")
+                        : uiText("Uncategorized")}
                     </option>
                     {ledger.categories.map((c) => (
                       <option value={c.id} key={c.id}>
@@ -695,7 +746,10 @@ export function Editor({
                 </label>
               )}
             </div>
-            <label> {uiText("Date")} <input
+            <label>
+              {" "}
+              {uiText("Date")}{" "}
+              <input
                 required
                 name="date"
                 type="date"
@@ -703,7 +757,9 @@ export function Editor({
               />
             </label>
             <label>
-              {kind === "transfer" ? uiText("Description") : uiText("Payee / description")}
+              {kind === "transfer"
+                ? uiText("Description")
+                : uiText("Payee / description")}
               <input
                 name="payee"
                 maxLength={160}
@@ -718,7 +774,10 @@ export function Editor({
                 }
               />
             </label>
-            <label> {uiText("Notes")} <span className="muted">{uiText("Optional")}</span>
+            <label>
+              {" "}
+              {uiText("Notes")}{" "}
+              <span className="muted">{uiText("Optional")}</span>
               <textarea
                 name="notes"
                 maxLength={1000}
@@ -735,14 +794,18 @@ export function Editor({
                   disabled={busy}
                   onClick={handleApplyRules}
                 >
-                  <Wand2 size={14} /> {uiText("Apply rules")} </button>
+                  <Wand2 size={14} /> {uiText("Apply rules")}{" "}
+                </button>
                 {ruleNotice && (
                   <span className="muted small">{ruleNotice}</span>
                 )}
               </div>
             )}
             <div className="field-block">
-              <span className="field-label"> {uiText("Tags")} <span className="muted">{uiText("Optional")}</span>
+              <span className="field-label">
+                {" "}
+                {uiText("Tags")}{" "}
+                <span className="muted">{uiText("Optional")}</span>
               </span>
               <TagInput
                 tags={tags}
@@ -755,7 +818,8 @@ export function Editor({
               <div className="enrichment-section">
                 <div className="enrichment-section-head">
                   <span className="field-label">
-                    <Split size={14} /> {uiText("Split transaction")} </span>
+                    <Split size={14} /> {uiText("Split transaction")}{" "}
+                  </span>
                   <button
                     type="button"
                     className="secondary compact-btn"
@@ -798,7 +862,9 @@ export function Editor({
                     }}
                   >
                     <Plus size={13} />{" "}
-                    {splits.length === 0 ? uiText("Split across categories") : uiText("Add split")}
+                    {splits.length === 0
+                      ? uiText("Split across categories")
+                      : uiText("Add split")}
                   </button>
                 </div>
                 {splits.length > 0 && (
@@ -858,7 +924,9 @@ export function Editor({
                           className="icon-button delete"
                           aria-label={`Remove split ${idx + 1}`}
                           onClick={() =>
-                            setSplits((rows) => rows.filter((_, i) => i !== idx))
+                            setSplits((rows) =>
+                              rows.filter((_, i) => i !== idx),
+                            )
                           }
                         >
                           <Trash2 size={14} />
@@ -897,7 +965,10 @@ export function Editor({
                               );
                             }
                           }}
-                        > {uiText("Fill remainder on last line")} </button>
+                        >
+                          {" "}
+                          {uiText("Fill remainder on last line")}{" "}
+                        </button>
                       )}
                     </div>
                   </div>
@@ -908,7 +979,9 @@ export function Editor({
               <div className="enrichment-section-head">
                 <span className="field-label">
                   <Paperclip size={14} /> {uiText("Receipt")}{" "}
-                  <span className="muted">{uiText("JPEG, PNG, WebP, PDF · max 5 MB")}</span>
+                  <span className="muted">
+                    {uiText("JPEG, PNG, WebP, PDF · max 5 MB")}
+                  </span>
                 </span>
               </div>
               <input
@@ -930,7 +1003,9 @@ export function Editor({
                 }}
               />
               {receiptLoading && (
-                <p className="muted small">{uiText("Loading receipt preview…")}</p>
+                <p className="muted small">
+                  {uiText("Loading receipt preview…")}
+                </p>
               )}
               {(receiptFile || (!removeReceipt && txItem?.receipt)) && (
                 <div className="receipt-preview-box">
@@ -950,12 +1025,15 @@ export function Editor({
                     {receiptPreviewUrl && (
                       <a
                         href={receiptPreviewUrl}
-                        download={receiptFile?.name ?? txItem?.receipt ?? "receipt"}
+                        download={
+                          receiptFile?.name ?? txItem?.receipt ?? "receipt"
+                        }
                         target="_blank"
                         rel="noopener noreferrer"
                         className="secondary compact-btn"
                       >
-                        <Download size={13} /> {uiText("Open / Download")} </a>
+                        <Download size={13} /> {uiText("Open / Download")}{" "}
+                      </a>
                     )}
                     <button
                       type="button"
@@ -967,21 +1045,35 @@ export function Editor({
                         setReceiptPreviewUrl("");
                       }}
                     >
-                      <Trash2 size={13} /> {uiText("Remove")} </button>
+                      <Trash2 size={13} /> {uiText("Remove")}{" "}
+                    </button>
                   </div>
                   {demo && (
-                    <small className="muted"> {uiText("Demo mode: receipt stays in browser memory for this session.")} </small>
+                    <small className="muted">
+                      {" "}
+                      {uiText(
+                        "Demo mode: receipt stays in browser memory for this session.",
+                      )}{" "}
+                    </small>
                   )}
                 </div>
               )}
             </div>
             {kind === "transfer" && (
-              <p className="form-hint"> {uiText("Both accounts update together. Transfers are excluded from income and expenses.")} </p>
+              <p className="form-hint">
+                {" "}
+                {uiText(
+                  "Both accounts update together. Transfers are excluded from income and expenses.",
+                )}{" "}
+              </p>
             )}
           </>
         ) : modal.kind === "account" ? (
           <>
-            <label> {uiText("Account name")} <input
+            <label>
+              {" "}
+              {uiText("Account name")}{" "}
+              <input
                 required
                 autoFocus
                 name="name"
@@ -991,19 +1083,27 @@ export function Editor({
               />
             </label>
             <div className="form-row">
-              <label> {uiText("Account type")} <select
+              <label>
+                {" "}
+                {uiText("Account type")}{" "}
+                <select
                   name="type"
                   value={accountType}
-                  onChange={(e) => setAccountType(e.target.value as AccountType)}
+                  onChange={(e) =>
+                    setAccountType(e.target.value as AccountType)
+                  }
                 >
                   {Object.entries(ACCOUNT_TYPES).map(([value, label]) => (
                     <option value={value} key={value}>
-                      {label}
+                      {uiText(label)}
                     </option>
                   ))}
                 </select>
               </label>
-              <label> {uiText("Original purchase currency")} <span className="muted">{uiText("Optional")}</span>
+              <label>
+                {" "}
+                {uiText("Original purchase currency")}{" "}
+                <span className="muted">{uiText("Optional")}</span>
                 <select
                   name="currency"
                   defaultValue={normalizeCurrencyCode(modal.item?.currency)}
@@ -1016,9 +1116,16 @@ export function Editor({
                 </select>
               </label>
             </div>
-            <p className="form-hint">{uiText("All balances and transfers are recorded in AED. The currency above is a purchase reference, not a native-currency account balance. Enter your bank’s actual conversion rate for foreign purchases.")}</p>
+            <p className="form-hint">
+              {uiText(
+                "All balances and transfers are recorded in AED. The currency above is a purchase reference, not a native-currency account balance. Enter your bank’s actual conversion rate for foreign purchases.",
+              )}
+            </p>
             <div className="form-row">
-              <label> {uiText("Balance (AED)")} <span className="muted">{uiText("Optional")}</span>
+              <label>
+                {" "}
+                {uiText("Balance (AED)")}{" "}
+                <span className="muted">{uiText("Optional")}</span>
                 <input
                   inputMode="decimal"
                   name="balance"
@@ -1030,7 +1137,10 @@ export function Editor({
                   }
                 />
               </label>
-              <label> {uiText("As of end of")} <input
+              <label>
+                {" "}
+                {uiText("As of end of")}{" "}
+                <input
                   name="balance_as_of"
                   type="date"
                   defaultValue={
@@ -1041,20 +1151,34 @@ export function Editor({
                 />
               </label>
             </div>
-            <p className="form-hint"> {uiText("Enter what your bank shows at the end of a day. Transactions after that day are added to it. Earlier ones are already part of it, so you can add past transactions at any time without changing this balance. Leave it blank to just add up your transactions. Use a negative balance for credit card debt or an overdraft.")} {modal.item && (
+            <p className="form-hint">
+              {" "}
+              {uiText(
+                "Enter what your bank shows at the end of a day. Transactions after that day are added to it. Earlier ones are already part of it, so you can add past transactions at any time without changing this balance. Leave it blank to just add up your transactions. Use a negative balance for credit card debt or an overdraft.",
+              )}{" "}
+              {modal.item && (
                 <>
-                  {" "} {uiText("The app currently shows")}{" "}
-                  {money(balance(modal.item, ledger.transactions))} {uiText("for this account.")} </>
+                  {" "}
+                  {uiText("The app currently shows")}{" "}
+                  {money(balance(modal.item, ledger.transactions))}{" "}
+                  {uiText("for this account.")}{" "}
+                </>
               )}
             </p>
             {accountType === "credit_card" && (
               <div className="enrichment-section">
                 <div className="enrichment-section-head">
-                  <span className="field-label"> {uiText("Credit card details")} <span className="muted">{uiText("Optional")}</span>
+                  <span className="field-label">
+                    {" "}
+                    {uiText("Credit card details")}{" "}
+                    <span className="muted">{uiText("Optional")}</span>
                   </span>
                 </div>
                 <div className="form-row">
-                  <label> {uiText("Credit limit (AED)")} <input
+                  <label>
+                    {" "}
+                    {uiText("Credit limit (AED)")}{" "}
+                    <input
                       inputMode="decimal"
                       name="credit_limit"
                       placeholder={uiText("e.g. 25000.00")}
@@ -1065,7 +1189,10 @@ export function Editor({
                       }
                     />
                   </label>
-                  <label> {uiText("Minimum payment (AED)")} <input
+                  <label>
+                    {" "}
+                    {uiText("Minimum payment (AED)")}{" "}
+                    <input
                       inputMode="decimal"
                       name="minimum_payment"
                       placeholder={uiText("e.g. 500.00")}
@@ -1078,7 +1205,10 @@ export function Editor({
                   </label>
                 </div>
                 <div className="form-row">
-                  <label> {uiText("Statement day (1–31)")} <input
+                  <label>
+                    {" "}
+                    {uiText("Statement day (1–31)")}{" "}
+                    <input
                       type="number"
                       min={1}
                       max={31}
@@ -1087,7 +1217,10 @@ export function Editor({
                       defaultValue={modal.item?.statement_day || ""}
                     />
                   </label>
-                  <label> {uiText("Payment due day (1–31)")} <input
+                  <label>
+                    {" "}
+                    {uiText("Payment due day (1–31)")}{" "}
+                    <input
                       type="number"
                       min={1}
                       max={31}
@@ -1096,7 +1229,10 @@ export function Editor({
                       defaultValue={modal.item?.payment_due_day || ""}
                     />
                   </label>
-                  <label> {uiText("APR (%)")} <input
+                  <label>
+                    {" "}
+                    {uiText("APR (%)")}{" "}
+                    <input
                       inputMode="decimal"
                       name="apr_pct"
                       placeholder={uiText("e.g. 29.99")}
@@ -1120,7 +1256,10 @@ export function Editor({
           </>
         ) : (
           <>
-            <label> {uiText("Category name")} <input
+            <label>
+              {" "}
+              {uiText("Category name")}{" "}
+              <input
                 autoFocus
                 required
                 name="name"
@@ -1129,8 +1268,14 @@ export function Editor({
                 placeholder={uiText("e.g. Coffee & cafés")}
               />
             </label>
-            <p className="form-hint"> {uiText("Use this category for both income and expenses.")} </p>
-            <label> {uiText("Description")} <span className="muted">{uiText("Optional")}</span>
+            <p className="form-hint">
+              {" "}
+              {uiText("Use this category for both income and expenses.")}{" "}
+            </p>
+            <label>
+              {" "}
+              {uiText("Description")}{" "}
+              <span className="muted">{uiText("Optional")}</span>
               <textarea
                 name="description"
                 maxLength={500}
@@ -1158,14 +1303,21 @@ export function Editor({
             className="secondary"
             disabled={busy}
             onClick={onClose}
-          > {uiText("Cancel")} </button>
+          >
+            {" "}
+            {uiText("Cancel")}{" "}
+          </button>
           <button
             className="primary"
             disabled={
               busy || (modal.kind === "transaction" && !ledger.accounts.length)
             }
           >
-            {busy ? uiText("Saving…") : item ? uiText("Save changes") : `Add ${modal.kind}`}
+            {busy
+              ? uiText("Saving…")
+              : item
+                ? uiText("Save changes")
+                : `Add ${modal.kind}`}
             <Check size={16} />
           </button>
         </div>

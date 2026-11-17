@@ -49,10 +49,7 @@ export function RecurringEditorModal({
   concealed: (v: number) => string;
   busy: boolean;
   onClose: () => void;
-  onSave: (
-    value: Omit<RecurringSchedule, "id">,
-    id?: string,
-  ) => Promise<void>;
+  onSave: (value: Omit<RecurringSchedule, "id">, id?: string) => Promise<void>;
   onUnlinkOccurrence: (occurrenceId: string) => void;
 }) {
   const [kind, setKind] = useState<RecurringKind>(
@@ -126,7 +123,8 @@ export function RecurringEditorModal({
         <div>
           <span className="eyebrow">{uiText("RECURRING SCHEDULE")}</span>
           <h2 id="recurring-modal-title">
-            {item ? uiText("Edit") : uiText("Add")} {uiText("recurring")} </h2>
+            {item ? uiText("Edit") : uiText("Add")} {uiText("recurring")}{" "}
+          </h2>
         </div>
         <button
           type="button"
@@ -140,7 +138,12 @@ export function RecurringEditorModal({
       </div>
       <form onSubmit={submit}>
         {ledger.accounts.length === 0 && (
-          <div className="notice"> {uiText("Create an account first before adding a recurring schedule.")} </div>
+          <div className="notice">
+            {" "}
+            {uiText(
+              "Create an account first before adding a recurring schedule.",
+            )}{" "}
+          </div>
         )}
         <div className="type-switch">
           {(["expense", "income"] as const).map((k) => (
@@ -161,7 +164,10 @@ export function RecurringEditorModal({
           ))}
         </div>
 
-        <label> {uiText("Name")} <input
+        <label>
+          {" "}
+          {uiText("Name")}{" "}
+          <input
             name="name"
             required
             autoFocus
@@ -177,7 +183,9 @@ export function RecurringEditorModal({
 
         <div className="form-row">
           <label>
-            {amountType === "variable" ? uiText("Expected amount") : uiText("Amount")}{" "}
+            {amountType === "variable"
+              ? uiText("Expected amount")
+              : uiText("Amount")}{" "}
             <span className="muted">AED</span>
             <input
               name="amount"
@@ -193,7 +201,10 @@ export function RecurringEditorModal({
               }
             />
           </label>
-          <label> {uiText("Amount behaviour")} <select
+          <label>
+            {" "}
+            {uiText("Amount behaviour")}{" "}
+            <select
               name="amount_type"
               value={amountType}
               onChange={(e) =>
@@ -201,13 +212,18 @@ export function RecurringEditorModal({
               }
             >
               <option value="fixed">{uiText("Fixed amount")}</option>
-              <option value="variable">{uiText("Variable (prompt when paid)")}</option>
+              <option value="variable">
+                {uiText("Variable (prompt when paid)")}
+              </option>
             </select>
           </label>
         </div>
 
         <div className="form-row">
-          <label> {uiText("Account")} <select
+          <label>
+            {" "}
+            {uiText("Account")}{" "}
+            <select
               name="account_id"
               required
               defaultValue={
@@ -223,7 +239,10 @@ export function RecurringEditorModal({
               ))}
             </select>
           </label>
-          <label> {uiText("Category")} <select
+          <label>
+            {" "}
+            {uiText("Category")}{" "}
+            <select
               name="category_id"
               defaultValue={
                 item?.category_id ?? initialDraft?.category_id ?? ""
@@ -240,7 +259,10 @@ export function RecurringEditorModal({
         </div>
 
         <div className="form-row">
-          <label> {uiText("Frequency")} <select
+          <label>
+            {" "}
+            {uiText("Frequency")}{" "}
+            <select
               name="frequency"
               defaultValue={
                 item?.frequency ?? initialDraft?.frequency ?? "monthly"
@@ -253,7 +275,10 @@ export function RecurringEditorModal({
               <option value="yearly">{uiText("Yearly")}</option>
             </select>
           </label>
-          <label> {uiText("Status")} <select
+          <label>
+            {" "}
+            {uiText("Status")}{" "}
+            <select
               name="status"
               defaultValue={item?.status ?? initialDraft?.status ?? "active"}
             >
@@ -264,7 +289,10 @@ export function RecurringEditorModal({
         </div>
 
         <div className="form-row">
-          <label> {uiText("Start date")} <input
+          <label>
+            {" "}
+            {uiText("Start date")}{" "}
+            <input
               name="start_date"
               type="date"
               required
@@ -275,7 +303,10 @@ export function RecurringEditorModal({
               }
             />
           </label>
-          <label> {uiText("End date")} <span className="muted">{uiText("Optional")}</span>
+          <label>
+            {" "}
+            {uiText("End date")}{" "}
+            <span className="muted">{uiText("Optional")}</span>
             <input
               name="end_date"
               type="date"
@@ -286,7 +317,9 @@ export function RecurringEditorModal({
           </label>
         </div>
 
-        <label> {uiText("Notes")} <span className="muted">{uiText("Optional")}</span>
+        <label>
+          {" "}
+          {uiText("Notes")} <span className="muted">{uiText("Optional")}</span>
           <textarea
             name="notes"
             maxLength={1000}
@@ -297,7 +330,10 @@ export function RecurringEditorModal({
 
         {hasConfirmed && (
           <div className="link-existing-box">
-            <span className="eyebrow"> {uiText("CONFIRMED OCCURRENCES (")}{confirmedLinks.length})
+            <span className="eyebrow">
+              {" "}
+              {uiText("CONFIRMED OCCURRENCES (")}
+              {confirmedLinks.length})
             </span>
             <div className="candidate-list">
               {confirmedLinks.map((occ) => {
@@ -320,7 +356,8 @@ export function RecurringEditorModal({
                       disabled={busy}
                       onClick={() => onUnlinkOccurrence(occ.id)}
                     >
-                      <Unlink size={13} /> {uiText("Unlink")} </button>
+                      <Unlink size={13} /> {uiText("Unlink")}{" "}
+                    </button>
                   </div>
                 );
               })}
@@ -328,7 +365,12 @@ export function RecurringEditorModal({
           </div>
         )}
 
-        <p className="form-hint"> {uiText("Month-end, quarterly and leap-day schedules adjust automatically. Account balances only change when you mark an occurrence paid.")} </p>
+        <p className="form-hint">
+          {" "}
+          {uiText(
+            "Month-end, quarterly and leap-day schedules adjust automatically. Account balances only change when you mark an occurrence paid.",
+          )}{" "}
+        </p>
 
         {error && (
           <div className="error" role="alert">
@@ -342,12 +384,19 @@ export function RecurringEditorModal({
             className="secondary"
             disabled={busy}
             onClick={onClose}
-          > {uiText("Cancel")} </button>
+          >
+            {" "}
+            {uiText("Cancel")}{" "}
+          </button>
           <button
             className="primary"
             disabled={busy || !ledger.accounts.length}
           >
-            {busy ? uiText("Saving…") : item ? uiText("Save changes") : uiText("Add recurring")}
+            {busy
+              ? uiText("Saving…")
+              : item
+                ? uiText("Save changes")
+                : uiText("Add recurring")}
             <Check size={16} />
           </button>
         </div>
@@ -423,9 +472,7 @@ export function ConfirmOccurrenceModal({
         if (q) {
           const acc = accountById.get(t.account_id)?.name ?? "";
           if (
-            !`${t.payee} ${t.notes} ${t.date} ${acc}`
-              .toLowerCase()
-              .includes(q)
+            !`${t.payee} ${t.notes} ${t.date} ${acc}`.toLowerCase().includes(q)
           )
             return false;
         }
@@ -540,7 +587,8 @@ export function ConfirmOccurrenceModal({
                 setError("");
               }}
             >
-              <Plus size={16} /> {uiText("Record new transaction")} </button>
+              <Plus size={16} /> {uiText("Record new transaction")}{" "}
+            </button>
           )}
           <button
             type="button"
@@ -550,16 +598,25 @@ export function ConfirmOccurrenceModal({
               setError("");
             }}
           >
-            <Link2 size={16} /> {uiText("Link existing (")}{candidates.length})
+            <Link2 size={16} /> {uiText("Link existing (")}
+            {candidates.length})
           </button>
         </div>
 
         {mode === "create" ? (
           <>
             {schedule.amount_type === "variable" && (
-              <div className="notice"> {uiText("Variable payment (expected")} {money(schedule.amount)}{uiText("). Enter the actual")} {schedule.type === "income" ? "received" : "paid"} {uiText("amount in AED below.")} </div>
+              <div className="notice">
+                {" "}
+                {uiText("Variable payment (expected")} {money(schedule.amount)}
+                {uiText("). Enter the actual")}{" "}
+                {schedule.type === "income" ? "received" : "paid"}{" "}
+                {uiText("amount in AED below.")}{" "}
+              </div>
             )}
-            <label> {uiText("Actual amount")} <span className="muted">AED</span>
+            <label>
+              {" "}
+              {uiText("Actual amount")} <span className="muted">AED</span>
               <input
                 name="amount"
                 required
@@ -578,7 +635,10 @@ export function ConfirmOccurrenceModal({
               />
             </label>
             <div className="form-row">
-              <label> {uiText("Account")} <select
+              <label>
+                {" "}
+                {uiText("Account")}{" "}
+                <select
                   name="account_id"
                   required
                   defaultValue={schedule.account_id}
@@ -590,7 +650,10 @@ export function ConfirmOccurrenceModal({
                   ))}
                 </select>
               </label>
-              <label> {uiText("Category")} <select
+              <label>
+                {" "}
+                {uiText("Category")}{" "}
+                <select
                   name="category_id"
                   defaultValue={schedule.category_id ?? ""}
                 >
@@ -604,21 +667,30 @@ export function ConfirmOccurrenceModal({
               </label>
             </div>
             <div className="form-row">
-              <label> {uiText("Transaction date")} <input
+              <label>
+                {" "}
+                {uiText("Transaction date")}{" "}
+                <input
                   name="date"
                   type="date"
                   required
                   defaultValue={defaultTxDate}
                 />
               </label>
-              <label> {uiText("Payee / description")} <input
+              <label>
+                {" "}
+                {uiText("Payee / description")}{" "}
+                <input
                   name="payee"
                   maxLength={160}
                   defaultValue={schedule.name}
                 />
               </label>
             </div>
-            <label> {uiText("Notes")} <span className="muted">{uiText("Optional")}</span>
+            <label>
+              {" "}
+              {uiText("Notes")}{" "}
+              <span className="muted">{uiText("Optional")}</span>
               <textarea
                 name="notes"
                 maxLength={1000}
@@ -668,9 +740,18 @@ export function ConfirmOccurrenceModal({
                 })}
               </div>
             ) : (
-              <p className="form-hint"> {uiText("No unlinked")} {schedule.type} {uiText("transactions found.")} </p>
+              <p className="form-hint">
+                {" "}
+                {uiText("No unlinked")} {schedule.type}{" "}
+                {uiText("transactions found.")}{" "}
+              </p>
             )}
-            <p className="form-hint"> {uiText("Linking attaches this occurrence to an existing ledger record without creating a duplicate transaction or changing account balances.")} </p>
+            <p className="form-hint">
+              {" "}
+              {uiText(
+                "Linking attaches this occurrence to an existing ledger record without creating a duplicate transaction or changing account balances.",
+              )}{" "}
+            </p>
           </div>
         )}
 
@@ -686,7 +767,10 @@ export function ConfirmOccurrenceModal({
             className="secondary"
             disabled={busy}
             onClick={onClose}
-          > {uiText("Cancel")} </button>
+          >
+            {" "}
+            {uiText("Cancel")}{" "}
+          </button>
           <button
             className="primary"
             disabled={busy || (mode === "link" && !selectedTxId)}

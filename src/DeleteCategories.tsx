@@ -86,14 +86,19 @@ export function DeleteCategoriesDialog({
       <form onSubmit={submit}>
         <div id="delete-categories-message">
           {!single && (
-            <ul className="delete-categories-names" aria-label={uiText("Categories")}>
+            <ul
+              className="delete-categories-names"
+              aria-label={uiText("Categories")}
+            >
               {names.map((c) => (
                 <li key={c.id}>
                   <span aria-hidden="true">{c.emoji || "•"}</span> {c.name}
                 </li>
               ))}
               {count > names.length && (
-                <li className="more">+{count - names.length} {uiText("more")}</li>
+                <li className="more">
+                  +{count - names.length} {uiText("more")}
+                </li>
               )}
             </ul>
           )}
@@ -105,8 +110,8 @@ export function DeleteCategoriesDialog({
             </li>
             {recurringCount > 0 && (
               <li>
-                {plural(recurringCount, "recurring schedule")} {uiText("will also move to")}{" "}
-                {targetName}.
+                {plural(recurringCount, "recurring schedule")}{" "}
+                {uiText("will also move to")} {targetName}.
               </li>
             )}
             <li className={budgetCount ? "danger-text" : undefined}>
@@ -133,7 +138,9 @@ export function DeleteCategoriesDialog({
               </select>
             </label>
           )}
-          <p className="delete-categories-final">{uiText("This can't be undone.")}</p>
+          <p className="delete-categories-final">
+            {uiText("This can't be undone.")}
+          </p>
         </div>
         {error && (
           <div className="error" role="alert">
@@ -146,7 +153,10 @@ export function DeleteCategoriesDialog({
             className="secondary"
             disabled={busy}
             onClick={close}
-          > {uiText("Cancel")} </button>
+          >
+            {" "}
+            {uiText("Cancel")}{" "}
+          </button>
           <button className="primary danger" disabled={busy || !count}>
             {busy
               ? uiText("Deleting…")

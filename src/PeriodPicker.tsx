@@ -220,7 +220,11 @@ export function PeriodPicker({
           aria-label={`Choose ${label.toLowerCase()}`}
         >
           {choices.length > 0 && (
-            <div className="period-spans" role="group" aria-label={uiText("Length")}>
+            <div
+              className="period-spans"
+              role="group"
+              aria-label={uiText("Length")}
+            >
               {choices.map((s) => (
                 <button
                   key={s.value}
@@ -244,7 +248,12 @@ export function PeriodPicker({
             </div>
           )}
           {span === "all" ? (
-            <p className="period-all-note"> {uiText("Showing every transaction. Pick a length above to browse by month.")} </p>
+            <p className="period-all-note">
+              {" "}
+              {uiText(
+                "Showing every transaction. Pick a length above to browse by month.",
+              )}{" "}
+            </p>
           ) : (
             <>
               <div className="period-year">
@@ -325,7 +334,10 @@ export function PeriodPicker({
                 </p>
               ) : (
                 span !== "month" && (
-                  <p className="period-hint"> {uiText("Pick the last month ·")} {periodLabel(span, preview ?? month)}
+                  <p className="period-hint">
+                    {" "}
+                    {uiText("Pick the last month ·")}{" "}
+                    {periodLabel(span, preview ?? month)}
                   </p>
                 )
               )}

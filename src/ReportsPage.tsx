@@ -144,24 +144,30 @@ export function ReportsPage({
                 );
               }}
             >
-              <Download size={14} /> {uiText("Export CSV")} </button>
+              <Download size={14} /> {uiText("Export CSV")}{" "}
+            </button>
             <button
               type="button"
               className="secondary no-print"
               onClick={() => window.print()}
             >
-              <Printer size={14} /> {uiText("Print / Save PDF")} </button>
+              <Printer size={14} /> {uiText("Print / Save PDF")}{" "}
+            </button>
           </div>
         </div>
 
         <div className="reports-kpis">
           <div className="reports-kpi">
             <span className="reports-kpi-label">{uiText("Income")}</span>
-            <span className="reports-kpi-value">{concealed(summary.income)}</span>
+            <span className="reports-kpi-value">
+              {concealed(summary.income)}
+            </span>
           </div>
           <div className="reports-kpi">
             <span className="reports-kpi-label">{uiText("Expenses")}</span>
-            <span className="reports-kpi-value">{concealed(summary.expense)}</span>
+            <span className="reports-kpi-value">
+              {concealed(summary.expense)}
+            </span>
           </div>
           <div className="reports-kpi">
             <span className="reports-kpi-label">{uiText("Net cash flow")}</span>
@@ -188,7 +194,10 @@ export function ReportsPage({
             </span>
             <div>
               <b>{c.name}</b>
-              <p>{((c.total / summary.expense) * 100).toFixed(1)}{uiText("% of spending")}</p>
+              <p>
+                {((c.total / summary.expense) * 100).toFixed(1)}
+                {uiText("% of spending")}
+              </p>
               <progress
                 aria-label={`${c.name} share of spending`}
                 value={c.total}
@@ -216,11 +225,21 @@ export function ReportsPage({
           </span>
         </div>
         {!yoy.available || !yoy.prior || !yoy.delta ? (
-          <p className="reports-note"> {uiText("Year-over-year comparison is available for specific periods (Month, YTD, 12M, or Custom).")} </p>
+          <p className="reports-note">
+            {" "}
+            {uiText(
+              "Year-over-year comparison is available for specific periods (Month, YTD, 12M, or Custom).",
+            )}{" "}
+          </p>
         ) : (
           <>
             {!yoy.hasPriorData && (
-              <p className="reports-note"> {uiText("No transactions recorded in the prior-year period (")} {formatRangeShort(yoy.priorRange!)}).
+              <p className="reports-note">
+                {" "}
+                {uiText(
+                  "No transactions recorded in the prior-year period (",
+                )}{" "}
+                {formatRangeShort(yoy.priorRange!)}).
               </p>
             )}
             <div className="reports-table-wrap">
@@ -325,12 +344,18 @@ export function ReportsPage({
                 type="button"
                 className={payeeKind === "expense" ? "is-active" : ""}
                 onClick={() => setPayeeKind("expense")}
-              > {uiText("Expenses")} </button>
+              >
+                {" "}
+                {uiText("Expenses")}{" "}
+              </button>
               <button
                 type="button"
                 className={payeeKind === "income" ? "is-active" : ""}
                 onClick={() => setPayeeKind("income")}
-              > {uiText("Income")} </button>
+              >
+                {" "}
+                {uiText("Income")}{" "}
+              </button>
             </div>
           </div>
         </div>
@@ -469,4 +494,3 @@ export function ReportsPage({
     </>
   );
 }
-

@@ -22,6 +22,8 @@ FULOOS_TEST_EMAIL=you+fuloos-test@example.com FULOOS_TEST_PASSWORD='long-random-
 
 Omit `--signup` to reuse an existing test user, or omit the credentials to run only the read-only collection checks. Set `FULOOS_PB_URL` to test another server. Remove the test user afterwards with **Delete my account** in the app (after the lockdown migration), or from the dashboard as described under "Clearing test data".
 
+For the November 17 integrity and backup fixes, follow [UPGRADE_2026-11-17.md](UPGRADE_2026-11-17.md).
+
 ## Installation & Upgrades
 
 1. Back up the running instance's `pb_data` and existing migration folder. Check its version using `./pocketbase --version`. These migrations use the v0.23+ fields/collection API; review compatibility with the installed version before applying them.
@@ -39,7 +41,7 @@ Omit `--signup` to reuse an existing test user, or omit the credentials to run o
 5. Set `VITE_POCKETBASE_URL=https://pb.danishali.dev` as a **build** environment variable, then rebuild/redeploy the frontend. Without it, Fuloos remains an explicitly labeled in-memory demo.
 6. Verify signup/signin, then create two test users and confirm that neither user can read or reference the other's accounts, categories, transactions, recurring schedules, occurrence confirmations, automation preferences, or budgets. Test opening-date changes, category/account deletion restrictions, recurring schedule confirmation/linking, and credit-card repayments before real financial data.
 
-The migration allows ordinary email/password signup and immediate signin. Email verification is not required initially; if you later require verification, configure SMTP and update the auth UI/collection auth rule together. Password reset and verification-email UI are future additions.
+The migration allows ordinary email/password signup and immediate signin. Email verification is not required initially; if you later require verification, configure SMTP and update the auth UI/collection auth rule together. Password reset, verification-email and email OTP interfaces are implemented; delivery requires SMTP.
 
 ## Data guarantees
 

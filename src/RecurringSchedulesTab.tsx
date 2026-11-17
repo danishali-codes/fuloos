@@ -11,18 +11,10 @@ import {
   Tags,
   Trash2,
 } from "lucide-react";
-import type {
-  Ledger,
-  RecurringKind,
-  RecurringSchedule,
-} from "./domain.ts";
+import type { Ledger, RecurringKind, RecurringSchedule } from "./domain.ts";
 import { describeScheduleStatus } from "./recurring.ts";
 import type { IntelligentForecast } from "./recurringAutomation.ts";
-import {
-  formatFullDate,
-  frequencyLabels,
-  statusLabels,
-} from "./RecurringView";
+import { formatFullDate, frequencyLabels, statusLabels } from "./RecurringView";
 
 export function RecurringSchedulesTab({
   ledger,
@@ -76,7 +68,8 @@ export function RecurringSchedulesTab({
     () => ({
       all: summaries.length,
       active: summaries.filter(
-        (s) => s.schedule.status === "active" && s.paymentStatus !== "completed",
+        (s) =>
+          s.schedule.status === "active" && s.paymentStatus !== "completed",
       ).length,
       overdue: summaries.filter((s) => s.paymentStatus === "overdue").length,
       paused: summaries.filter((s) => s.schedule.status === "paused").length,
@@ -102,9 +95,11 @@ export function RecurringSchedulesTab({
         if (accountFilter && item.schedule.account_id !== accountFilter)
           return false;
         if (q) {
-          const cat = categoryById.get(item.schedule.category_id ?? "")?.name ?? "";
+          const cat =
+            categoryById.get(item.schedule.category_id ?? "")?.name ?? "";
           const acc = accountById.get(item.schedule.account_id)?.name ?? "";
-          const haystack = `${item.schedule.name} ${item.schedule.notes} ${cat} ${acc}`.toLowerCase();
+          const haystack =
+            `${item.schedule.name} ${item.schedule.notes} ${cat} ${acc}`.toLowerCase();
           if (!haystack.includes(q)) return false;
         }
         return true;
@@ -131,10 +126,17 @@ export function RecurringSchedulesTab({
     <section className="panel section">
       <div className="panel-heading recurring-panel-head">
         <div>
-          <h2> {uiText("Recurring schedules")}{" "}
+          <h2>
+            {" "}
+            {uiText("Recurring schedules")}{" "}
             <span className="count">{filteredSchedules.length}</span>
           </h2>
-          <p> {uiText("Subscriptions, bills and regular income. Balances update only when you confirm a payment.")} </p>
+          <p>
+            {" "}
+            {uiText(
+              "Subscriptions, bills and regular income. Balances update only when you confirm a payment.",
+            )}{" "}
+          </p>
         </div>
         <div
           className="status-tabs"
@@ -188,9 +190,7 @@ export function RecurringSchedulesTab({
         <select
           aria-label={uiText("Filter recurring type")}
           value={kindFilter}
-          onChange={(e) =>
-            setKindFilter(e.target.value as "" | RecurringKind)
-          }
+          onChange={(e) => setKindFilter(e.target.value as "" | RecurringKind)}
         >
           <option value="">{uiText("All types")}</option>
           <option value="expense">{uiText("Expenses")}</option>
@@ -206,10 +206,7 @@ export function RecurringSchedulesTab({
             const account = accountById.get(schedule.account_id);
             const profile = forecast.profiles[schedule.id];
             return (
-              <div
-                className="transaction-row recurring-row"
-                key={schedule.id}
-              >
+              <div className="transaction-row recurring-row" key={schedule.id}>
                 <button
                   type="button"
                   className="transaction-main"
@@ -247,7 +244,9 @@ export function RecurringSchedulesTab({
                         {frequencyLabels[schedule.frequency]}
                       </span>
                       {schedule.amount_type === "variable" && (
-                        <span className="mini-tag variable">{uiText("Variable")}</span>
+                        <span className="mini-tag variable">
+                          {uiText("Variable")}
+                        </span>
                       )}
                     </b>
                     <small>
@@ -285,7 +284,10 @@ export function RecurringSchedulesTab({
                       className="secondary compact-btn"
                       disabled={busy}
                       onClick={() => onConfirmOccurrence(schedule, nextDueDate)}
-                    > {uiText("Mark paid")} </button>
+                    >
+                      {" "}
+                      {uiText("Mark paid")}{" "}
+                    </button>
                   )}
                   <button
                     type="button"
@@ -296,7 +298,11 @@ export function RecurringSchedulesTab({
                         ? `Resume ${schedule.name}`
                         : `Pause ${schedule.name}`
                     }
-                    title={schedule.status === "paused" ? uiText("Resume") : uiText("Pause")}
+                    title={
+                      schedule.status === "paused"
+                        ? uiText("Resume")
+                        : uiText("Pause")
+                    }
                     onClick={() => onTogglePause(schedule)}
                   >
                     {schedule.status === "paused" ? (
@@ -339,7 +345,9 @@ export function RecurringSchedulesTab({
           <p>
             {(ledger.recurring ?? []).length
               ? uiText("Try switching filters or clearing your search.")
-              : uiText("Add your subscriptions, utility bills or salary to see upcoming dates.")}
+              : uiText(
+                  "Add your subscriptions, utility bills or salary to see upcoming dates.",
+                )}
           </p>
           {!(ledger.recurring ?? []).length && (
             <button
@@ -348,7 +356,8 @@ export function RecurringSchedulesTab({
               disabled={busy}
               onClick={onAddSchedule}
             >
-              <Plus size={16} /> {uiText("Add recurring")} </button>
+              <Plus size={16} /> {uiText("Add recurring")}{" "}
+            </button>
           )}
         </div>
       )}

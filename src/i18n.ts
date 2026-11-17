@@ -47,7 +47,8 @@ const en = {
   "header.eyebrow": "YOUR MONEY, IN VIEW",
   "header.title.Overview": "A clearer picture.",
   "header.subtitle.Overview": "Your everyday finances, all in one calm place.",
-  "header.subtitle.Transactions": "The small details behind the bigger picture.",
+  "header.subtitle.Transactions":
+    "The small details behind the bigger picture.",
   "header.subtitle.Recurring":
     "Subscriptions, bills and regular income — balances stay untouched until paid.",
   "header.subtitle.Budgets":
@@ -57,7 +58,8 @@ const en = {
   "header.subtitle.Net Worth":
     "Cash, investments, gold, property, and liabilities in one view.",
   "header.subtitle.Reports": "The small details behind the bigger picture.",
-  "header.subtitle.Accounts": "Every account. One place to see where you stand.",
+  "header.subtitle.Accounts":
+    "Every account. One place to see where you stand.",
   "header.subtitle.Categories":
     "Organize your money in a way that makes sense to you.",
 
@@ -273,8 +275,7 @@ const ar: Record<TranslationKey, string> = {
   "header.subtitle.Transactions": "التفاصيل الصغيرة التي تصنع الصورة الكبيرة.",
   "header.subtitle.Recurring":
     "الاشتراكات والفواتير والدخل المنتظم — تبقى الأرصدة كما هي حتى الدفع.",
-  "header.subtitle.Budgets":
-    "الحدود الشهرية لكل فئة، ومدى توافق إنفاقك معها.",
+  "header.subtitle.Budgets": "الحدود الشهرية لكل فئة، ومدى توافق إنفاقك معها.",
   "header.subtitle.Goals":
     "أهداف الادخار وصناديق التوفير، تتبعها بالوتيرة التي تناسبك.",
   "header.subtitle.Net Worth":
@@ -426,7 +427,8 @@ const ar: Record<TranslationKey, string> = {
   "settings.title": "الإعدادات",
   "settings.appearance": "المظهر",
   "settings.language": "اللغة",
-  "settings.languageHint": "اختر لغة العرض واتجاه القراءة. يُحفظ على هذا الجهاز.",
+  "settings.languageHint":
+    "اختر لغة العرض واتجاه القراءة. يُحفظ على هذا الجهاز.",
   "settings.langEn": "English (LTR)",
   "settings.langAr": "العربية (RTL)",
   "settings.layout": "التخطيط",
@@ -585,8 +587,7 @@ const LocaleContext = createContext<LocaleContextValue>({
   locale: currentLocale,
   dir: dir(currentLocale),
   setLocale: setGlobalLocale,
-  toggleLocale: () =>
-    setGlobalLocale(currentLocale === "en" ? "ar" : "en"),
+  toggleLocale: () => setGlobalLocale(currentLocale === "en" ? "ar" : "en"),
   t: (key, vars) => t(key, vars, currentLocale),
 });
 
@@ -649,7 +650,15 @@ export function useLocale(): LocaleContextValue {
   return useContext(LocaleContext);
 }
 
-const PHRASES: Record<string,string> = {...Object.fromEntries(Object.entries(MESSAGES.en).map(([key,english])=>[english,MESSAGES.ar[key as TranslationKey]])),...ARABIC_UI};
+const PHRASES: Record<string, string> = {
+  ...Object.fromEntries(
+    Object.entries(MESSAGES.en).map(([key, english]) => [
+      english,
+      MESSAGES.ar[key as TranslationKey],
+    ]),
+  ),
+  ...ARABIC_UI,
+};
 export function translateText(english: string): string {
   return currentLocale === "ar" ? (PHRASES[english] ?? english) : english;
 }

@@ -82,7 +82,11 @@ export function RecurringSuggestionsTab({
           </span>
           <span className={`confidence-pill ${pattern.confidenceTier}`}>
             {Math.round(pattern.confidence * 100)}%{" "}
-            {pattern.confidenceTier === "high" ? uiText("High") : uiText("Medium")} {uiText("confidence")} </span>
+            {pattern.confidenceTier === "high"
+              ? uiText("High")
+              : uiText("Medium")}{" "}
+            {uiText("confidence")}{" "}
+          </span>
         </div>
 
         <div className="card-main">
@@ -94,7 +98,9 @@ export function RecurringSuggestionsTab({
                 {acc?.name ?? "Account"} {cat ? `· ${cat.name}` : ""}
               </p>
               {pattern.status === "ended" && (
-                <p className="card-subtitle"> {uiText("Ended · paid")} {formatFullDate(pattern.firstDate)} –{" "}
+                <p className="card-subtitle">
+                  {" "}
+                  {uiText("Ended · paid")} {formatFullDate(pattern.firstDate)} –{" "}
                   {formatFullDate(pattern.lastDate)}
                 </p>
               )}
@@ -126,7 +132,9 @@ export function RecurringSuggestionsTab({
               }
             >
               {isExpanded ? uiText("Hide") : uiText("View")}{" "}
-              {pattern.supportingTransactions.length} {uiText("supporting transactions")} <ChevronDown
+              {pattern.supportingTransactions.length}{" "}
+              {uiText("supporting transactions")}{" "}
+              <ChevronDown
                 size={14}
                 style={{
                   transform: isExpanded ? "rotate(180deg)" : "none",
@@ -156,14 +164,18 @@ export function RecurringSuggestionsTab({
             className="secondary compact-btn"
             disabled={busy}
             onClick={() => onDismissPattern?.(pattern.patternKey)}
-          > {uiText("Dismiss")} </button>
+          >
+            {" "}
+            {uiText("Dismiss")}{" "}
+          </button>
           <button
             type="button"
             className="secondary compact-btn"
             disabled={busy}
             onClick={() => onEditPattern?.(pattern)}
           >
-            <Pencil size={13} /> {uiText("Edit & create")} </button>
+            <Pencil size={13} /> {uiText("Edit & create")}{" "}
+          </button>
           <button
             type="button"
             className="primary compact-btn"
@@ -184,10 +196,17 @@ export function RecurringSuggestionsTab({
     <section className="panel section suggestions-tab-content">
       <div className="panel-heading recurring-panel-head">
         <div>
-          <h2> {uiText("Recurring suggestions & match reviews")}{" "}
+          <h2>
+            {" "}
+            {uiText("Recurring suggestions & match reviews")}{" "}
             <span className="count">{suggestionsBadgeCount}</span>
           </h2>
-          <p> {uiText("Statistical pattern detection across your transaction history and bank imports. Nothing is scheduled or altered until you accept.")} </p>
+          <p>
+            {" "}
+            {uiText(
+              "Statistical pattern detection across your transaction history and bank imports. Nothing is scheduled or altered until you accept.",
+            )}{" "}
+          </p>
         </div>
         {onRunReconciliation && (
           <button
@@ -196,17 +215,28 @@ export function RecurringSuggestionsTab({
             disabled={busy}
             onClick={onRunReconciliation}
           >
-            <RefreshCw size={14} /> {uiText("Scan transactions")} </button>
+            <RefreshCw size={14} /> {uiText("Scan transactions")}{" "}
+          </button>
         )}
       </div>
 
       {reconciliation.reviewCandidates.length > 0 && (
         <div className="review-candidates-block">
           <div className="sub-block-heading">
-            <span className="eyebrow amber">{uiText("MATCH CONFIRMATION NEEDED")}</span>
-            <h3> {uiText("Transactions matching existing schedules (")} {reconciliation.reviewCandidates.length})
+            <span className="eyebrow amber">
+              {uiText("MATCH CONFIRMATION NEEDED")}
+            </span>
+            <h3>
+              {" "}
+              {uiText("Transactions matching existing schedules (")}{" "}
+              {reconciliation.reviewCandidates.length})
             </h3>
-            <p> {uiText("These transactions resemble your scheduled payments but had slight amount/date variance or multiple possible matches.")} </p>
+            <p>
+              {" "}
+              {uiText(
+                "These transactions resemble your scheduled payments but had slight amount/date variance or multiple possible matches.",
+              )}{" "}
+            </p>
           </div>
 
           <div className="suggestion-cards-grid">
@@ -221,20 +251,28 @@ export function RecurringSuggestionsTab({
                       <ArrowDownLeft size={14} />
                     ) : (
                       <ReceiptText size={14} />
-                    )} {uiText("Match Candidate")} </span>
+                    )}{" "}
+                    {uiText("Match Candidate")}{" "}
+                  </span>
                   <span className="confidence-pill medium">
-                    {Math.round(candidate.confidence * 100)}{uiText("% match")} </span>
+                    {Math.round(candidate.confidence * 100)}
+                    {uiText("% match")}{" "}
+                  </span>
                 </div>
 
                 <div className="card-main">
                   <h4>{candidate.schedule.name}</h4>
-                  <p className="card-detail-line"> {uiText("Scheduled for")}{" "}
+                  <p className="card-detail-line">
+                    {" "}
+                    {uiText("Scheduled for")}{" "}
                     <b>{formatShortDate(candidate.occurrenceDate)}</b> (
                     {money(candidate.schedule.amount)})
                   </p>
 
                   <div className="match-tx-preview">
-                    <span className="preview-label">{uiText("Bank transaction:")}</span>
+                    <span className="preview-label">
+                      {uiText("Bank transaction:")}
+                    </span>
                     <b>{transactionLabel(candidate.transaction)}</b>
                     <span>
                       {formatShortDate(candidate.transaction.date)} ·{" "}
@@ -259,14 +297,18 @@ export function RecurringSuggestionsTab({
                     onClick={() =>
                       onDismissMatchCandidate?.(candidate.matchKey)
                     }
-                  > {uiText("Dismiss")} </button>
+                  >
+                    {" "}
+                    {uiText("Dismiss")}{" "}
+                  </button>
                   <button
                     type="button"
                     className="primary compact-btn"
                     disabled={busy}
                     onClick={() => onConfirmMatchCandidate?.(candidate)}
                   >
-                    <Check size={14} /> {uiText("Confirm match")} </button>
+                    <Check size={14} /> {uiText("Confirm match")}{" "}
+                  </button>
                 </div>
               </article>
             ))}
@@ -276,9 +318,19 @@ export function RecurringSuggestionsTab({
 
       <div className="detected-patterns-block">
         <div className="sub-block-heading">
-          <span className="eyebrow green">{uiText("UNSCHEDULED RECURRING PATTERNS")}</span>
-          <h3>{uiText("Discovered from your history (")}{activePatterns.length})</h3>
-          <p> {uiText("Deterministic frequency analysis over your historical transactions and bank statements.")} </p>
+          <span className="eyebrow green">
+            {uiText("UNSCHEDULED RECURRING PATTERNS")}
+          </span>
+          <h3>
+            {uiText("Discovered from your history (")}
+            {activePatterns.length})
+          </h3>
+          <p>
+            {" "}
+            {uiText(
+              "Deterministic frequency analysis over your historical transactions and bank statements.",
+            )}{" "}
+          </p>
         </div>
 
         {activePatterns.length ? (
@@ -289,7 +341,12 @@ export function RecurringSuggestionsTab({
           <div className="empty">
             <Check size={28} />
             <h3>{uiText("All caught up")}</h3>
-            <p> {uiText("No unscheduled recurring patterns detected in your recent transactions. As you record transactions or import bank statements, new patterns will appear here.")} </p>
+            <p>
+              {" "}
+              {uiText(
+                "No unscheduled recurring patterns detected in your recent transactions. As you record transactions or import bank statements, new patterns will appear here.",
+              )}{" "}
+            </p>
           </div>
         )}
       </div>
@@ -298,8 +355,16 @@ export function RecurringSuggestionsTab({
         <div className="detected-patterns-block">
           <div className="sub-block-heading">
             <span className="eyebrow">{uiText("PAST RECURRING PAYMENTS")}</span>
-            <h3>{uiText("Stopped series (")}{pastPatterns.length})</h3>
-            <p> {uiText("Subscriptions, instalments and bills that used to repeat but have stopped. Adding one keeps it as an ended schedule with its payments linked, without any future due dates.")} </p>
+            <h3>
+              {uiText("Stopped series (")}
+              {pastPatterns.length})
+            </h3>
+            <p>
+              {" "}
+              {uiText(
+                "Subscriptions, instalments and bills that used to repeat but have stopped. Adding one keeps it as an ended schedule with its payments linked, without any future due dates.",
+              )}{" "}
+            </p>
           </div>
           <div className="suggestion-cards-grid">
             {pastPatterns.map(renderPatternCard)}

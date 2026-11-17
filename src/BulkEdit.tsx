@@ -192,7 +192,10 @@ export function BulkEdit({
         type="button"
         className="bulk-keep"
         onClick={() => set({ [key]: undefined })}
-      > {uiText("Keep each")} </button>
+      >
+        {" "}
+        {uiText("Keep each")}{" "}
+      </button>
     ) : null;
 
   return (
@@ -211,7 +214,9 @@ export function BulkEdit({
       <div className="modal-head">
         <div>
           <span className="eyebrow">{uiText("MAKE IT YOURS")}</span>
-          <h2 id="bulk-title"> {uiText("Edit")} {items.length}{" "}
+          <h2 id="bulk-title">
+            {" "}
+            {uiText("Edit")} {items.length}{" "}
             {items.length === 1 ? "transaction" : "transactions"}
           </h2>
         </div>
@@ -250,18 +255,23 @@ export function BulkEdit({
                 className={kind === undefined ? "selected" : ""}
                 onClick={() => set({ type: undefined })}
               >
-                <Shuffle size={16} /> {uiText("Keep each")} </button>
+                <Shuffle size={16} /> {uiText("Keep each")}{" "}
+              </button>
             )}
           </div>
           <label>
             <span className="bulk-label">
-              <span> {uiText("Amount")} <span className="muted">AED</span>
+              <span>
+                {" "}
+                {uiText("Amount")} <span className="muted">AED</span>
               </span>
               {keepLink("amount")}
             </span>
             <input
               inputMode="decimal"
-              placeholder={mixed("amount") ? uiText("Keep each amount") : "0.00"}
+              placeholder={
+                mixed("amount") ? uiText("Keep each amount") : "0.00"
+              }
               value={form.amount ?? ""}
               onChange={(e) =>
                 set({
@@ -296,7 +306,10 @@ export function BulkEdit({
               </select>
             </label>
             {showDestination ? (
-              <label> {uiText("To account")} <select
+              <label>
+                {" "}
+                {uiText("To account")}{" "}
+                <select
                   value={form.to_account_id ?? KEEP}
                   onChange={(e) =>
                     set({
@@ -306,9 +319,14 @@ export function BulkEdit({
                   }
                 >
                   {shared.type === "transfer" && mixed("to_account_id") ? (
-                    <option value={KEEP}>{uiText("Keep each destination")}</option>
+                    <option value={KEEP}>
+                      {uiText("Keep each destination")}
+                    </option>
                   ) : (
-                    <option value={KEEP} disabled> {uiText("Choose account")} </option>
+                    <option value={KEEP} disabled>
+                      {" "}
+                      {uiText("Choose account")}{" "}
+                    </option>
                   )}
                   {ledger.accounts.map((a) => (
                     <option value={a.id} key={a.id}>
@@ -318,7 +336,10 @@ export function BulkEdit({
                 </select>
               </label>
             ) : showCategory ? (
-              <label> {uiText("Category")} <select
+              <label>
+                {" "}
+                {uiText("Category")}{" "}
+                <select
                   value={form.category_id ?? KEEP}
                   onChange={(e) =>
                     set({
@@ -339,17 +360,27 @@ export function BulkEdit({
                 </select>
               </label>
             ) : (
-              <label> {uiText("Category / to account")} <select disabled value={KEEP}>
+              <label>
+                {" "}
+                {uiText("Category / to account")}{" "}
+                <select disabled value={KEEP}>
                   <option value={KEEP}>{uiText("Keep each")}</option>
                 </select>
               </label>
             )}
           </div>
           {!showCategory && !showDestination && (
-            <p className="form-hint"> {uiText("These include both transfers and income or expenses. Pick one type above to change the category or the destination account.")} </p>
+            <p className="form-hint">
+              {" "}
+              {uiText(
+                "These include both transfers and income or expenses. Pick one type above to change the category or the destination account.",
+              )}{" "}
+            </p>
           )}
           <label>
-            <span className="bulk-label"> {uiText("Date")} {keepLink("date")}
+            <span className="bulk-label">
+              {" "}
+              {uiText("Date")} {keepLink("date")}
             </span>
             <input
               type="date"
@@ -369,7 +400,9 @@ export function BulkEdit({
           </label>
           <label>
             <span className="bulk-label">
-              {kind === "transfer" ? uiText("Description") : uiText("Payee / description")}
+              {kind === "transfer"
+                ? uiText("Description")
+                : uiText("Payee / description")}
               {keepLink("payee")}
             </span>
             <input
@@ -391,7 +424,10 @@ export function BulkEdit({
           </label>
           <label>
             <span className="bulk-label">
-              <span> {uiText("Notes")} <span className="muted">{uiText("Optional")}</span>
+              <span>
+                {" "}
+                {uiText("Notes")}{" "}
+                <span className="muted">{uiText("Optional")}</span>
               </span>
               {keepLink("notes")}
             </span>
@@ -414,7 +450,11 @@ export function BulkEdit({
                 type="checkbox"
                 checked={appendNotes}
                 onChange={(e) => setAppendNotes(e.target.checked)}
-              /> {uiText("Add to the end of each note instead of replacing it")} </label>
+              />{" "}
+              {uiText(
+                "Add to the end of each note instead of replacing it",
+              )}{" "}
+            </label>
           )}
         </fieldset>
         <p className="form-hint" aria-live="polite">
@@ -423,7 +463,9 @@ export function BulkEdit({
               ? `${invalid.length} of ${preview.length} can’t be saved like this: ${invalid[0].error}`
               : hasChanges
                 ? `Changes the ${list(changed)} on ${preview.length} ${preview.length === 1 ? "transaction" : "transactions"}. Everything else stays as it is.`
-                : uiText("Fields the selected transactions share are filled in. Change any field to update them all."))}
+                : uiText(
+                    "Fields the selected transactions share are filled in. Change any field to update them all.",
+                  ))}
         </p>
         {error && (
           <div className="error" role="alert">
@@ -431,7 +473,12 @@ export function BulkEdit({
           </div>
         )}
         {uncertain && (
-          <p className="form-hint"> {uiText("Close this editor and reload your workspace before making more changes.")} </p>
+          <p className="form-hint">
+            {" "}
+            {uiText(
+              "Close this editor and reload your workspace before making more changes.",
+            )}{" "}
+          </p>
         )}
         {(busy || completed.size > 0) && (
           <ImportProgress
@@ -446,7 +493,10 @@ export function BulkEdit({
             className="secondary"
             disabled={busy}
             onClick={onClose}
-          > {uiText("Cancel")} </button>
+          >
+            {" "}
+            {uiText("Cancel")}{" "}
+          </button>
           <button
             className="primary"
             disabled={

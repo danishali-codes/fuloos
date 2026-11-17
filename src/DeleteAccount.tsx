@@ -66,8 +66,17 @@ export function DeleteAccountDialog({
         </button>
       </div>
       <form onSubmit={submit}>
-        <div className="error"> {uiText("This permanently deletes")} <b>{email}</b> {uiText("and everything in it: accounts, categories, transactions, recurring schedules, budgets, CSV presets and AI suggestion data. It can't be undone.")} </div>
-        <label> {uiText("Type")} {CONFIRM_WORD} {uiText("to confirm")} <input
+        <div className="error">
+          {" "}
+          {uiText("This permanently deletes")} <b>{email}</b>{" "}
+          {uiText(
+            "and everything in it: accounts, categories, transactions, recurring schedules, budgets, CSV presets and AI suggestion data. It can't be undone.",
+          )}{" "}
+        </div>
+        <label>
+          {" "}
+          {uiText("Type")} {CONFIRM_WORD} {uiText("to confirm")}{" "}
+          <input
             autoFocus
             autoComplete="off"
             value={typed}
@@ -87,7 +96,10 @@ export function DeleteAccountDialog({
             className="secondary"
             disabled={busy}
             onClick={close}
-          > {uiText("Cancel")} </button>
+          >
+            {" "}
+            {uiText("Cancel")}{" "}
+          </button>
           <button
             className="primary danger"
             disabled={busy || typed.trim() !== CONFIRM_WORD}

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   BACKUP_FORMAT_VERSION,
+  BACKUP_EXCLUSIONS,
   BackupValidationError,
   createBackup,
   executeRestore,
@@ -148,9 +149,15 @@ test("createBackup produces versioned AED backup excluding ml_examples and ml_se
   );
   assert.equal(backup.format_version, BACKUP_FORMAT_VERSION);
   assert.equal(backup.currency, "AED");
-  assert.deepEqual(backup.excluded, ["ml_examples", "ml_settings"]);
-  assert.equal("ml_examples" in (backup.data as Record<string, unknown>), false);
-  assert.equal("ml_settings" in (backup.data as Record<string, unknown>), false);
+  assert.deepEqual(backup.excluded, [...BACKUP_EXCLUSIONS]);
+  assert.equal(
+    "ml_examples" in (backup.data as Record<string, unknown>),
+    false,
+  );
+  assert.equal(
+    "ml_settings" in (backup.data as Record<string, unknown>),
+    false,
+  );
   assert.equal(backup.data.accounts.length, 2);
   assert.equal(backup.data.csv_presets.length, 1);
 
@@ -359,17 +366,20 @@ test("executeRestore rejects empty mode on non-empty workspace and supports merg
 
 test("executeRestore batches via PocketBase backend across >100 transactions with ID remapping", async () => {
   const base = sampleLedger();
-  base.transactions = Array.from({ length: IMPORT_BATCH_SIZE + 25 }, (_, i) => ({
-    id: `old_tx_${i}`,
-    type: "expense" as const,
-    amount: 1000 + i,
-    account_id: "old_acc_1",
-    to_account_id: null,
-    category_id: "old_cat_1",
-    date: "2026-03-01",
-    payee: `Merchant ${i}`,
-    notes: "",
-  }));
+  base.transactions = Array.from(
+    { length: IMPORT_BATCH_SIZE + 25 },
+    (_, i) => ({
+      id: `old_tx_${i}`,
+      type: "expense" as const,
+      amount: 1000 + i,
+      account_id: "old_acc_1",
+      to_account_id: null,
+      category_id: "old_cat_1",
+      date: "2026-03-01",
+      payee: `Merchant ${i}`,
+      notes: "",
+    }),
+  );
   base.recurring_occurrences = [
     {
       id: "old_occ_1",

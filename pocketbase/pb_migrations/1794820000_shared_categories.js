@@ -110,35 +110,103 @@ const sharedChecks = `
         OR (SELECT COALESCE(SUM(json_extract(s.value,'$.amount')),0) FROM json_each(NEW.splits) s)!=NEW.amount
       ) THEN RAISE(ABORT,'Splits must have positive integer amounts summing to the transaction amount') END;`;
 
-function installTxChecks(app,checks) {
-  for (const action of ["INSERT","UPDATE"]) {
-    app.db().newQuery("DROP TRIGGER IF EXISTS fuloos_transaction_" + action.toLowerCase()).execute();
-    app.db().newQuery("CREATE TRIGGER fuloos_transaction_" + action.toLowerCase() + " BEFORE " + action + " ON fuloos_transactions BEGIN " + checks + " END").execute();
+function installTxChecks(app, checks) {
+  for (const action of ["INSERT", "UPDATE"]) {
+    app
+      .db()
+      .newQuery(
+        "DROP TRIGGER IF EXISTS fuloos_transaction_" + action.toLowerCase(),
+      )
+      .execute();
+    app
+      .db()
+      .newQuery(
+        "CREATE TRIGGER fuloos_transaction_" +
+          action.toLowerCase() +
+          " BEFORE " +
+          action +
+          " ON fuloos_transactions BEGIN " +
+          checks +
+          " END",
+      )
+      .execute();
   }
 }
-migrate((app) => {
-  const households=app.findCollectionByNameOrId("fuloos_households");
-  const categories=app.findCollectionByNameOrId("fuloos_categories");
-  const field={type:"relation",name:"household_id",collectionId:households.id,maxSelect:1,cascadeDelete:false};
-  categories.fields.add(typeof RelationField === "function" ? new RelationField(field) : field);
-  const read = "@request.auth.collectionName = 'fuloos_users' && (user_id = @request.auth.id || (household_id != '' && (household_id.owner_id = @request.auth.id || (household_id.fuloos_household_members_via_household_id.user_id ?= @request.auth.id && household_id.fuloos_household_members_via_household_id.status ?= 'active'))))";
-  categories.listRule=read; categories.viewRule=read; app.save(categories);
-  for (const action of ["INSERT","UPDATE"]) {
-    app.db().newQuery("CREATE TRIGGER fuloos_category_household_" + action.toLowerCase() + " BEFORE " + action + ` ON fuloos_categories BEGIN
+migrate(
+  (app) => {
+    const households = app.findCollectionByNameOrId("fuloos_households");
+    const categories = app.findCollectionByNameOrId("fuloos_categories");
+    const field = {
+      type: "relation",
+      name: "household_id",
+      collectionId: households.id,
+      maxSelect: 1,
+      cascadeDelete: false,
+    };
+    categories.fields.add(
+      typeof RelationField === "function" ? new RelationField(field) : field,
+    );
+    const read =
+      "@request.auth.collectionName = 'fuloos_users' && (user_id = @request.auth.id || (household_id != '' && (household_id.owner_id = @request.auth.id || (household_id.fuloos_household_members_via_household_id.user_id ?= @request.auth.id && household_id.fuloos_household_members_via_household_id.status ?= 'active'))))";
+    categories.listRule = read;
+    categories.viewRule = read;
+    app.save(categories);
+    for (const action of ["INSERT", "UPDATE"]) {
+      app
+        .db()
+        .newQuery(
+          "CREATE TRIGGER fuloos_category_household_" +
+            action.toLowerCase() +
+            " BEFORE " +
+            action +
+            ` ON fuloos_categories BEGIN
       SELECT CASE WHEN COALESCE(NEW.household_id,'')!='' AND NOT EXISTS(
         SELECT 1 FROM fuloos_households h WHERE h.id=NEW.household_id AND (h.owner_id=NEW.user_id OR EXISTS(SELECT 1 FROM fuloos_household_members m WHERE m.household_id=h.id AND m.user_id=NEW.user_id AND m.status='active' AND m.role IN ('owner','editor')))
       ) THEN RAISE(ABORT,'Category owner must be an owner or editor of the household') END;
-    END`).execute();
-  }
-  app.db().newQuery(`UPDATE fuloos_categories SET household_id=COALESCE(
+    END`,
+        )
+        .execute();
+    }
+    app
+      .db()
+      .newQuery(
+        `UPDATE fuloos_categories SET household_id=COALESCE(
     (SELECT MIN(a.household_id) FROM fuloos_transactions t JOIN fuloos_accounts a ON a.id=t.account_id WHERE t.category_id=fuloos_categories.id AND a.household_id!='' AND a.user_id=fuloos_categories.user_id),
-    (SELECT MIN(b.household_id) FROM fuloos_budgets b WHERE b.category_id=fuloos_categories.id AND b.household_id!='' AND b.user_id=fuloos_categories.user_id),'')`).execute();
-  installTxChecks(app,sharedChecks);
-}, (app) => {
-  installTxChecks(app,previousChecks);
-  for (const a of ["insert","update"]) app.db().newQuery("DROP TRIGGER IF EXISTS fuloos_category_household_"+a).execute();
-  const col=app.findCollectionByNameOrId("fuloos_categories");
-  col.fields.removeByName("household_id");
-  col.listRule="@request.auth.collectionName = 'fuloos_users' && user_id = @request.auth.id";
-  col.viewRule=col.listRule; app.save(col);
-});
+    (SELECT MIN(b.household_id) FROM fuloos_budgets b WHERE b.category_id=fuloos_categories.id AND b.household_id!='' AND b.user_id=fuloos_categories.user_id),'')`,
+      )
+      .execute();
+    app
+      .db()
+      .newQuery(
+        `CREATE TRIGGER fuloos_category_unshare_guard BEFORE UPDATE OF household_id ON fuloos_categories
+    WHEN COALESCE(NEW.household_id,'')!=COALESCE(OLD.household_id,'') BEGIN
+    SELECT CASE WHEN EXISTS(
+      SELECT 1 FROM fuloos_transactions t JOIN fuloos_accounts a ON a.id=t.account_id
+      WHERE COALESCE(a.household_id,'')!='' AND a.household_id!=COALESCE(NEW.household_id,'')
+      AND (t.category_id=OLD.id OR EXISTS(SELECT 1 FROM json_each(CASE WHEN json_valid(t.splits) THEN t.splits ELSE '[]' END) s WHERE json_extract(s.value,'$.category_id')=OLD.id))
+    ) OR EXISTS(SELECT 1 FROM fuloos_budgets b WHERE b.category_id=OLD.id AND COALESCE(b.household_id,'')!='' AND b.household_id!=COALESCE(NEW.household_id,''))
+    THEN RAISE(ABORT,'Unshare or reassign linked accounts and budgets before changing category sharing') END;
+  END`,
+      )
+      .execute();
+    installTxChecks(app, sharedChecks);
+  },
+  (app) => {
+    app
+      .db()
+      .newQuery("DROP TRIGGER IF EXISTS fuloos_category_unshare_guard")
+      .execute();
+    installTxChecks(app, previousChecks);
+    for (const a of ["insert", "update"])
+      app
+        .db()
+        .newQuery("DROP TRIGGER IF EXISTS fuloos_category_household_" + a)
+        .execute();
+    const col = app.findCollectionByNameOrId("fuloos_categories");
+    col.fields.removeByName("household_id");
+    col.listRule =
+      "@request.auth.collectionName = 'fuloos_users' && user_id = @request.auth.id";
+    col.viewRule = col.listRule;
+    app.save(col);
+  },
+);

@@ -37,7 +37,9 @@ function TaskRow({
         <span className="queue-task-state">
           {task.status === "queued" && "Waiting"}
           {task.status === "running" &&
-            (task.total > 1 ? `${task.done} / ${task.total}` : uiText("Saving…"))}
+            (task.total > 1
+              ? `${task.done} / ${task.total}`
+              : uiText("Saving…"))}
           {task.status === "done" && "Saved"}
           {task.status === "failed" && "Failed"}
         </span>
@@ -128,7 +130,12 @@ export function QueueDock({ queue }: { queue: TaskQueue }) {
             ))}
           </ul>
           {pending > 0 && (
-            <p className="queue-note"> {uiText("You can keep using Fuloos. Keep this tab open until saving finishes.")} </p>
+            <p className="queue-note">
+              {" "}
+              {uiText(
+                "You can keep using Fuloos. Keep this tab open until saving finishes.",
+              )}{" "}
+            </p>
           )}
         </>
       )}

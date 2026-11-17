@@ -143,7 +143,13 @@ export function NotificationSettings({
 
   const dirty = JSON.stringify(prefs) !== savedSnapshot;
   const disabled = Boolean(
-    busy || loading || saving || testing || testingPush || pushBusy || !supported,
+    busy ||
+    loading ||
+    saving ||
+    testing ||
+    testingPush ||
+    pushBusy ||
+    !supported,
   );
   const pushChannelEnabled = Boolean(prefs.channels?.push);
   const anyChannelEnabled = prefs.email_enabled || pushChannelEnabled;
@@ -151,7 +157,7 @@ export function NotificationSettings({
   const browserSupported = isWebPushSupported();
   const isBrowserSubscribed = Boolean(
     browserEndpoint &&
-      pushSubscriptions.some((s) => s.endpoint === browserEndpoint),
+    pushSubscriptions.some((s) => s.endpoint === browserEndpoint),
   );
   const pushStatus = deriveWebPushStatus({
     supported: browserSupported && pushServerSupported,
@@ -275,18 +281,27 @@ export function NotificationSettings({
         <h3 id="notifications-heading">{uiText("Notifications")}</h3>
         <p className="muted small">
           {demo
-            ? uiText("Demo mode: preferences are kept in memory only and no emails or push alerts are sent.")
+            ? uiText(
+                "Demo mode: preferences are kept in memory only and no emails or push alerts are sent.",
+              )
             : `Opt-in email${userEmail ? ` (${userEmail})` : ""} and Web Push alerts. All alerts start off until you enable them.`}
         </p>
       </div>
 
       {!supported && !demo && (
-        <p className="muted small" role="status"> {uiText("Notifications are not installed on the server yet. Apply the notifications migration and hooks to enable alerts.")} </p>
+        <p className="muted small" role="status">
+          {" "}
+          {uiText(
+            "Notifications are not installed on the server yet. Apply the notifications migration and hooks to enable alerts.",
+          )}{" "}
+        </p>
       )}
 
       <label className="notifications-master">
         <span>
-          <Bell size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} /> {uiText("Email notifications")} </span>
+          <Bell size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />{" "}
+          {uiText("Email notifications")}{" "}
+        </span>
         <input
           type="checkbox"
           checked={prefs.email_enabled}
@@ -308,7 +323,9 @@ export function NotificationSettings({
           <Smartphone
             size={14}
             style={{ verticalAlign: "-2px", marginRight: 6 }}
-          /> {uiText("Push notifications (account preference)")} </span>
+          />{" "}
+          {uiText("Push notifications (account preference)")}{" "}
+        </span>
         <input
           type="checkbox"
           checked={pushChannelEnabled}
@@ -329,7 +346,9 @@ export function NotificationSettings({
           <Smartphone
             size={14}
             style={{ verticalAlign: "-2px", marginRight: 6 }}
-          /> {uiText("Push notifications (this browser)")} </span>
+          />{" "}
+          {uiText("Push notifications (this browser)")}{" "}
+        </span>
         <span className="notifications-master-meta">
           <span
             className={`notifications-badge${
@@ -370,8 +389,12 @@ export function NotificationSettings({
           {!browserSupported
             ? uiText("This browser does not support Web Push notifications.")
             : !pushServerSupported
-              ? uiText("Web Push migration is not installed on the PocketBase server yet.")
-              : uiText("Web Push is not configured in this build (VITE_VAPID_PUBLIC_KEY is missing).")}
+              ? uiText(
+                  "Web Push migration is not installed on the PocketBase server yet.",
+                )
+              : uiText(
+                  "Web Push is not configured in this build (VITE_VAPID_PUBLIC_KEY is missing).",
+                )}
         </p>
       )}
 

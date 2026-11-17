@@ -1,6 +1,14 @@
 import { translateText as uiText } from "./i18n";
 import { useEffect, useState } from "react";
-import { Check, Copy, LogOut, Plus, Trash2, UserPlus, Users } from "lucide-react";
+import {
+  Check,
+  Copy,
+  LogOut,
+  Plus,
+  Trash2,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import {
   errorMessage,
   type Account,
@@ -74,7 +82,10 @@ export function HouseholdSettings({
     budgetId: string,
     householdId: string | null,
   ) => Promise<void>;
-  onToggleCategoryShare?: (categoryId:string,householdId:string|null) => Promise<void>;
+  onToggleCategoryShare?: (
+    categoryId: string,
+    householdId: string | null,
+  ) => Promise<void>;
   onReloadLedger?: () => Promise<void>;
 }) {
   const effectiveUserId = demo ? "demo-user" : (userId ?? "");
@@ -262,8 +273,7 @@ export function HouseholdSettings({
           demoStore.members = demoStore.members.filter(
             (m) =>
               !(
-                m.household_id === household.id &&
-                m.user_id === effectiveUserId
+                m.household_id === household.id && m.user_id === effectiveUserId
               ),
           );
         }
@@ -360,13 +370,24 @@ export function HouseholdSettings({
       <div className="household-head">
         <div>
           <h3 id="household-settings-title">
-            <Users size={15} /> {uiText("Household sharing")} </h3>
-          <p className="muted small"> {uiText("Share selected accounts and budgets with a partner or family while keeping your other accounts private.")} </p>
+            <Users size={15} /> {uiText("Household sharing")}{" "}
+          </h3>
+          <p className="muted small">
+            {" "}
+            {uiText(
+              "Share selected accounts and budgets with a partner or family while keeping your other accounts private.",
+            )}{" "}
+          </p>
         </div>
       </div>
 
       {!supported && (
-        <p className="muted small"> {uiText("Household sharing isn't installed on the server yet. Apply the latest PocketBase migration and hooks to enable it.")} </p>
+        <p className="muted small">
+          {" "}
+          {uiText(
+            "Household sharing isn't installed on the server yet. Apply the latest PocketBase migration and hooks to enable it.",
+          )}{" "}
+        </p>
       )}
 
       {error && (
@@ -414,12 +435,16 @@ export function HouseholdSettings({
                   onClick={() => handleLeaveHousehold(hh)}
                 >
                   <LogOut size={14} />{" "}
-                  {isOwner ? uiText("Delete household") : uiText("Leave household")}
+                  {isOwner
+                    ? uiText("Delete household")
+                    : uiText("Leave household")}
                 </button>
               </div>
 
               <div>
-                <div className="household-section-label">{uiText("Members")}</div>
+                <div className="household-section-label">
+                  {uiText("Members")}
+                </div>
                 <div className="household-list">
                   {activeMembers.map((m) => (
                     <div className="household-member-row" key={m.id}>
@@ -453,7 +478,10 @@ export function HouseholdSettings({
                         <span className="household-invite-code">
                           {inv.invite_code}
                         </span>
-                        <span className="household-role-badge is-pending"> {uiText("Pending ·")} {HOUSEHOLD_ROLE_LABELS[inv.role]}
+                        <span className="household-role-badge is-pending">
+                          {" "}
+                          {uiText("Pending ·")}{" "}
+                          {HOUSEHOLD_ROLE_LABELS[inv.role]}
                         </span>
                       </div>
                       <div style={{ display: "flex", gap: 4 }}>
@@ -500,8 +528,12 @@ export function HouseholdSettings({
                       )
                     }
                   >
-                    <option value="editor">{uiText("Editor (can add/edit)")}</option>
-                    <option value="viewer">{uiText("Viewer (read-only)")}</option>
+                    <option value="editor">
+                      {uiText("Editor (can add/edit)")}
+                    </option>
+                    <option value="viewer">
+                      {uiText("Viewer (read-only)")}
+                    </option>
                   </select>
                   <button
                     type="button"
@@ -509,13 +541,16 @@ export function HouseholdSettings({
                     disabled={disabled}
                     onClick={() => handleGenerateInvite(hh.id)}
                   >
-                    <UserPlus size={14} /> {uiText("Generate invite code")} </button>
+                    <UserPlus size={14} /> {uiText("Generate invite code")}{" "}
+                  </button>
                 </div>
               )}
 
               {canShare && accounts.length > 0 && (
                 <div>
-                  <div className="household-section-label">{uiText("Shared accounts")}</div>
+                  <div className="household-section-label">
+                    {uiText("Shared accounts")}
+                  </div>
                   <div className="household-share-list">
                     {accounts
                       .filter(
@@ -538,7 +573,9 @@ export function HouseholdSettings({
                               </span>
                             </label>
                             {isShared && (
-                              <span className="shared-badge">{uiText("Shared")}</span>
+                              <span className="shared-badge">
+                                {uiText("Shared")}
+                              </span>
                             )}
                           </div>
                         );
@@ -549,25 +586,55 @@ export function HouseholdSettings({
 
               {canShare && categories.length > 0 && onToggleCategoryShare && (
                 <div>
-                  <div className="household-section-label">{uiText("Shared categories")}</div>
-                  <p className="muted small">{uiText("Share categories before using them on shared accounts. Category names are visible to all household members.")}</p>
+                  <div className="household-section-label">
+                    {uiText("Shared categories")}
+                  </div>
+                  <p className="muted small">
+                    {uiText(
+                      "Share categories before using them on shared accounts. Category names are visible to all household members.",
+                    )}
+                  </p>
                   <div className="household-share-list">
-                    {categories.filter(c => (!c.user_id || c.user_id === effectiveUserId) && (!c.household_id || c.household_id === hh.id)).map(c => (
-                      <label className="household-share-item" key={c.id}>
-                        <input type="checkbox" checked={c.household_id === hh.id} disabled={disabled} onChange={async () => {
-                          setWorking(true); setError("");
-                          try { await onToggleCategoryShare(c.id,c.household_id === hh.id ? null : hh.id); }
-                          catch(err) { setError(errorMessage(err)); } finally {setWorking(false);}
-                        }} />
-                        <span>{c.emoji} {c.name}</span>
-                      </label>
-                    ))}
+                    {categories
+                      .filter(
+                        (c) =>
+                          (!c.user_id || c.user_id === effectiveUserId) &&
+                          (!c.household_id || c.household_id === hh.id),
+                      )
+                      .map((c) => (
+                        <label className="household-share-item" key={c.id}>
+                          <input
+                            type="checkbox"
+                            checked={c.household_id === hh.id}
+                            disabled={disabled}
+                            onChange={async () => {
+                              setWorking(true);
+                              setError("");
+                              try {
+                                await onToggleCategoryShare(
+                                  c.id,
+                                  c.household_id === hh.id ? null : hh.id,
+                                );
+                              } catch (err) {
+                                setError(errorMessage(err));
+                              } finally {
+                                setWorking(false);
+                              }
+                            }}
+                          />
+                          <span>
+                            {c.emoji} {c.name}
+                          </span>
+                        </label>
+                      ))}
                   </div>
                 </div>
               )}
               {canShare && budgets.length > 0 && onToggleBudgetShare && (
                 <div>
-                  <div className="household-section-label">{uiText("Shared budgets")}</div>
+                  <div className="household-section-label">
+                    {uiText("Shared budgets")}
+                  </div>
                   <div className="household-share-list">
                     {budgets
                       .filter(
@@ -586,11 +653,15 @@ export function HouseholdSettings({
                                 onChange={() => toggleBudget(b, hh.id)}
                               />
                               <span>
-                                {cat ? `${cat.emoji ?? ""} ${cat.name}` : uiText("Budget")}
+                                {cat
+                                  ? `${cat.emoji ?? ""} ${cat.name}`
+                                  : uiText("Budget")}
                               </span>
                             </label>
                             {isShared && (
-                              <span className="shared-badge">{uiText("Shared")}</span>
+                              <span className="shared-badge">
+                                {uiText("Shared")}
+                              </span>
                             )}
                           </div>
                         );
@@ -623,7 +694,8 @@ export function HouseholdSettings({
                 className="secondary"
                 disabled={disabled || !newName.trim()}
               >
-                <Plus size={14} /> {uiText("Create household")} </button>
+                <Plus size={14} /> {uiText("Create household")}{" "}
+              </button>
             </form>
           )}
           <form
@@ -643,7 +715,10 @@ export function HouseholdSettings({
               type="submit"
               className="secondary"
               disabled={disabled || !joinCode.trim()}
-            > {uiText("Join household")} </button>
+            >
+              {" "}
+              {uiText("Join household")}{" "}
+            </button>
           </form>
         </div>
       )}

@@ -1,8 +1,20 @@
 import type { PocketBaseBackend } from "./backend.ts";
 import { validateSavingsGoal, validateGoalContribution } from "./goals.ts";
-import { validateNetWorthItem, validateNetWorthSnapshot, type NetWorthItem, type NetWorthSnapshot } from "./netWorth.ts";
+import {
+  validateNetWorthItem,
+  validateNetWorthSnapshot,
+  type NetWorthItem,
+  type NetWorthSnapshot,
+} from "./netWorth.ts";
 import { validateRule } from "./rules.ts";
-import type { SavingsGoal, GoalContribution, TransactionRule, CapturedAlert, NotificationPreferences, Household } from "./domain.ts";
+import type {
+  SavingsGoal,
+  GoalContribution,
+  TransactionRule,
+  CapturedAlert,
+  NotificationPreferences,
+  Household,
+} from "./domain.ts";
 import { budgetsOverlap, isMonth, MAX_BUDGET_AMOUNT } from "./budgets.ts";
 import {
   isSupportedCurrency,
@@ -36,6 +48,15 @@ import {
 } from "./domain.ts";
 
 export const BACKUP_FORMAT_VERSION = 2;
+export const BACKUP_EXCLUSIONS = [
+  "ml_examples",
+  "ml_settings",
+  "capture_tokens",
+  "push_subscriptions",
+  "household_members",
+  "auth_secrets",
+  "operation_history",
+] as const;
 export const MAX_BACKUP_BYTES = 100 * 1024 * 1024;
 export const MAX_MONETARY_FILS = 100_000_000_000;
 
@@ -85,7 +106,7 @@ export interface FuloosBackup {
   app: "fuloos";
   exported_at: string;
   currency: "AED";
-  excluded: ["ml_examples", "ml_settings"];
+  excluded: readonly string[];
   data: {
     accounts: Account[];
     categories: Category[];
@@ -124,6 +145,14 @@ export interface BackupPreview {
     recurringOccurrences: number;
     budgets: number;
     csvPresets: number;
+    goals: number;
+    contributions: number;
+    rules: number;
+    netWorthItems: number;
+    valuations: number;
+    capturedAlerts: number;
+    receipts: number;
+    households: number;
   };
 }
 
@@ -224,7 +253,7 @@ export function createBackup(
     app: "fuloos",
     exported_at: exportedAt,
     currency: "AED",
-    excluded: ["ml_examples", "ml_settings"],
+    excluded: [...BACKUP_EXCLUSIONS],
     data: {
       accounts: ledger.accounts.map((a) => ({ ...a })),
       categories: ledger.categories.map((c) => ({ ...c })),
@@ -289,7 +318,10 @@ export function parseAndValidateBackup(rawText: string): {
   if (!isPlainObject(parsed)) {
     fail("Backup root must be a JSON object.");
   }
-  if (parsed.format_version !== 1 && parsed.format_version !== BACKUP_FORMAT_VERSION) {
+  if (
+    parsed.format_version !== 1 &&
+    parsed.format_version !== BACKUP_FORMAT_VERSION
+  ) {
     fail(
       `Unsupported backup format_version: ${String(parsed.format_version ?? "missing")}.`,
     );
@@ -298,7 +330,9 @@ export function parseAndValidateBackup(rawText: string): {
     fail("Backup file is not a Fuloos backup.");
   }
   if (parsed.currency !== undefined && parsed.currency !== "AED") {
-    fail(`Unsupported currency "${String(parsed.currency)}". Only AED is supported.`);
+    fail(
+      `Unsupported currency "${String(parsed.currency)}". Only AED is supported.`,
+    );
   }
   const exportedAt =
     typeof parsed.exported_at === "string" && parsed.exported_at.trim()
@@ -363,7 +397,10 @@ export function parseAndValidateBackup(rawText: string): {
       raw.currency !== null &&
       raw.currency !== ""
     ) {
-      if (typeof raw.currency !== "string" || !isSupportedCurrency(raw.currency)) {
+      if (
+        typeof raw.currency !== "string" ||
+        !isSupportedCurrency(raw.currency)
+      ) {
         fail(`Account "${name}" has an unsupported currency.`);
       }
       currency = normalizeCurrencyCode(raw.currency);
@@ -377,8 +414,30 @@ export function parseAndValidateBackup(rawText: string): {
       color,
       ...(emoji ? { emoji } : {}),
       ...(currency ? { currency } : {}),
-      ...Object.fromEntries(["credit_limit","statement_day","payment_due_day","apr_bps","minimum_payment"].filter((key) => raw[key] !== undefined).map((key) => [key, requireIntFils(raw[key], key, 0, key === "statement_day" || key === "payment_due_day" ? 31 : MAX_MONETARY_FILS)])),
-      ...(typeof raw.household_id === "string" && raw.household_id ? {household_id: raw.household_id} : {}),
+      ...Object.fromEntries(
+        [
+          "credit_limit",
+          "statement_day",
+          "payment_due_day",
+          "apr_bps",
+          "minimum_payment",
+        ]
+          .filter((key) => raw[key] !== undefined)
+          .map((key) => [
+            key,
+            requireIntFils(
+              raw[key],
+              key,
+              0,
+              key === "statement_day" || key === "payment_due_day"
+                ? 31
+                : MAX_MONETARY_FILS,
+            ),
+          ]),
+      ),
+      ...(typeof raw.household_id === "string" && raw.household_id
+        ? { household_id: raw.household_id }
+        : {}),
     };
   });
 
@@ -404,7 +463,9 @@ export function parseAndValidateBackup(rawText: string): {
       description,
       color,
       ...(emoji ? { emoji } : {}),
-      ...(typeof raw.household_id === "string" && raw.household_id ? {household_id:raw.household_id} : {}),
+      ...(typeof raw.household_id === "string" && raw.household_id
+        ? { household_id: raw.household_id }
+        : {}),
     };
   });
 
@@ -426,7 +487,10 @@ export function parseAndValidateBackup(rawText: string): {
         0,
         MAX_MONETARY_FILS,
       );
-      if (typeof raw.account_id !== "string" || !accountIds.has(raw.account_id)) {
+      if (
+        typeof raw.account_id !== "string" ||
+        !accountIds.has(raw.account_id)
+      ) {
         fail(`Transaction #${i + 1} references missing account.`);
       }
       const toAccountId =
@@ -453,7 +517,9 @@ export function parseAndValidateBackup(rawText: string): {
         }
       } else {
         if (toAccountId !== null) {
-          fail(`Transaction #${i + 1} cannot have to_account_id unless it is a transfer.`);
+          fail(
+            `Transaction #${i + 1} cannot have to_account_id unless it is a transfer.`,
+          );
         }
         if (
           categoryId !== null &&
@@ -500,7 +566,11 @@ export function parseAndValidateBackup(rawText: string): {
       }
 
       let foreignFields:
-        | { original_currency: string; original_amount: number; fx_rate: number }
+        | {
+            original_currency: string;
+            original_amount: number;
+            fx_rate: number;
+          }
         | undefined;
       if (
         raw.original_currency !== undefined &&
@@ -562,10 +632,14 @@ export function parseAndValidateBackup(rawText: string): {
         `Recurring schedule #${i + 1}`,
         recurringIds,
       );
-      const name = requireString(raw.name, `Recurring schedule #${i + 1} name`, {
-        min: 1,
-        max: 80,
-      }).trim();
+      const name = requireString(
+        raw.name,
+        `Recurring schedule #${i + 1} name`,
+        {
+          min: 1,
+          max: 80,
+        },
+      ).trim();
       if (
         typeof raw.type !== "string" ||
         !RECURRING_KINDS.has(raw.type as RecurringKind)
@@ -584,7 +658,10 @@ export function parseAndValidateBackup(rawText: string): {
       ) {
         fail(`Recurring schedule "${name}" has an invalid amount_type.`);
       }
-      if (typeof raw.account_id !== "string" || !accountIds.has(raw.account_id)) {
+      if (
+        typeof raw.account_id !== "string" ||
+        !accountIds.has(raw.account_id)
+      ) {
         fail(`Recurring schedule "${name}" references missing account.`);
       }
       const categoryId =
@@ -762,7 +839,9 @@ export function parseAndValidateBackup(rawText: string): {
       amount,
       start_month: raw.start_month,
       end_month,
-      ...(typeof raw.household_id === "string" && raw.household_id ? {household_id:raw.household_id} : {}),
+      ...(typeof raw.household_id === "string" && raw.household_id
+        ? { household_id: raw.household_id }
+        : {}),
     };
     const existingForCat = budgetsByCategory.get(budget.category_id) ?? [];
     if (existingForCat.some((b) => budgetsOverlap(b, budget))) {
@@ -792,7 +871,9 @@ export function parseAndValidateBackup(rawText: string): {
       (!Array.isArray(rp.dismissed_keys) ||
         !rp.dismissed_keys.every((k) => typeof k === "string"))
     ) {
-      fail("Backup recurring_prefs.dismissed_keys must be an array of strings.");
+      fail(
+        "Backup recurring_prefs.dismissed_keys must be an array of strings.",
+      );
     }
     const dismissed_keys = [
       ...new Set(
@@ -822,7 +903,7 @@ export function parseAndValidateBackup(rawText: string): {
     app: "fuloos",
     exported_at: exportedAt,
     currency: "AED",
-    excluded: ["ml_examples", "ml_settings"],
+    excluded: [...BACKUP_EXCLUSIONS],
     data: {
       accounts,
       categories,
@@ -832,7 +913,7 @@ export function parseAndValidateBackup(rawText: string): {
       recurring_prefs,
       budgets,
       csv_presets,
-      ...validateBackupExtensions(d, {accounts, categories, transactions}),
+      ...validateBackupExtensions(d, { accounts, categories, transactions }),
     },
   };
 
@@ -849,6 +930,14 @@ export function parseAndValidateBackup(rawText: string): {
         recurringOccurrences: recurring_occurrences.length,
         budgets: budgets.length,
         csvPresets: csv_presets.length,
+        goals: backup.data.goals?.length ?? 0,
+        contributions: backup.data.goal_contributions?.length ?? 0,
+        rules: backup.data.rules?.length ?? 0,
+        netWorthItems: backup.data.net_worth_items?.length ?? 0,
+        valuations: backup.data.net_worth_snapshots?.length ?? 0,
+        capturedAlerts: backup.data.captured_alerts?.length ?? 0,
+        receipts: backup.data.attachments?.length ?? 0,
+        households: backup.data.households?.length ?? 0,
       },
     },
   };
@@ -871,7 +960,9 @@ export function isLedgerEmpty(ledger: Ledger): boolean {
   );
 }
 
-function accountMatchKey(a: Pick<Account, "name" | "type" | "currency">): string {
+function accountMatchKey(
+  a: Pick<Account, "name" | "type" | "currency">,
+): string {
   return `${a.name.trim().toLowerCase()}|${a.type}|${a.currency || "AED"}`;
 }
 
@@ -910,7 +1001,20 @@ function transactionFingerprint(t: Omit<Transaction, "id">): string {
   ]);
 }
 
-export type RestoreBackend = Pick<PocketBaseBackend, "save" | "createMany"> & Partial<Pick<PocketBaseBackend, "saveTransactionWithReceipt" | "createHousehold" | "shareAccountWithHousehold" | "shareBudgetWithHousehold" | "saveNotificationPrefs" | "loadNotificationPrefs">>;
+export type RestoreBackend = Pick<PocketBaseBackend, "save" | "createMany"> &
+  Partial<
+    Pick<
+      PocketBaseBackend,
+      | "saveTransactionWithReceipt"
+      | "createHousehold"
+      | "shareAccountWithHousehold"
+      | "shareBudgetWithHousehold"
+      | "saveNotificationPrefs"
+      | "loadNotificationPrefs"
+      | "loadHouseholds"
+      | "getSession"
+    >
+  >;
 
 export interface RestoreResult {
   accountsCreated: number;
@@ -997,7 +1101,9 @@ export async function executeRestore(params: {
 
   for (const a of backup.data.accounts) {
     const existingId =
-      mode === "merge" ? existingAccountsByKey.get(accountMatchKey(a)) : undefined;
+      mode === "merge"
+        ? existingAccountsByKey.get(accountMatchKey(a))
+        : undefined;
     if (existingId) {
       accountIdMap.set(a.id, existingId);
       accountsSkipped++;
@@ -1026,6 +1132,8 @@ export async function executeRestore(params: {
       categoriesSkipped++;
     } else {
       const { id: oldId, ...value } = c;
+      delete value.household_id;
+      delete value.user_id;
       categoriesToCreate.push({ oldId, value });
     }
   }
@@ -1141,7 +1249,10 @@ export async function executeRestore(params: {
       if (remaining > 0) {
         existingTxCounts.set(fp, remaining - 1);
         const used = new Set(txIdMap.values());
-        const existing = existingLedger.transactions.find((candidate) => !used.has(candidate.id) && transactionFingerprint(candidate) === fp);
+        const existing = existingLedger.transactions.find(
+          (candidate) =>
+            !used.has(candidate.id) && transactionFingerprint(candidate) === fp,
+        );
         if (existing) txIdMap.set(t.id, existing.id);
         txSkipped++;
         continue;
@@ -1404,36 +1515,66 @@ export async function executeRestore(params: {
     advance(1);
   }
 
-  const budgetIdMap = new Map<string,string>();
+  const budgetIdMap = new Map<string, string>();
   for (const old of backup.data.budgets) {
-    const match = [...(existingLedger.budgets ?? []),...createdBudgets].find(b=>b.category_id === categoryIdMap.get(old.category_id) && b.start_month === old.start_month && b.end_month === old.end_month);
-    if (match) budgetIdMap.set(old.id,match.id);
+    const match = [...(existingLedger.budgets ?? []), ...createdBudgets].find(
+      (b) =>
+        b.category_id === categoryIdMap.get(old.category_id) &&
+        b.start_month === old.start_month &&
+        b.end_month === old.end_month,
+    );
+    if (match) budgetIdMap.set(old.id, match.id);
   }
-  const {householdMap, receipts, ...extensions} = await restoreBackupExtensions(backup, existingLedger, {accountIdMap, categoryIdMap, txIdMap,budgetIdMap}, backend, demo, demoId, check);
+  const { householdMap, receipts, ...extensions } =
+    await restoreBackupExtensions(
+      backup,
+      existingLedger,
+      { accountIdMap, categoryIdMap, txIdMap, budgetIdMap },
+      backend,
+      demo,
+      demoId,
+      check,
+    );
   const nextLedger: Ledger = {
     ...existingLedger,
     ...extensions,
-    accounts: [...existingLedger.accounts, ...createdAccounts].map(a => {
-      const original = backup.data.accounts.find(old => accountIdMap.get(old.id) === a.id);
-      const household_id = original?.household_id ? householdMap.get(original.household_id) : undefined;
-      return household_id ? {...a,household_id} : a;
+    accounts: [...existingLedger.accounts, ...createdAccounts].map((a) => {
+      const original = backup.data.accounts.find(
+        (old) => accountIdMap.get(old.id) === a.id,
+      );
+      const household_id = original?.household_id
+        ? householdMap.get(original.household_id)
+        : undefined;
+      return household_id ? { ...a, household_id } : a;
     }),
-    categories: [...existingLedger.categories, ...createdCategories].map(c => {
-      const original = backup.data.categories.find(old => categoryIdMap.get(old.id) === c.id);
-      const household_id = original?.household_id ? householdMap.get(original.household_id) : undefined;
-      return household_id ? {...c,household_id} : c;
-    }),
-    transactions: [...existingLedger.transactions, ...createdTransactions].map(t => receipts.has(t.id) ? {...t,receipt:receipts.get(t.id)} : t),
+    categories: [...existingLedger.categories, ...createdCategories].map(
+      (c) => {
+        const original = backup.data.categories.find(
+          (old) => categoryIdMap.get(old.id) === c.id,
+        );
+        const household_id = original?.household_id
+          ? householdMap.get(original.household_id)
+          : undefined;
+        return household_id ? { ...c, household_id } : c;
+      },
+    ),
+    transactions: [...existingLedger.transactions, ...createdTransactions].map(
+      (t) => (receipts.has(t.id) ? { ...t, receipt: receipts.get(t.id) } : t),
+    ),
     recurring: [...(existingLedger.recurring ?? []), ...createdRecurring],
     recurring_occurrences: [
       ...(existingLedger.recurring_occurrences ?? []),
       ...createdOccurrences,
     ],
     recurring_prefs: nextPrefs,
-    budgets: [...(existingLedger.budgets ?? []), ...createdBudgets].map(b => {
-      const original = backup.data.budgets.find(old => budgetIdMap.get(old.id) === b.id);
-      const household_id = original?.household_id ? householdMap.get(original.household_id) : undefined;
-      return household_id ? {...b,household_id} : b;
+    budgets: [...(existingLedger.budgets ?? []), ...createdBudgets].map((b) => {
+      const original = backup.data.budgets.find(
+        (old) => budgetIdMap.get(old.id) === b.id,
+      );
+      const household_id = original?.household_id
+        ? householdMap.get(original.household_id)
+        : undefined;
+      return household_id ? { ...b, household_id } : b;
     }),
   };
 
@@ -1460,134 +1601,437 @@ export async function executeRestore(params: {
   };
 }
 
-function validateBackupExtensions(d: Record<string, unknown>, ledger: Pick<Ledger, "accounts" | "categories" | "transactions">): Partial<FuloosBackup["data"]> {
-  const read = <T extends {id: string}>(key: string, fields: string[], validate: (v: T) => void): T[] => {
+function validateBackupExtensions(
+  d: Record<string, unknown>,
+  ledger: Pick<Ledger, "accounts" | "categories" | "transactions">,
+): Partial<FuloosBackup["data"]> {
+  const read = <T extends { id: string }>(
+    key: string,
+    fields: string[],
+    validate: (v: T) => void,
+  ): T[] => {
     const values = d[key] ?? [];
-    if (!Array.isArray(values) || values.length > 10000) fail("Invalid backup " + key + ".");
+    if (!Array.isArray(values) || values.length > 10000)
+      fail("Invalid backup " + key + ".");
     const ids = new Set<string>();
     return values.map((raw, i) => {
       if (!isPlainObject(raw)) fail("Invalid backup " + key + ".");
       const id = requireId(raw.id, key + " #" + (i + 1), ids);
-      const item = Object.fromEntries(["id", ...fields].filter(k => raw[k] !== undefined).map(k => [k, raw[k]])) as T;
+      const item = Object.fromEntries(
+        ["id", ...fields]
+          .filter((k) => raw[k] !== undefined)
+          .map((k) => [k, raw[k]]),
+      ) as T;
       item.id = id;
-      try { validate(item); } catch (err) { fail("Invalid " + key + ": " + (err instanceof Error ? err.message : "invalid data")); }
+      try {
+        validate(item);
+      } catch (err) {
+        fail(
+          "Invalid " +
+            key +
+            ": " +
+            (err instanceof Error ? err.message : "invalid data"),
+        );
+      }
       return item;
     });
   };
-  const goals = read<SavingsGoal>("goals", ["name","target_amount","current_amount","target_date","account_id","color","emoji","kind","status","notes"], (g) => validateSavingsGoal(g, ledger));
-  const goal_contributions = read<GoalContribution>("goal_contributions", ["goal_id","amount","date","transaction_id","notes"], (c) => validateGoalContribution(c, {...ledger,goals}));
-  const rules = read<TransactionRule>("rules", ["name","enabled","priority","match_field","match_type","pattern","min_amount","max_amount","set_category_id","add_tags","set_payee"], (r) => validateRule(r, ledger.categories));
-  const net_worth_items = read<NetWorthItem>("net_worth_items", ["name","kind","category","current_value","as_of_date","color","emoji","notes"], validateNetWorthItem);
-  const net_worth_snapshots = read<NetWorthSnapshot>("net_worth_snapshots", ["item_id","value","date","notes"], (s) => {
-    validateNetWorthSnapshot(s);
-    if (!net_worth_items.some(i => i.id === s.item_id)) fail("Missing net worth item.");
-  });
-  const captured_alerts = read<CapturedAlert>("captured_alerts", ["source","subject","raw_text","parsed_type","parsed_amount","parsed_date","parsed_payee","parsed_notes","account_hint","status","created_at_iso"], (a) => {
-    if (!["email","shortcut"].includes(a.source) || !["expense","income","unknown"].includes(a.parsed_type) || !["pending","imported","dismissed"].includes(a.status)) fail("Invalid captured alert.");
-    requireIntFils(a.parsed_amount, "Alert amount", 0, MAX_MONETARY_FILS);
-    for (const key of ["subject","raw_text","parsed_date","parsed_payee","parsed_notes","account_hint","created_at_iso"] as const) requireString(a[key],key,{max:key === "raw_text" ? 64000 : 1000});
-  });
-  const households = read<Household>("households", ["name","owner_id"], (h) => {requireString(h.name,"Household name",{min:1,max:80});});
+  const goals = read<SavingsGoal>(
+    "goals",
+    [
+      "name",
+      "target_amount",
+      "current_amount",
+      "target_date",
+      "account_id",
+      "color",
+      "emoji",
+      "kind",
+      "status",
+      "notes",
+    ],
+    (g) => validateSavingsGoal(g, ledger),
+  );
+  const goal_contributions = read<GoalContribution>(
+    "goal_contributions",
+    ["goal_id", "amount", "date", "transaction_id", "notes"],
+    (c) => validateGoalContribution(c, { ...ledger, goals }),
+  );
+  const rules = read<TransactionRule>(
+    "rules",
+    [
+      "name",
+      "enabled",
+      "priority",
+      "match_field",
+      "match_type",
+      "pattern",
+      "min_amount",
+      "max_amount",
+      "set_category_id",
+      "add_tags",
+      "set_payee",
+    ],
+    (r) => validateRule(r, ledger.categories),
+  );
+  const net_worth_items = read<NetWorthItem>(
+    "net_worth_items",
+    [
+      "name",
+      "kind",
+      "category",
+      "current_value",
+      "as_of_date",
+      "color",
+      "emoji",
+      "notes",
+    ],
+    validateNetWorthItem,
+  );
+  const net_worth_snapshots = read<NetWorthSnapshot>(
+    "net_worth_snapshots",
+    ["item_id", "value", "date", "notes", "revision"],
+    (s) => {
+      validateNetWorthSnapshot(s);
+      if (s.revision !== undefined)
+        requireIntFils(
+          s.revision,
+          "Valuation revision",
+          0,
+          Number.MAX_SAFE_INTEGER,
+        );
+      if (!net_worth_items.some((i) => i.id === s.item_id))
+        fail("Missing net worth item.");
+    },
+  );
+  const captured_alerts = read<CapturedAlert>(
+    "captured_alerts",
+    [
+      "source",
+      "subject",
+      "raw_text",
+      "parsed_type",
+      "parsed_amount",
+      "parsed_date",
+      "parsed_payee",
+      "parsed_notes",
+      "account_hint",
+      "status",
+      "created_at_iso",
+    ],
+    (a) => {
+      if (
+        !["email", "shortcut"].includes(a.source) ||
+        !["expense", "income", "unknown"].includes(a.parsed_type) ||
+        !["pending", "imported", "dismissed"].includes(a.status)
+      )
+        fail("Invalid captured alert.");
+      requireIntFils(a.parsed_amount, "Alert amount", 0, MAX_MONETARY_FILS);
+      for (const key of [
+        "subject",
+        "raw_text",
+        "parsed_date",
+        "parsed_payee",
+        "parsed_notes",
+        "account_hint",
+        "created_at_iso",
+      ] as const)
+        requireString(a[key], key, { max: key === "raw_text" ? 64000 : 1000 });
+    },
+  );
+  const households = read<Household>(
+    "households",
+    ["name", "owner_id"],
+    (h) => {
+      requireString(h.name, "Household name", { min: 1, max: 80 });
+    },
+  );
   const attachments = d.attachments ?? [];
-  if (!Array.isArray(attachments) || attachments.length > 200) fail("Too many receipt attachments.");
+  if (!Array.isArray(attachments) || attachments.length > 200)
+    fail("Too many receipt attachments.");
   let attachmentBytes = 0;
   const seenAttachments = new Set<string>();
   for (const a of attachments) {
-    if (!isPlainObject(a) || typeof a.transaction_id !== "string" || !ledger.transactions.some(t => t.id === a.transaction_id) || seenAttachments.has(a.transaction_id)) fail("Invalid receipt transaction.");
+    if (
+      !isPlainObject(a) ||
+      typeof a.transaction_id !== "string" ||
+      !ledger.transactions.some((t) => t.id === a.transaction_id) ||
+      seenAttachments.has(a.transaction_id)
+    )
+      fail("Invalid receipt transaction.");
     seenAttachments.add(a.transaction_id);
-    requireString(a.filename,"Receipt filename",{min:1,max:255});
-    if (!["image/jpeg","image/png","image/webp","application/pdf"].includes(String(a.mime)) || typeof a.base64 !== "string" || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(a.base64)) fail("Invalid receipt encoding.");
-    const bytes = a.base64.length * 3 / 4 - (a.base64.endsWith("==") ? 2 : a.base64.endsWith("=") ? 1 : 0);
+    requireString(a.filename, "Receipt filename", { min: 1, max: 255 });
+    if (
+      !["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(
+        String(a.mime),
+      ) ||
+      typeof a.base64 !== "string" ||
+      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
+        a.base64,
+      )
+    )
+      fail("Invalid receipt encoding.");
+    const bytes =
+      (a.base64.length * 3) / 4 -
+      (a.base64.endsWith("==") ? 2 : a.base64.endsWith("=") ? 1 : 0);
     if (bytes <= 0 || bytes > 5 * 1024 * 1024) fail("Receipt exceeds 5 MB.");
     attachmentBytes += bytes;
   }
-  if (attachmentBytes > 50 * 1024 * 1024) fail("Receipts exceed the 50 MB total limit.");
+  if (attachmentBytes > 50 * 1024 * 1024)
+    fail("Receipts exceed the 50 MB total limit.");
   let notification_prefs: NotificationPreferences | undefined;
   if (d.notification_prefs !== undefined) {
     const n = d.notification_prefs;
     if (!isPlainObject(n)) fail("Invalid notification preferences.");
-    const flags = ["email_enabled","upcoming_bill_enabled","overdue_enabled","budget_80_enabled","budget_100_enabled","weekly_digest_enabled"];
-    if (!flags.every(k => typeof n[k] === "boolean") || !Number.isInteger(n.upcoming_bill_days) || Number(n.upcoming_bill_days) < 1 || Number(n.upcoming_bill_days) > 30 || !["sun","mon","tue","wed","thu","fri","sat"].includes(String(n.digest_day))) fail("Invalid notification preferences.");
-    const timezone = requireString(n.timezone,"Timezone",{min:1,max:100});
-    try { new Intl.DateTimeFormat("en",{timeZone:timezone}); } catch { fail("Invalid notification timezone."); }
-    notification_prefs = {...Object.fromEntries(flags.map(k => [k,n[k]])), upcoming_bill_days:n.upcoming_bill_days, digest_day:n.digest_day, timezone, channels:{email:!!n.email_enabled,push:false}} as unknown as NotificationPreferences;
+    const flags = [
+      "email_enabled",
+      "upcoming_bill_enabled",
+      "overdue_enabled",
+      "budget_80_enabled",
+      "budget_100_enabled",
+      "weekly_digest_enabled",
+    ];
+    if (
+      !flags.every((k) => typeof n[k] === "boolean") ||
+      !Number.isInteger(n.upcoming_bill_days) ||
+      Number(n.upcoming_bill_days) < 1 ||
+      Number(n.upcoming_bill_days) > 30 ||
+      !["sun", "mon", "tue", "wed", "thu", "fri", "sat"].includes(
+        String(n.digest_day),
+      )
+    )
+      fail("Invalid notification preferences.");
+    const timezone = requireString(n.timezone, "Timezone", {
+      min: 1,
+      max: 100,
+    });
+    try {
+      new Intl.DateTimeFormat("en", { timeZone: timezone });
+    } catch {
+      fail("Invalid notification timezone.");
+    }
+    notification_prefs = {
+      ...Object.fromEntries(flags.map((k) => [k, n[k]])),
+      upcoming_bill_days: n.upcoming_bill_days,
+      digest_day: n.digest_day,
+      timezone,
+      channels: { email: !!n.email_enabled, push: false },
+    } as unknown as NotificationPreferences;
   }
-  return {goals,goal_contributions,rules,net_worth_items,net_worth_snapshots,captured_alerts,households,attachments:attachments as BackupAttachment[], ...(notification_prefs ? {notification_prefs} : {})};
+  return {
+    goals,
+    goal_contributions,
+    rules,
+    net_worth_items,
+    net_worth_snapshots,
+    captured_alerts,
+    households,
+    attachments: attachments as BackupAttachment[],
+    ...(notification_prefs ? { notification_prefs } : {}),
+  };
 }
 
 async function restoreBackupExtensions(
-  backup: FuloosBackup, existing: Ledger,
-  maps: {accountIdMap: Map<string,string>; categoryIdMap: Map<string,string>; txIdMap: Map<string,string>;budgetIdMap: Map<string,string>},
-  backend: RestoreBackend | undefined, demo: boolean, demoId: () => string, check: () => void,
-): Promise<Partial<Ledger> & {householdMap: Map<string,string>; receipts: Map<string,string>}> {
-  const {accountIdMap:accounts,categoryIdMap:categories,txIdMap:transactions} = maps;
-  const remap = (map: Map<string,string>, id: string | null | undefined) => id ? map.get(id) ?? id : null;
-  const clean = <T extends {id:string}>(row:T) => {const {id,...rest}=row; return rest;};
-  async function rows<T extends {id:string}>(table: "goals"|"goal_contributions"|"rules"|"net_worth_items"|"net_worth_snapshots"|"captured_alerts", values:T[], previous:T[], rewrite:(row:T)=>Record<string,unknown>) {
-    const result = [...previous], map = new Map<string,string>();
-    const fingerprint = (v:Record<string,unknown>) => JSON.stringify(Object.fromEntries(Object.keys(v).filter(k => k !== "id" && k !== "user_id" && k !== "created" && k !== "updated").sort().map(k=>[k,v[k]])));
+  backup: FuloosBackup,
+  existing: Ledger,
+  maps: {
+    accountIdMap: Map<string, string>;
+    categoryIdMap: Map<string, string>;
+    txIdMap: Map<string, string>;
+    budgetIdMap: Map<string, string>;
+  },
+  backend: RestoreBackend | undefined,
+  demo: boolean,
+  demoId: () => string,
+  check: () => void,
+): Promise<
+  Partial<Ledger> & {
+    householdMap: Map<string, string>;
+    receipts: Map<string, string>;
+  }
+> {
+  const {
+    accountIdMap: accounts,
+    categoryIdMap: categories,
+    txIdMap: transactions,
+  } = maps;
+  const remap = (map: Map<string, string>, id: string | null | undefined) =>
+    id ? (map.get(id) ?? id) : null;
+  const clean = <T extends { id: string }>(row: T) => {
+    const { id, ...rest } = row;
+    return rest;
+  };
+  async function rows<T extends { id: string }>(
+    table:
+      | "goals"
+      | "goal_contributions"
+      | "rules"
+      | "net_worth_items"
+      | "net_worth_snapshots"
+      | "captured_alerts",
+    values: T[],
+    previous: T[],
+    rewrite: (row: T) => Record<string, unknown>,
+  ) {
+    const result = [...previous],
+      map = new Map<string, string>();
+    const fingerprint = (v: Record<string, unknown>) =>
+      JSON.stringify(
+        Object.fromEntries(
+          Object.keys(v)
+            .filter(
+              (k) =>
+                k !== "id" &&
+                k !== "user_id" &&
+                k !== "created" &&
+                k !== "updated" &&
+                k !== "revision",
+            )
+            .sort()
+            .map((k) => [k, v[k]]),
+        ),
+      );
     const used = new Set<string>();
     for (const original of values) {
       check();
       const value = rewrite(original);
-      const match = result.find(r => !used.has(r.id) && fingerprint(clean(r)) === fingerprint(value));
-      const saved = match ?? (demo ? {...value,id:demoId()} : await backend!.save(table,value));
+      const match = result.find(
+        (r) => !used.has(r.id) && fingerprint(clean(r)) === fingerprint(value),
+      );
+      const saved =
+        match ??
+        (demo ? { ...value, id: demoId() } : await backend!.save(table, value));
       used.add(saved.id);
       if (!match) result.push(saved as T);
-      map.set(original.id,saved.id);
+      map.set(original.id, saved.id);
     }
-    return {records:result,map};
+    return { records: result, map };
   }
-  const goals = await rows("goals",backup.data.goals ?? [],existing.goals ?? [],g=>({...clean(g),account_id:remap(accounts,g.account_id)}));
-  const contributions = await rows("goal_contributions",backup.data.goal_contributions ?? [],existing.goal_contributions ?? [],c=>({...clean(c),goal_id:remap(goals.map,c.goal_id),transaction_id:remap(transactions,c.transaction_id)}));
-  const rules = await rows("rules",backup.data.rules ?? [],existing.rules ?? [],r=>({...clean(r),set_category_id:remap(categories,r.set_category_id)}));
-  const items = await rows("net_worth_items",backup.data.net_worth_items ?? [],existing.net_worth_items ?? [],i=>({...clean(i)}));
-  const snapshots = await rows("net_worth_snapshots",backup.data.net_worth_snapshots ?? [],existing.net_worth_snapshots ?? [],s=>({...clean(s),item_id:remap(items.map,s.item_id)}));
-  const alerts = await rows("captured_alerts",backup.data.captured_alerts ?? [],existing.captured_alerts ?? [],a=>({...clean(a)}));
-  const householdMap = new Map<string,string>();
+  const goals = await rows(
+    "goals",
+    backup.data.goals ?? [],
+    existing.goals ?? [],
+    (g) => ({ ...clean(g), account_id: remap(accounts, g.account_id) }),
+  );
+  const contributions = await rows(
+    "goal_contributions",
+    backup.data.goal_contributions ?? [],
+    existing.goal_contributions ?? [],
+    (c) => ({
+      ...clean(c),
+      goal_id: remap(goals.map, c.goal_id),
+      transaction_id: remap(transactions, c.transaction_id),
+    }),
+  );
+  const rules = await rows(
+    "rules",
+    backup.data.rules ?? [],
+    existing.rules ?? [],
+    (r) => ({
+      ...clean(r),
+      set_category_id: remap(categories, r.set_category_id),
+    }),
+  );
+  const items = await rows(
+    "net_worth_items",
+    backup.data.net_worth_items ?? [],
+    existing.net_worth_items ?? [],
+    (i) => ({ ...clean(i) }),
+  );
+  const snapshots = await rows(
+    "net_worth_snapshots",
+    backup.data.net_worth_snapshots ?? [],
+    existing.net_worth_snapshots ?? [],
+    (s) => ({ ...clean(s), item_id: remap(items.map, s.item_id) }),
+  );
+  const alerts = await rows(
+    "captured_alerts",
+    backup.data.captured_alerts ?? [],
+    existing.captured_alerts ?? [],
+    (a) => ({ ...clean(a) }),
+  );
+  const householdMap = new Map<string, string>();
+  const currentHouseholds =
+    !demo && backend?.loadHouseholds ? await backend.loadHouseholds() : null;
+  const session =
+    !demo && backend?.getSession ? await backend.getSession() : null;
   for (const h of backup.data.households ?? []) {
     check();
-    if (demo) householdMap.set(h.id,demoId());
+    if (demo) householdMap.set(h.id, demoId());
     else {
-      if (!backend?.createHousehold) throw new Error("Household restore is unavailable.");
-      const created = await backend.createHousehold(h.name);
-      householdMap.set(h.id,created.household.id);
+      if (!backend?.createHousehold)
+        throw new Error("Household restore is unavailable.");
+      const existingGroup = currentHouseholds?.households.find(
+        (group) => group.owner_id === session?.user.id && group.name === h.name,
+      );
+      const created =
+        existingGroup ?? (await backend.createHousehold(h.name)).household;
+      householdMap.set(h.id, created.id);
     }
   }
   for (const c of backup.data.categories) {
-    const hid=c.household_id ? householdMap.get(c.household_id) : undefined, id=categories.get(c.id);
-    if (hid && id && !demo) await backend!.save("categories",{household_id:hid},id);
+    const hid = c.household_id ? householdMap.get(c.household_id) : undefined,
+      id = categories.get(c.id);
+    if (hid && id && !demo)
+      await backend!.save("categories", { household_id: hid }, id);
   }
   for (const b of backup.data.budgets) {
-    const hid=b.household_id ? householdMap.get(b.household_id) : undefined, id=maps.budgetIdMap.get(b.id);
+    const hid = b.household_id ? householdMap.get(b.household_id) : undefined,
+      id = maps.budgetIdMap.get(b.id);
     if (hid && id && !demo) {
-      if (!backend?.shareBudgetWithHousehold) throw new Error("Budget sharing restore is unavailable.");
-      await backend.shareBudgetWithHousehold(id,hid);
+      if (!backend?.shareBudgetWithHousehold)
+        throw new Error("Budget sharing restore is unavailable.");
+      await backend.shareBudgetWithHousehold(id, hid);
     }
   }
   for (const a of backup.data.accounts) {
     const hid = a.household_id ? householdMap.get(a.household_id) : undefined;
     const id = accounts.get(a.id);
     if (hid && id && !demo) {
-      if (!backend?.shareAccountWithHousehold) throw new Error("Household sharing restore is unavailable.");
-      await backend.shareAccountWithHousehold(id,hid);
+      if (!backend?.shareAccountWithHousehold)
+        throw new Error("Household sharing restore is unavailable.");
+      await backend.shareAccountWithHousehold(id, hid);
     }
   }
   if (backup.data.notification_prefs && !demo) {
-    if (!backend?.saveNotificationPrefs) throw new Error("Notification settings restore is unavailable.");
+    if (!backend?.saveNotificationPrefs)
+      throw new Error("Notification settings restore is unavailable.");
     const current = await backend.loadNotificationPrefs?.();
-    await backend.saveNotificationPrefs({...backup.data.notification_prefs,id:current?.prefs.id});
+    await backend.saveNotificationPrefs({
+      ...backup.data.notification_prefs,
+      id: current?.prefs.id,
+    });
   }
-  const receipts = new Map<string,string>();
+  const receipts = new Map<string, string>();
   for (const a of backup.data.attachments ?? []) {
     check();
     const id = transactions.get(a.transaction_id);
     if (!id) throw new Error("Receipt transaction was not restored.");
-    const bytes = Uint8Array.from(atob(a.base64), c=>c.charCodeAt(0));
-    if (demo) { receipts.set(id,URL.createObjectURL(new Blob([bytes],{type:a.mime}))); continue; }
-    if (!backend?.saveTransactionWithReceipt) throw new Error("Receipt restore is unavailable.");
-    const saved = await backend.saveTransactionWithReceipt({},id,new File([bytes],a.filename,{type:a.mime}));
-    if (saved.receipt) receipts.set(id,saved.receipt);
+    const bytes = Uint8Array.from(atob(a.base64), (c) => c.charCodeAt(0));
+    if (demo) {
+      receipts.set(
+        id,
+        URL.createObjectURL(new Blob([bytes], { type: a.mime })),
+      );
+      continue;
+    }
+    if (!backend?.saveTransactionWithReceipt)
+      throw new Error("Receipt restore is unavailable.");
+    const saved = await backend.saveTransactionWithReceipt(
+      {},
+      id,
+      new File([bytes], a.filename, { type: a.mime }),
+    );
+    if (saved.receipt) receipts.set(id, saved.receipt);
   }
-  return {householdMap,receipts,goals:goals.records,goal_contributions:contributions.records,rules:rules.records,net_worth_items:items.records,net_worth_snapshots:snapshots.records,captured_alerts:alerts.records};
+  return {
+    householdMap,
+    receipts,
+    goals: goals.records,
+    goal_contributions: contributions.records,
+    rules: rules.records,
+    net_worth_items: items.records,
+    net_worth_snapshots: snapshots.records,
+    captured_alerts: alerts.records,
+  };
 }

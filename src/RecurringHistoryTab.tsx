@@ -43,10 +43,17 @@ export function RecurringHistoryTab({
     <section className="panel section">
       <div className="panel-heading recurring-panel-head">
         <div>
-          <h2> {uiText("Occurrence history")}{" "}
+          <h2>
+            {" "}
+            {uiText("Occurrence history")}{" "}
             <span className="count">{historyItems.length}</span>
           </h2>
-          <p> {uiText("Confirmed occurrences linked to actual ledger transactions. Unlinking or re-linking never deletes or alters transaction amounts.")} </p>
+          <p>
+            {" "}
+            {uiText(
+              "Confirmed occurrences linked to actual ledger transactions. Unlinking or re-linking never deletes or alters transaction amounts.",
+            )}{" "}
+          </p>
         </div>
       </div>
 
@@ -74,17 +81,24 @@ export function RecurringHistoryTab({
                       >
                         {isAutoMatched ? (
                           <>
-                            <Sparkles size={12} /> {uiText("Auto-matched")} </>
+                            <Sparkles size={12} /> {uiText("Auto-matched")}{" "}
+                          </>
                         ) : (
                           <>
-                            <Check size={12} /> {uiText("Manual")} </>
+                            <Check size={12} /> {uiText("Manual")}{" "}
+                          </>
                         )}
                       </span>
                     </b>
-                    <small> {uiText("Scheduled")} {formatFullDate(occ.occurrence_date)}
+                    <small>
+                      {" "}
+                      {uiText("Scheduled")}{" "}
+                      {formatFullDate(occ.occurrence_date)}
                       {tx ? (
                         <>
-                          {" "} {uiText("· Linked to")} <b>"{tx.payee || "Transaction"}"</b> {uiText("on")}{" "}
+                          {" "}
+                          {uiText("· Linked to")}{" "}
+                          <b>"{tx.payee || "Transaction"}"</b> {uiText("on")}{" "}
                           {formatShortDate(tx.date)}
                         </>
                       ) : (
@@ -121,7 +135,10 @@ export function RecurringHistoryTab({
                       onClick={() =>
                         onRelinkOccurrence?.(occ, schedule, occ.occurrence_date)
                       }
-                    > {uiText("Change")} </button>
+                    >
+                      {" "}
+                      {uiText("Change")}{" "}
+                    </button>
                   )}
                   <button
                     type="button"
@@ -142,7 +159,12 @@ export function RecurringHistoryTab({
         <div className="empty">
           <ReceiptText size={28} />
           <h3>{uiText("No confirmed occurrences yet")}</h3>
-          <p> {uiText("When you mark recurring payments as paid or auto-reconciliation matches bank transactions, they will be listed here.")} </p>
+          <p>
+            {" "}
+            {uiText(
+              "When you mark recurring payments as paid or auto-reconciliation matches bank transactions, they will be listed here.",
+            )}{" "}
+          </p>
         </div>
       )}
     </section>

@@ -77,26 +77,41 @@ export function DataBackup({
       const backup = createBackup(ledger, presets);
       const api = demo ? null : backend;
       if (api) {
-        const [notifications, households] = await Promise.all([api.loadNotificationPrefs(), api.loadHouseholds()]);
-        if (notifications.supported) backup.data.notification_prefs = notifications.prefs;
+        const [notifications, households] = await Promise.all([
+          api.loadNotificationPrefs(),
+          api.loadHouseholds(),
+        ]);
+        if (notifications.supported)
+          backup.data.notification_prefs = notifications.prefs;
         const session = await api.getSession();
-        if (households.supported) backup.data.households = households.households.filter(h => h.owner_id === session?.user.id);
+        if (households.supported)
+          backup.data.households = households.households.filter(
+            (h) => h.owner_id === session?.user.id,
+          );
       }
       let totalReceiptBytes = 0;
       for (const tx of ledger.transactions) {
         if (!tx.receipt) continue;
         const blob = api
           ? await api.getReceiptBlob(tx.id, tx.receipt)
-          : await fetch(tx.receipt).then(r => r.blob());
+          : await fetch(tx.receipt).then((r) => r.blob());
         totalReceiptBytes += blob.size;
-        if (totalReceiptBytes > 50 * 1024 * 1024) throw new Error("Receipts exceed 50 MB. Export smaller groups or keep a server backup.");
+        if (totalReceiptBytes > 50 * 1024 * 1024)
+          throw new Error(
+            "Receipts exceed 50 MB. Export smaller groups or keep a server backup.",
+          );
         const base64 = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(String(reader.result).split(",")[1]);
           reader.onerror = () => reject(new Error("Could not read receipt."));
           reader.readAsDataURL(blob);
         });
-        backup.data.attachments!.push({transaction_id:tx.id,filename:tx.receipt,mime:blob.type,base64});
+        backup.data.attachments!.push({
+          transaction_id: tx.id,
+          filename: tx.receipt,
+          mime: blob.type,
+          base64,
+        });
       }
       downloadBlob(
         serializeBackup(backup),
@@ -119,7 +134,7 @@ export function DataBackup({
     setFileName(file?.name ?? "");
     if (!file) return;
     if (file.size > MAX_BACKUP_BYTES) {
-      setError("Backup file exceeds the 10 MB size limit.");
+      setError("Backup file exceeds the 100 MB size limit.");
       return;
     }
     try {
@@ -158,7 +173,12 @@ export function DataBackup({
       <div className="data-backup-head">
         <div>
           <h3 id="data-backup-heading">{uiText("Data & backup")}</h3>
-          <p className="muted small"> {uiText("Export your transactions as CSV or download a full JSON backup (accounts, categories, transactions, recurring schedules, occurrences, preferences, budgets, goals, rules, net worth, alerts, receipts and CSV presets). AI learning data, access tokens and other household members are excluded. Restored household groups need new invitations. Browser push must be enabled again.")} </p>
+          <p className="muted small">
+            {" "}
+            {uiText(
+              "Export your transactions as CSV or download a full JSON backup (accounts, categories, transactions, recurring schedules, occurrences, preferences, budgets, goals, rules, net worth, alerts, receipts and CSV presets). AI learning data, access tokens and other household members are excluded. Restored household groups need new invitations. Browser push must be enabled again.",
+            )}{" "}
+          </p>
         </div>
       </div>
 
@@ -169,14 +189,18 @@ export function DataBackup({
           disabled={disabled || ledger.transactions.length === 0}
           onClick={() => void handleExportCsv()}
         >
-          <FileSpreadsheet size={15} /> {uiText("Export transactions (CSV)")} </button>
+          <FileSpreadsheet size={15} />{" "}
+          {uiText("Export transactions (CSV)")}{" "}
+        </button>
         <button
           type="button"
           className="secondary"
           disabled={disabled}
           onClick={() => void handleExportJson()}
         >
-          <FileJson size={15} /> <Download size={14} /> {uiText("Full backup (JSON)")} </button>
+          <FileJson size={15} /> <Download size={14} />{" "}
+          {uiText("Full backup (JSON)")}{" "}
+        </button>
       </div>
 
       <div className="data-backup-restore">
@@ -195,18 +219,54 @@ export function DataBackup({
           <div className="data-backup-preview">
             <div className="data-backup-preview-head">
               <strong>{fileName || "Backup preview"}</strong>
-              <span className="muted small"> {uiText("Format v")}{parsed.preview.formatVersion} {uiText("· Exported")}{" "}
+              <span className="muted small">
+                {" "}
+                {uiText("Format v")}
+                {parsed.preview.formatVersion} {uiText("· Exported")}{" "}
                 {parsed.preview.exportedAt.slice(0, 10)}
               </span>
             </div>
             <ul className="data-backup-counts">
               <li>{plural(parsed.preview.counts.accounts, "account")}</li>
-              <li>{plural(parsed.preview.counts.categories, "category", "categories")}</li>
-              <li>{plural(parsed.preview.counts.transactions, "transaction")}</li>
-              <li>{plural(parsed.preview.counts.recurring, "recurring schedule")}</li>
-              <li>{plural(parsed.preview.counts.recurringOccurrences, "occurrence")}</li>
+              <li>
+                {plural(
+                  parsed.preview.counts.categories,
+                  "category",
+                  "categories",
+                )}
+              </li>
+              <li>
+                {plural(parsed.preview.counts.transactions, "transaction")}
+              </li>
+              <li>
+                {plural(parsed.preview.counts.recurring, "recurring schedule")}
+              </li>
+              <li>
+                {plural(
+                  parsed.preview.counts.recurringOccurrences,
+                  "occurrence",
+                )}
+              </li>
               <li>{plural(parsed.preview.counts.budgets, "budget")}</li>
               <li>{plural(parsed.preview.counts.csvPresets, "CSV preset")}</li>
+              {(
+                [
+                  ["goals", "Goals"],
+                  ["contributions", "Contributions"],
+                  ["rules", "Transaction rules"],
+                  ["netWorthItems", "Net-worth items"],
+                  ["valuations", "Valuations"],
+                  ["capturedAlerts", "Captured alerts"],
+                  ["receipts", "Receipt"],
+                  ["households", "Household groups"],
+                ] as const
+              ).map(([key, label]) =>
+                parsed.preview.counts[key] > 0 ? (
+                  <li key={key}>
+                    {parsed.preview.counts[key]} {uiText(label)}
+                  </li>
+                ) : null,
+              )}
             </ul>
 
             <fieldset className="data-backup-modes">
@@ -220,9 +280,16 @@ export function DataBackup({
                   checked={mode === "empty"}
                   onChange={() => setMode("empty")}
                 />
-                <span> {uiText("Restore into empty account only")} {!workspaceEmpty && (
+                <span>
+                  {" "}
+                  {uiText("Restore into empty account only")}{" "}
+                  {!workspaceEmpty && (
                     <small className="muted">
-                      {" "} {uiText("(Unavailable — workspace already has data)")} </small>
+                      {" "}
+                      {uiText(
+                        "(Unavailable — workspace already has data)",
+                      )}{" "}
+                    </small>
                   )}
                 </span>
               </label>
@@ -235,7 +302,12 @@ export function DataBackup({
                   checked={mode === "merge"}
                   onChange={() => setMode("merge")}
                 />
-                <span> {uiText("Merge with existing data (reuses matching accounts & categories, skips duplicate transactions)")} </span>
+                <span>
+                  {" "}
+                  {uiText(
+                    "Merge with existing data (reuses matching accounts & categories, skips duplicate transactions)",
+                  )}{" "}
+                </span>
               </label>
             </fieldset>
 
@@ -246,7 +318,12 @@ export function DataBackup({
                 disabled={disabled}
                 onChange={(e) => setConfirmed(e.target.checked)}
               />
-              <span> {uiText("I have reviewed the preview counts and want to restore this backup.")} </span>
+              <span>
+                {" "}
+                {uiText(
+                  "I have reviewed the preview counts and want to restore this backup.",
+                )}{" "}
+              </span>
             </label>
 
             <div className="data-backup-restore-actions">
@@ -270,7 +347,10 @@ export function DataBackup({
                   setError("");
                   if (fileInput.current) fileInput.current.value = "";
                 }}
-              > {uiText("Cancel")} </button>
+              >
+                {" "}
+                {uiText("Cancel")}{" "}
+              </button>
             </div>
           </div>
         )}

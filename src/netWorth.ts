@@ -10,12 +10,7 @@ import {
 export type NetWorthKind = "asset" | "liability";
 
 export type NetWorthAssetCategory =
-  | "investment"
-  | "gold"
-  | "crypto"
-  | "property"
-  | "vehicle"
-  | "other_asset";
+  "investment" | "gold" | "crypto" | "property" | "vehicle" | "other_asset";
 
 export type NetWorthLiabilityCategory =
   | "mortgage"
@@ -25,8 +20,7 @@ export type NetWorthLiabilityCategory =
   | "other_liability";
 
 export type NetWorthCategory =
-  | NetWorthAssetCategory
-  | NetWorthLiabilityCategory;
+  NetWorthAssetCategory | NetWorthLiabilityCategory;
 
 export interface NetWorthItem {
   id: string;
@@ -46,6 +40,7 @@ export interface NetWorthSnapshot {
   value: number;
   date: string;
   notes: string;
+  revision?: number;
 }
 
 export interface NetWorthSummary {
@@ -80,13 +75,7 @@ export const NET_WORTH_ASSET_CATEGORIES: readonly NetWorthAssetCategory[] = [
 ];
 
 export const NET_WORTH_LIABILITY_CATEGORIES: readonly NetWorthLiabilityCategory[] =
-  [
-    "mortgage",
-    "auto_loan",
-    "personal_loan",
-    "student_loan",
-    "other_liability",
-  ];
+  ["mortgage", "auto_loan", "personal_loan", "student_loan", "other_liability"];
 
 export const NET_WORTH_CATEGORIES: Record<
   NetWorthCategory,
@@ -294,7 +283,10 @@ export function buildNetWorthSeries(
     byItem.set(s.item_id, list);
   }
   for (const list of byItem.values()) {
-    list.sort((a, b) => a.date.localeCompare(b.date));
+    list.sort(
+      (a, b) =>
+        a.date.localeCompare(b.date) || (a.revision ?? 0) - (b.revision ?? 0),
+    );
   }
 
   const points: NetWorthSeriesPoint[] = [];

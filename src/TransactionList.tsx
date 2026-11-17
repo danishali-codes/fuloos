@@ -6,11 +6,7 @@ import {
   ReceiptText,
   Trash2,
 } from "lucide-react";
-import {
-  startingBalance,
-  type Ledger,
-  type Transaction,
-} from "./domain";
+import { startingBalance, type Ledger, type Transaction } from "./domain";
 
 export function Empty({ title, text }: { title: string; text: string }) {
   return (
@@ -142,11 +138,15 @@ export function TransactionList({
               </span>
               <span className="transaction-value">
                 <small>
-                  {account?.name}: {concealed(balances.get(t.id)?.source ?? 0)}{" "} {uiText("balance")} </small>
+                  {account?.name}: {concealed(balances.get(t.id)?.source ?? 0)}{" "}
+                  {uiText("balance")}{" "}
+                </small>
                 {t.to_account_id && (
                   <small>
                     {toAccount?.name}:{" "}
-                    {concealed(balances.get(t.id)?.destination ?? 0)} {uiText("balance")} </small>
+                    {concealed(balances.get(t.id)?.destination ?? 0)}{" "}
+                    {uiText("balance")}{" "}
+                  </small>
                 )}
                 <b className={t.type === "income" ? "green-text" : ""}>
                   {t.type === "income" ? "+" : t.type === "expense" ? "−" : ""}

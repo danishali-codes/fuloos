@@ -1,5 +1,12 @@
 import { translateText as uiText } from "./i18n";
-import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  Suspense,
+  lazy,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createRoot } from "react-dom/client";
 import {
   backend,
@@ -64,11 +71,7 @@ import { applyContributionAmount } from "./goals";
 import { useRecurringActions } from "./useRecurringActions";
 import { useDeletionActions } from "./useDeletionActions";
 import { useImportAndBulk } from "./useImportAndBulk";
-import {
-  executeRestore,
-  type FuloosBackup,
-  type RestoreMode,
-} from "./backup";
+import { executeRestore, type FuloosBackup, type RestoreMode } from "./backup";
 import { Sidebar } from "./Sidebar";
 import { AppModals } from "./AppModals";
 import { AppPageHeader, AppTopbar } from "./AppHeader";
@@ -144,7 +147,11 @@ function App() {
     [view, setView] = useState("month"),
     [rangeFrom, setRangeFrom] = useState(today().slice(0, 7)),
     [hidden, setHidden] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(() => new URLSearchParams(window.location.search).get("settings") === "notifications");
+  const [settingsOpen, setSettingsOpen] = useState(
+    () =>
+      new URLSearchParams(window.location.search).get("settings") ===
+      "notifications",
+  );
   const [rulesOpen, setRulesOpen] = useState(false);
   const appStorage = useMemo<StorageLike | undefined>(() => {
     try {
@@ -186,18 +193,20 @@ function App() {
   const online = useOnlineStatus();
   const { canInstall, promptInstall } = useInstallPrompt();
   const [swUpdate, setSwUpdate] = useState<(() => void) | null>(null);
-  const [quickAdd, setQuickAdd] = useState<Partial<QuickAddDraft> | null>(() => {
-    const parsed = parseQuickAddUrl(window.location.search);
-    if (parsed.open) {
-      window.history.replaceState(
-        {},
-        "",
-        window.location.pathname + window.location.hash,
-      );
-      return parsed.draft;
-    }
-    return null;
-  });
+  const [quickAdd, setQuickAdd] = useState<Partial<QuickAddDraft> | null>(
+    () => {
+      const parsed = parseQuickAddUrl(window.location.search);
+      if (parsed.open) {
+        window.history.replaceState(
+          {},
+          "",
+          window.location.pathname + window.location.hash,
+        );
+        return parsed.draft;
+      }
+      return null;
+    },
+  );
   useEffect(
     () => registerServiceWorker((apply) => setSwUpdate(() => apply)),
     [],
@@ -228,7 +237,10 @@ function App() {
   const mutationKeys = useRef(new Map<string, string>());
   function operationKey(key: string) {
     let value = mutationKeys.current.get(key);
-    if (!value) { value = crypto.randomUUID(); mutationKeys.current.set(key, value); }
+    if (!value) {
+      value = crypto.randomUUID();
+      mutationKeys.current.set(key, value);
+    }
     return value;
   }
   // Background saves keep running while the user moves between pages.
@@ -370,7 +382,9 @@ function App() {
     };
     const checkIdle = () => {
       const now = Date.now();
-      if (shouldSignOutForIdle(lastActiveRef.current, now, idleSignOutMinutes)) {
+      if (
+        shouldSignOutForIdle(lastActiveRef.current, now, idleSignOutMinutes)
+      ) {
         setError("Signed out due to inactivity.");
         backend?.signOut();
         return;
@@ -407,7 +421,9 @@ function App() {
     try {
       const [data, alertsRes] = await Promise.all([
         backend.load(),
-        backend.loadCapturedAlerts().catch(() => ({ alerts: [], supported: false })),
+        backend
+          .loadCapturedAlerts()
+          .catch(() => ({ alerts: [], supported: false })),
       ]);
       if (current === generation.current) {
         savedTx.current.clear();
@@ -460,9 +476,9 @@ function App() {
     try {
       if (demo) {
         const existing = id
-          ? (
-              ledger[table] as unknown as Array<Record<string, unknown>>
-            ).find((v) => v.id === id)
+          ? (ledger[table] as unknown as Array<Record<string, unknown>>).find(
+              (v) => v.id === id,
+            )
           : undefined;
         const next: Record<string, unknown> = {
           ...(existing ?? {}),
@@ -537,10 +553,7 @@ function App() {
       setBusy(false);
     }
   }
-  async function saveRule(
-    value: Omit<TransactionRule, "id">,
-    id?: string,
-  ) {
+  async function saveRule(value: Omit<TransactionRule, "id">, id?: string) {
     if (!demo && !online) {
       throw new Error("You're offline. Reconnect to save rules.");
     }
@@ -611,11 +624,14 @@ function App() {
     }
     if (!backend || !session) throw new Error("Please sign in.");
     const current = generation.current;
-    const savedTx = await backend.importCapturedAlert(alert.id, {...tx});
+    const savedTx = await backend.importCapturedAlert(alert.id, { ...tx });
     if (current !== generation.current) return;
     setLedger((l) => ({
       ...l,
-      transactions: [...l.transactions.filter((t) => t.id !== savedTx.id), savedTx],
+      transactions: [
+        ...l.transactions.filter((t) => t.id !== savedTx.id),
+        savedTx,
+      ],
       captured_alerts: (l.captured_alerts ?? []).map((a) =>
         a.id === alert.id ? { ...a, status: "imported" } : a,
       ),
@@ -761,17 +777,35 @@ function App() {
           goals: (l.goals ?? []).map((g) =>
             g.id === goal.id ? updatedGoal : g,
           ),
-          goal_contributions: [...(l.goal_contributions ?? []).filter((c) => c.id !== contrib.id), contrib],
+          goal_contributions: [
+            ...(l.goal_contributions ?? []).filter((c) => c.id !== contrib.id),
+            contrib,
+          ],
         }));
       } else {
         if (!backend || !session) throw new Error("Please sign in.");
         const current = generation.current;
-        const key = JSON.stringify(["goal", goal.id, amount, date, notes, recordTransaction]);
+        const key = JSON.stringify([
+          "goal",
+          goal.id,
+          amount,
+          date,
+          notes,
+          recordTransaction,
+        ]);
         const result = await backend.contributeGoal(goal.id, {
-          amount, date, notes, record_transaction: recordTransaction, operation_key: operationKey(key),
+          amount,
+          date,
+          notes,
+          record_transaction: recordTransaction,
+          operation_key: operationKey(key),
         });
         mutationKeys.current.delete(key);
-        const { goal: updatedGoal, contribution: contrib, transaction: createdTx } = result;
+        const {
+          goal: updatedGoal,
+          contribution: contrib,
+          transaction: createdTx,
+        } = result;
         if (current !== generation.current) return;
         setLedger((l) => ({
           ...l,
@@ -781,7 +815,10 @@ function App() {
           goals: (l.goals ?? []).map((g) =>
             g.id === goal.id ? updatedGoal : g,
           ),
-          goal_contributions: [...(l.goal_contributions ?? []).filter((c) => c.id !== contrib.id), contrib],
+          goal_contributions: [
+            ...(l.goal_contributions ?? []).filter((c) => c.id !== contrib.id),
+            contrib,
+          ],
         }));
       }
       setGoalContributeTarget(null);
@@ -804,8 +841,15 @@ function App() {
         const current = generation.current;
         const updated = await backend.removeGoalContribution(c.id);
         if (current !== generation.current) return;
-        setLedger((l) => ({...l, goals: (l.goals ?? []).map((g) => g.id === updated.id ? updated : g),
-          goal_contributions: (l.goal_contributions ?? []).filter((item) => item.id !== c.id)}));
+        setLedger((l) => ({
+          ...l,
+          goals: (l.goals ?? []).map((g) =>
+            g.id === updated.id ? updated : g,
+          ),
+          goal_contributions: (l.goal_contributions ?? []).filter(
+            (item) => item.id !== c.id,
+          ),
+        }));
         return;
         if (current !== generation.current) return;
       }
@@ -832,24 +876,51 @@ function App() {
     setError("");
     try {
       if (demo) {
+        const previous = (ledgerRef.current.net_worth_items ?? []).find(
+          (item) => item.id === id,
+        );
         const saved: NetWorthItem = { ...draft, id: id ?? demoId() };
-        const initialSnap: NetWorthSnapshot | null = id
-          ? null
-          : {
-              id: demoId(),
-              item_id: saved.id,
-              value: saved.current_value,
-              date: saved.as_of_date,
-              notes: "Initial valuation",
-            };
+        const history = (ledgerRef.current.net_worth_snapshots ?? []).filter(
+          (snap) => snap.item_id === saved.id,
+        );
+        const changed =
+          !previous ||
+          previous.current_value !== draft.current_value ||
+          previous.as_of_date !== draft.as_of_date;
+        const nextHistory = changed
+          ? [
+              ...history,
+              {
+                id: demoId(),
+                item_id: saved.id,
+                value: draft.current_value,
+                date: draft.as_of_date,
+                notes: previous ? "Edited valuation" : "Initial valuation",
+                revision:
+                  Math.max(0, ...history.map((snap) => snap.revision ?? 0)) + 1,
+              },
+            ]
+          : history;
+        const latest = [...nextHistory].sort(
+          (a, b) =>
+            b.date.localeCompare(a.date) ||
+            (b.revision ?? 0) - (a.revision ?? 0),
+        )[0];
+        if (latest) {
+          saved.current_value = latest.value;
+          saved.as_of_date = latest.date;
+        }
         setLedger((l) => ({
           ...l,
           net_worth_items: id
             ? (l.net_worth_items ?? []).map((i) => (i.id === id ? saved : i))
             : [...(l.net_worth_items ?? []), saved],
-          net_worth_snapshots: initialSnap
-            ? [...(l.net_worth_snapshots ?? []), initialSnap]
-            : l.net_worth_snapshots,
+          net_worth_snapshots: [
+            ...(l.net_worth_snapshots ?? []).filter(
+              (snap) => snap.item_id !== saved.id,
+            ),
+            ...nextHistory,
+          ],
         }));
         setNetWorthModal(null);
         return;
@@ -857,7 +928,11 @@ function App() {
       if (!backend || !session) throw new Error("Please sign in.");
       const current = generation.current;
       const key = JSON.stringify(["net-worth-item", id, draft]);
-      const result = await backend.saveNetWorthItemAtomic({...draft}, id, operationKey(key));
+      const result = await backend.saveNetWorthItemAtomic(
+        { ...draft },
+        id,
+        operationKey(key),
+      );
       mutationKeys.current.delete(key);
       const saved = result.item;
       if (current !== generation.current) return;
@@ -866,7 +941,12 @@ function App() {
         net_worth_items: id
           ? (l.net_worth_items ?? []).map((i) => (i.id === id ? saved : i))
           : [...(l.net_worth_items ?? []), saved],
-        net_worth_snapshots: [...(l.net_worth_snapshots ?? []).filter((snap) => snap.item_id !== saved.id), ...result.snapshots],
+        net_worth_snapshots: [
+          ...(l.net_worth_snapshots ?? []).filter(
+            (snap) => snap.item_id !== saved.id,
+          ),
+          ...result.snapshots,
+        ],
       }));
       setNetWorthModal(null);
     } catch (e) {
@@ -919,6 +999,13 @@ function App() {
           value,
           date,
           notes,
+          revision:
+            Math.max(
+              0,
+              ...(ledgerRef.current.net_worth_snapshots ?? [])
+                .filter((snap) => snap.item_id === item.id)
+                .map((snap) => snap.revision ?? 0),
+            ) + 1,
         };
         setLedger((l) => ({
           ...l,
@@ -935,13 +1022,24 @@ function App() {
       if (!backend || !session) throw new Error("Please sign in.");
       const current = generation.current;
       const key = JSON.stringify(["valuation", item.id, value, date, notes]);
-      const result = await backend.saveNetWorthValuationAtomic(item.id, value, date, notes, operationKey(key));
+      const result = await backend.saveNetWorthValuationAtomic(
+        item.id,
+        value,
+        date,
+        notes,
+        operationKey(key),
+      );
       mutationKeys.current.delete(key);
       const updated = result.item;
       if (current !== generation.current) return;
       setLedger((l) => ({
         ...l,
-        net_worth_snapshots: [...(l.net_worth_snapshots ?? []).filter((snap) => snap.item_id !== item.id), ...result.snapshots],
+        net_worth_snapshots: [
+          ...(l.net_worth_snapshots ?? []).filter(
+            (snap) => snap.item_id !== item.id,
+          ),
+          ...result.snapshots,
+        ],
         net_worth_items: (l.net_worth_items ?? []).map((i) =>
           i.id === item.id ? updated : i,
         ),
@@ -963,17 +1061,42 @@ function App() {
         const current = generation.current;
         const result = await backend.deleteNetWorthSnapshotAtomic(snap.id);
         if (current !== generation.current) return;
-        setLedger((l) => ({...l,
-          net_worth_items: (l.net_worth_items ?? []).map((i) => i.id === result.item.id ? result.item : i),
-          net_worth_snapshots: [...(l.net_worth_snapshots ?? []).filter((s) => s.item_id !== result.item.id), ...result.snapshots]}));
+        setLedger((l) => ({
+          ...l,
+          net_worth_items: (l.net_worth_items ?? []).map((i) =>
+            i.id === result.item.id ? result.item : i,
+          ),
+          net_worth_snapshots: [
+            ...(l.net_worth_snapshots ?? []).filter(
+              (s) => s.item_id !== result.item.id,
+            ),
+            ...result.snapshots,
+          ],
+        }));
         return;
       }
-      const remaining = (ledgerRef.current.net_worth_snapshots ?? []).filter((s) => s.item_id === snap.item_id && s.id !== snap.id).sort((a,b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
-      if (!remaining.length) throw new Error("Keep at least one valuation for this item.");
+      const remaining = (ledgerRef.current.net_worth_snapshots ?? [])
+        .filter((s) => s.item_id === snap.item_id && s.id !== snap.id)
+        .sort(
+          (a, b) =>
+            b.date.localeCompare(a.date) ||
+            (b.revision ?? 0) - (a.revision ?? 0) ||
+            b.id.localeCompare(a.id),
+        );
+      if (!remaining.length)
+        throw new Error("Keep at least one valuation for this item.");
       const latest = remaining[0];
-      setLedger((l) => ({...l,
-        net_worth_items: (l.net_worth_items ?? []).map((i) => i.id === snap.item_id ? {...i, current_value: latest.value, as_of_date: latest.date} : i),
-        net_worth_snapshots: (l.net_worth_snapshots ?? []).filter((s) => s.id !== snap.id)}));
+      setLedger((l) => ({
+        ...l,
+        net_worth_items: (l.net_worth_items ?? []).map((i) =>
+          i.id === snap.item_id
+            ? { ...i, current_value: latest.value, as_of_date: latest.date }
+            : i,
+        ),
+        net_worth_snapshots: (l.net_worth_snapshots ?? []).filter(
+          (s) => s.id !== snap.id,
+        ),
+      }));
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -1065,24 +1188,26 @@ function App() {
     generation,
     demoId,
   });
-  const { bulkUpdate, importTransactions, createCategories } = useImportAndBulk({
-    demo,
-    session,
-    queue,
-    ledger,
-    setLedger,
-    ledgerRef,
-    busy,
-    setBusy,
-    generation,
-    demoId,
-    ownerGuard,
-    checkOwner,
-    load,
-    latestTransaction,
-    mergeRecords,
-    updateTransactions,
-  });
+  const { bulkUpdate, importTransactions, createCategories } = useImportAndBulk(
+    {
+      demo,
+      session,
+      queue,
+      ledger,
+      setLedger,
+      ledgerRef,
+      busy,
+      setBusy,
+      generation,
+      demoId,
+      ownerGuard,
+      checkOwner,
+      load,
+      latestTransaction,
+      mergeRecords,
+      updateTransactions,
+    },
+  );
   async function saveBudget(value: BudgetDraft, id?: string) {
     if (busy) return;
     validateBudget({ ...value, id }, ledger);
@@ -1256,10 +1381,7 @@ function App() {
   const summary = useMemo(() => totals(monthly), [monthly]);
   const net = useMemo(
     () =>
-      ledger.accounts.reduce(
-        (s, a) => s + balance(a, ledger.transactions),
-        0,
-      ),
+      ledger.accounts.reduce((s, a) => s + balance(a, ledger.transactions), 0),
     [ledger.accounts, ledger.transactions],
   );
   const balanceNote = (a: Account, short = false) =>
@@ -1326,7 +1448,8 @@ function App() {
           month,
         )
       : start.toISOString().slice(0, 7);
-  if (checking) return <div className="loading">{uiText("Opening Fuloos…")}</div>;
+  if (checking)
+    return <div className="loading">{uiText("Opening Fuloos…")}</div>;
   if (!session && !demo)
     return <Auth onDemo={startDemo} externalError={error} />;
   if (session && !demo && locked && lockConfig)
@@ -1466,7 +1589,11 @@ function App() {
             />
           )}
           {page === "Recurring" && (
-            <Suspense fallback={<div className="loading-inline">{uiText("Loading…")}</div>}>
+            <Suspense
+              fallback={
+                <div className="loading-inline">{uiText("Loading…")}</div>
+              }
+            >
               <RecurringPage
                 ledger={ledger}
                 concealed={concealed}
@@ -1474,7 +1601,9 @@ function App() {
                 initialTab={recurringTab}
                 initialFilter={recurringFilter}
                 onAddSchedule={() => setRecurringModal({ open: true })}
-                onEditSchedule={(item) => setRecurringModal({ open: true, item })}
+                onEditSchedule={(item) =>
+                  setRecurringModal({ open: true, item })
+                }
                 onTogglePause={(item) => void togglePauseRecurring(item)}
                 onDeleteSchedule={(item) => void remove("recurring", item.id)}
                 onConfirmOccurrence={(schedule, occurrenceDate) =>
@@ -1490,9 +1619,13 @@ function App() {
                     existingConfirmation: existing,
                   })
                 }
-                onAcceptPattern={(pattern) => void acceptDetectedPattern(pattern)}
+                onAcceptPattern={(pattern) =>
+                  void acceptDetectedPattern(pattern)
+                }
                 onEditPattern={(pattern) => editDetectedPattern(pattern)}
-                onDismissPattern={(patternKey) => void dismissPattern(patternKey)}
+                onDismissPattern={(patternKey) =>
+                  void dismissPattern(patternKey)
+                }
                 onConfirmMatchCandidate={(candidate) =>
                   void confirmLinkOccurrence(
                     candidate.schedule,
@@ -1513,7 +1646,11 @@ function App() {
             </Suspense>
           )}
           {page === "Budgets" && (
-            <Suspense fallback={<div className="loading-inline">{uiText("Loading…")}</div>}>
+            <Suspense
+              fallback={
+                <div className="loading-inline">{uiText("Loading…")}</div>
+              }
+            >
               <BudgetsPage
                 ledger={ledger}
                 month={month}
@@ -1534,7 +1671,11 @@ function App() {
             </Suspense>
           )}
           {page === "Goals" && (
-            <Suspense fallback={<div className="loading-inline">{uiText("Loading…")}</div>}>
+            <Suspense
+              fallback={
+                <div className="loading-inline">{uiText("Loading…")}</div>
+              }
+            >
               <GoalsPage
                 ledger={ledger}
                 concealed={concealed}
@@ -1548,18 +1689,30 @@ function App() {
             </Suspense>
           )}
           {page === "Net Worth" && (
-            <Suspense fallback={<div className="loading-inline">{uiText("Loading…")}</div>}>
-              <NetWorthPage ledger={ledger} concealed={concealed} busy={busy}
-                onAddItem={()=>setNetWorthModal({open:true})}
-                onEditItem={(item)=>setNetWorthModal({open:true,item})}
-                onDeleteItem={(item)=>void deleteNetWorthItem(item)}
+            <Suspense
+              fallback={
+                <div className="loading-inline">{uiText("Loading…")}</div>
+              }
+            >
+              <NetWorthPage
+                ledger={ledger}
+                concealed={concealed}
+                busy={busy}
+                onAddItem={() => setNetWorthModal({ open: true })}
+                onEditItem={(item) => setNetWorthModal({ open: true, item })}
+                onDeleteItem={(item) => void deleteNetWorthItem(item)}
                 onUpdateValuation={setNetWorthValuationTarget}
-                onDeleteSnapshot={(snap)=>void deleteNetWorthSnapshot(snap)}
-                onNavigateAccounts={()=>setPage("Accounts")} />
+                onDeleteSnapshot={(snap) => void deleteNetWorthSnapshot(snap)}
+                onNavigateAccounts={() => setPage("Accounts")}
+              />
             </Suspense>
           )}
           {page === "Reports" && (
-            <Suspense fallback={<div className="loading-inline">{uiText("Loading…")}</div>}>
+            <Suspense
+              fallback={
+                <div className="loading-inline">{uiText("Loading…")}</div>
+              }
+            >
               <ReportsPage
                 ledger={ledger}
                 budgetRangeStart={budgetRangeStart}

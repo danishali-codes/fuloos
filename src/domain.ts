@@ -4,19 +4,11 @@ import { validateSplits, validateTags } from "./enrichment.ts";
 import type { NetWorthItem, NetWorthSnapshot } from "./netWorth.ts";
 
 export type AccountType =
-  | "current"
-  | "savings"
-  | "credit_card"
-  | "cash"
-  | "other";
+  "current" | "savings" | "credit_card" | "cash" | "other";
 export type Kind = "expense" | "income" | "transfer";
 export type RecurringKind = "expense" | "income";
 export type RecurringFrequency =
-  | "daily"
-  | "weekly"
-  | "monthly"
-  | "quarterly"
-  | "yearly";
+  "daily" | "weekly" | "monthly" | "quarterly" | "yearly";
 export type RecurringAmountType = "fixed" | "variable";
 export type RecurringStatus = "active" | "paused";
 export type OccurrenceMatchSource = "manual" | "auto";
@@ -165,14 +157,7 @@ export const defaultRecurringPreferences: RecurringPreferences = {
   auto_match: "auto",
   dismissed_keys: [],
 };
-export type DigestDay =
-  | "sun"
-  | "mon"
-  | "tue"
-  | "wed"
-  | "thu"
-  | "fri"
-  | "sat";
+export type DigestDay = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
 export interface NotificationPreferences {
   id?: string;
   email_enabled: boolean;

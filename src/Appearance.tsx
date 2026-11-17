@@ -54,8 +54,13 @@ export function ColorPicker({
             ),
           )
         }
-      > {uiText("Shuffle colors")} </button>
-      <label className="custom-color"> {uiText("Full color picker")}{" "}
+      >
+        {" "}
+        {uiText("Shuffle colors")}{" "}
+      </button>
+      <label className="custom-color">
+        {" "}
+        {uiText("Full color picker")}{" "}
         <input
           aria-label={uiText("Custom color")}
           type="color"
@@ -88,7 +93,9 @@ export function EmojiField({ defaultValue = "" }: { defaultValue?: string }) {
   };
   return (
     <div className="emoji-picker">
-      <span className="emoji-label"> {uiText("Emoji")} <span className="muted">{uiText("Optional")}</span>
+      <span className="emoji-label">
+        {" "}
+        {uiText("Emoji")} <span className="muted">{uiText("Optional")}</span>
       </span>
       <input type="hidden" name="emoji" value={emoji} />
       <div className="emoji-current">
@@ -107,14 +114,21 @@ export function EmojiField({ defaultValue = "" }: { defaultValue?: string }) {
           aria-expanded={open}
           onClick={() => setOpen((o) => !o)}
         >
-          {open ? uiText("Close") : emoji ? uiText("Change") : uiText("Pick an emoji")}
+          {open
+            ? uiText("Close")
+            : emoji
+              ? uiText("Change")
+              : uiText("Pick an emoji")}
         </button>
         {emoji && (
           <button
             type="button"
             className="text-button"
             onClick={() => pick("")}
-          > {uiText("Remove")} </button>
+          >
+            {" "}
+            {uiText("Remove")}{" "}
+          </button>
         )}
       </div>
       {open && (
@@ -178,7 +192,10 @@ export function EmojiField({ defaultValue = "" }: { defaultValue?: string }) {
               </button>
             ))}
           </div>
-          <label className="emoji-custom"> {uiText("Or type or paste any emoji")} <input
+          <label className="emoji-custom">
+            {" "}
+            {uiText("Or type or paste any emoji")}{" "}
+            <input
               maxLength={32}
               value={emoji}
               placeholder={uiText("e.g. 🏦")}

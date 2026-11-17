@@ -20,12 +20,11 @@ import {
   parseIsoDate,
   type OccurrenceItem,
 } from "./recurring.ts";
-import type { ForecastItem, IntelligentForecast } from "./recurringAutomation.ts";
-import {
-  formatFullDate,
-  formatShortDate,
-  statusLabels,
-} from "./RecurringView";
+import type {
+  ForecastItem,
+  IntelligentForecast,
+} from "./recurringAutomation.ts";
+import { formatFullDate, formatShortDate, statusLabels } from "./RecurringView";
 
 export function RecurringUpcomingTab({
   ledger,
@@ -66,10 +65,11 @@ export function RecurringUpcomingTab({
   const calendarData = useMemo(() => {
     if (upcomingView !== "calendar") {
       return {
-        cells: [] as (
-          | { day: number; date: string; items: OccurrenceItem[] }
-          | null
-        )[],
+        cells: [] as ({
+          day: number;
+          date: string;
+          items: OccurrenceItem[];
+        } | null)[],
         items: [] as OccurrenceItem[],
       };
     }
@@ -90,8 +90,11 @@ export function RecurringUpcomingTab({
       (new Date(Date.UTC(parsed.year, parsed.month - 1, 1)).getUTCDay() + 6) %
       7; // Monday = 0
     const totalDays = daysInMonth(parsed.year, parsed.month);
-    const cells: ({ day: number; date: string; items: OccurrenceItem[] } | null)[] =
-      [];
+    const cells: ({
+      day: number;
+      date: string;
+      items: OccurrenceItem[];
+    } | null)[] = [];
     for (let i = 0; i < firstWeekday; i++) cells.push(null);
     for (let day = 1; day <= totalDays; day++) {
       const date = formatIsoDate(parsed.year, parsed.month, day);
@@ -127,7 +130,8 @@ export function RecurringUpcomingTab({
                   className={horizonDays === h ? "active" : ""}
                   onClick={() => setHorizonDays(h)}
                 >
-                  {h} {uiText("days")} </button>
+                  {h} {uiText("days")}{" "}
+                </button>
               ))}
             </div>
           )}
@@ -143,7 +147,8 @@ export function RecurringUpcomingTab({
               className={upcomingView === "timeline" ? "active" : ""}
               onClick={() => setUpcomingView("timeline")}
             >
-              <List size={15} /> {uiText("Chronological")} </button>
+              <List size={15} /> {uiText("Chronological")}{" "}
+            </button>
             <button
               type="button"
               role="tab"
@@ -151,7 +156,8 @@ export function RecurringUpcomingTab({
               className={upcomingView === "calendar" ? "active" : ""}
               onClick={() => setUpcomingView("calendar")}
             >
-              <Calendar size={15} /> {uiText("Calendar")} </button>
+              <Calendar size={15} /> {uiText("Calendar")}{" "}
+            </button>
           </div>
         </div>
       </div>
@@ -184,13 +190,20 @@ export function RecurringUpcomingTab({
                         </span>
                         {item.schedule.amount_type === "variable" &&
                           !item.isConfirmed && (
-                            <span className="mini-tag variable">{uiText("Variable")}</span>
+                            <span className="mini-tag variable">
+                              {uiText("Variable")}
+                            </span>
                           )}
                       </b>
-                      <small> {uiText("Scheduled")} {formatFullDate(item.scheduledDate)}
+                      <small>
+                        {" "}
+                        {uiText("Scheduled")}{" "}
+                        {formatFullDate(item.scheduledDate)}
                         {item.offsetDays !== 0 && !item.isConfirmed && (
                           <span className="predicted-hint">
-                            {" "} {uiText("· Predicted")} {formatShortDate(item.predictedDate)} (
+                            {" "}
+                            {uiText("· Predicted")}{" "}
+                            {formatShortDate(item.predictedDate)} (
                             {item.offsetDays > 0
                               ? `+${item.offsetDays}d`
                               : `${item.offsetDays}d`}
@@ -241,7 +254,10 @@ export function RecurringUpcomingTab({
                         onClick={() =>
                           onConfirmOccurrence(item.schedule, item.scheduledDate)
                         }
-                      > {uiText("Mark paid")} </button>
+                      >
+                        {" "}
+                        {uiText("Mark paid")}{" "}
+                      </button>
                     )}
                   </div>
                 </div>
@@ -251,8 +267,15 @@ export function RecurringUpcomingTab({
         ) : (
           <div className="empty">
             <Calendar size={28} />
-            <h3>{uiText("No payments in the next")} {horizonDays} {uiText("days")}</h3>
-            <p> {uiText("Active schedules with upcoming payments in this window will appear here.")} </p>
+            <h3>
+              {uiText("No payments in the next")} {horizonDays} {uiText("days")}
+            </h3>
+            <p>
+              {" "}
+              {uiText(
+                "Active schedules with upcoming payments in this window will appear here.",
+              )}{" "}
+            </p>
           </div>
         )
       ) : (
@@ -265,7 +288,8 @@ export function RecurringUpcomingTab({
               onChange={(next) => setCalMonth(next.month)}
             />
             <span className="muted small">
-              {calendarData.items.length} {uiText("scheduled in month")} </span>
+              {calendarData.items.length} {uiText("scheduled in month")}{" "}
+            </span>
           </div>
           <div className="calendar-grid">
             {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (

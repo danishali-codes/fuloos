@@ -14,9 +14,15 @@ Reviewed application source, PocketBase migrations/hooks, existing tests, open P
 
 Recent production builds had been failing at dependency installation with ERESOLVE. The working production deployment now includes the dependency repair.
 
-## Confirmed issues and incomplete behavior
+## Current repair status
 
-These findings remain open; the dependency repair above does not fix them.
+The defects below were addressed in PR #50 after this initial review. The implementation adds retry-safe atomic server operations; a v2 backup with new feature data, receipt bytes, privacy exclusions and owned household-group restoration; shared categories and bulk ownership preservation; split-aware paginated notification calculations; stable valuation ordering and recalculation; notification deep-link handling; explicit AED-accounting labels; expanded Arabic UI strings and money formatting; and additional browser/integration regression coverage. Browser testing also found and repaired the missing Net Worth page mount.
+
+[Deploy the matching PocketBase files using this checklist](../pocketbase/UPGRADE_2026-11-17.md). These server changes must be installed on the actual server; passing integration tests against a temporary instance does not install them in production.
+
+Foreign-currency support continues to use an AED ledger with explicit foreign-purchase conversion, now clearly labeled. The missing-capabilities section below distinguishes new product features and externally configured integrations from the repaired defects.
+
+## Original findings (addressed in PR #50)
 
 ### 1. High — “Full backup” does not cover the current product
 

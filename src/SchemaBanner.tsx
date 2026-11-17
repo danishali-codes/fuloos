@@ -24,9 +24,12 @@ export function SchemaBanner({
       }}
     >
       <span>
-        <strong>{uiText("Server migration needed:")}</strong> {uiText("missing PocketBase")}{" "}
+        <strong>{uiText("Server migration needed:")}</strong>{" "}
+        {uiText("missing PocketBase")}{" "}
         {status.missing.length === 1 ? "collection" : "collections"} (
-        {formatMissingCollections(status.missing)}{uiText("). Apply the latest migrations in")} <code>pocketbase/pb_migrations</code>.
+        {formatMissingCollections(status.missing)}
+        {uiText("). Apply the latest migrations in")}{" "}
+        <code>pocketbase/pb_migrations</code>.
       </span>
       <button
         type="button"
@@ -39,7 +42,8 @@ export function SchemaBanner({
           flexShrink: 0,
         }}
       >
-        <X size={14} /> {uiText("Dismiss")} </button>
+        <X size={14} /> {uiText("Dismiss")}{" "}
+      </button>
     </div>
   );
 }

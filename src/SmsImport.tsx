@@ -383,10 +383,18 @@ export function SmsImport({
         </button>
       </div>
       <div className="csv-body">
-        <p className="muted"> {uiText("Paste bank SMS alerts (separate messages with a blank line) or upload an SMS Backup & Restore XML file. Messages are read on this device and never uploaded. Only the transactions you confirm are saved, not the SMS text.")} </p>
+        <p className="muted">
+          {" "}
+          {uiText(
+            "Paste bank SMS alerts (separate messages with a blank line) or upload an SMS Backup & Restore XML file. Messages are read on this device and never uploaded. Only the transactions you confirm are saved, not the SMS text.",
+          )}{" "}
+        </p>
         <fieldset disabled={busy || done}>
           <div className="csv-grid">
-            <label> {uiText("Account")} <select
+            <label>
+              {" "}
+              {uiText("Account")}{" "}
+              <select
                 value={account}
                 onChange={(e) => setAccount(e.target.value)}
               >
@@ -397,7 +405,10 @@ export function SmsImport({
                 ))}
               </select>
             </label>
-            <label> {uiText("Bank")} <select value={bank} onChange={(e) => setBank(e.target.value)}>
+            <label>
+              {" "}
+              {uiText("Bank")}{" "}
+              <select value={bank} onChange={(e) => setBank(e.target.value)}>
                 <option value="">{uiText("Detect automatically")}</option>
                 {BANK_NAMES.map((b) => (
                   <option key={b} value={b}>
@@ -406,7 +417,10 @@ export function SmsImport({
                 ))}
               </select>
             </label>
-            <label> {uiText("Date when the SMS has none")} <input
+            <label>
+              {" "}
+              {uiText("Date when the SMS has none")}{" "}
+              <input
                 type="date"
                 value={fallbackDate}
                 onChange={(e) => setFallbackDate(e.target.value || uaeToday())}
@@ -449,7 +463,10 @@ export function SmsImport({
                   );
                 }
               }}
-            > {uiText("Paste from clipboard")} </button>
+            >
+              {" "}
+              {uiText("Paste from clipboard")}{" "}
+            </button>
           </div>
           <label>
             <textarea
@@ -466,7 +483,10 @@ export function SmsImport({
               }}
             />
           </label>
-          <label> {uiText("Or upload SMS backup (.xml) or text file")} <input
+          <label>
+            {" "}
+            {uiText("Or upload SMS backup (.xml) or text file")}{" "}
+            <input
               type="file"
               accept=".xml,.txt,text/xml,text/plain"
               onChange={(e) => void readFile(e.target.files?.[0])}
@@ -479,7 +499,10 @@ export function SmsImport({
                 type="button"
                 className="secondary"
                 onClick={() => void readFile(undefined)}
-              > {uiText("Clear file")} </button>
+              >
+                {" "}
+                {uiText("Clear file")}{" "}
+              </button>
             </p>
           )}
         </fieldset>
@@ -493,10 +516,21 @@ export function SmsImport({
               checked={learnOn}
               disabled={!settings || learningBusy || busy}
               onChange={(e) => void setLearn(e.target.checked)}
-            /> {uiText("Learn from my categorisations")} </label>
-          <p className="muted small"> {uiText("When on, Fuloos keeps the cleaned merchant name, amount, payee and category you choose for each imported expense")} {learning.scope === "account"
+            />{" "}
+            {uiText("Learn from my categorisations")}{" "}
+          </label>
+          <p className="muted small">
+            {" "}
+            {uiText(
+              "When on, Fuloos keeps the cleaned merchant name, amount, payee and category you choose for each imported expense",
+            )}{" "}
+            {learning.scope === "account"
               ? " in your account"
-              : " for this session only"} {uiText(", and uses them on this device to suggest your own categories next time. SMS text is never kept. Turning this off stops learning; delete the data below to remove it.")} </p>
+              : " for this session only"}{" "}
+            {uiText(
+              ", and uses them on this device to suggest your own categories next time. SMS text is never kept. Turning this off stops learning; delete the data below to remove it.",
+            )}{" "}
+          </p>
           {learnOn && (
             <p className="muted small" role="status">
               {examples.length} {uiText("saved")}{" "}
@@ -504,26 +538,41 @@ export function SmsImport({
               {personal?.stats.usesClassifier
                 ? `Your personal model is on: ${Math.round((personal.stats.personalAccuracy ?? 0) * 100)}% right on your latest ${personal.stats.holdout}, against ${Math.round((personal.stats.baselineAccuracy ?? 0) * 100)}% for the standard mapping.`
                 : examples.length < 20
-                  ? uiText("Exact merchants you corrected are reused now; the personal model starts after 20 corrections.")
-                  : uiText("Exact merchants you corrected are reused; the personal model stays off until it beats the standard mapping on your recent corrections.")}
+                  ? uiText(
+                      "Exact merchants you corrected are reused now; the personal model starts after 20 corrections.",
+                    )
+                  : uiText(
+                      "Exact merchants you corrected are reused; the personal model stays off until it beats the standard mapping on your recent corrections.",
+                    )}
             </p>
           )}
           {(learnOn || !!settings?.consent_at) &&
             (confirmClear ? (
               <div className="csv-category-actions">
-                <span className="small"> {uiText("Delete all saved corrections? This can't be undone.")} </span>
+                <span className="small">
+                  {" "}
+                  {uiText(
+                    "Delete all saved corrections? This can't be undone.",
+                  )}{" "}
+                </span>
                 <button
                   type="button"
                   className="primary"
                   disabled={learningBusy}
                   onClick={() => void clearLearning()}
-                > {uiText("Delete learning data")} </button>
+                >
+                  {" "}
+                  {uiText("Delete learning data")}{" "}
+                </button>
                 <button
                   type="button"
                   className="secondary"
                   disabled={learningBusy}
                   onClick={() => setConfirmClear(false)}
-                > {uiText("Keep")} </button>
+                >
+                  {" "}
+                  {uiText("Keep")}{" "}
+                </button>
               </div>
             ) : (
               <button
@@ -531,7 +580,10 @@ export function SmsImport({
                 className="secondary"
                 disabled={learningBusy}
                 onClick={() => setConfirmClear(true)}
-              > {uiText("Delete learning data…")} </button>
+              >
+                {" "}
+                {uiText("Delete learning data…")}{" "}
+              </button>
             ))}
           {learningError && (
             <p role="alert" className="notice">
@@ -544,7 +596,12 @@ export function SmsImport({
           onToggle={(e) => setMapOpen((e.target as HTMLDetailsElement).open)}
         >
           <summary>{uiText("Match suggestions to your categories")}</summary>
-          <p className="muted small"> {uiText("Suggestions come in 12 standard groups. Choose which of your categories each group should fill.")} {learning.scope === "account"
+          <p className="muted small">
+            {" "}
+            {uiText(
+              "Suggestions come in 12 standard groups. Choose which of your categories each group should fill.",
+            )}{" "}
+            {learning.scope === "account"
               ? " This is saved to your account."
               : " This is saved in this browser."}
           </p>
@@ -580,21 +637,31 @@ export function SmsImport({
           <>
             <h3>{uiText("Review transactions")}</h3>
             <p>
-              {selected.length} {uiText("selected ·")} {needsReview.length} {uiText("need a category check ·")} {invalid.length} {uiText("unreadable ·")} {skipped.length} {uiText("skipped ·")}{" "}
-              {importable.filter((r) => r.duplicate).length} {uiText("possible duplicates")} </p>
+              {selected.length} {uiText("selected ·")} {needsReview.length}{" "}
+              {uiText("need a category check ·")} {invalid.length}{" "}
+              {uiText("unreadable ·")} {skipped.length} {uiText("skipped ·")}{" "}
+              {importable.filter((r) => r.duplicate).length}{" "}
+              {uiText("possible duplicates")}{" "}
+            </p>
             <label className="csv-check">
               <input
                 type="checkbox"
                 checked={includeDuplicates}
                 disabled={busy || done}
                 onChange={(e) => setIncludeDuplicates(e.target.checked)}
-              /> {uiText("Include possible duplicates")} </label>
+              />{" "}
+              {uiText("Include possible duplicates")}{" "}
+            </label>
             <label className="csv-check">
               <input
                 type="checkbox"
                 checked={showSkipped}
                 onChange={(e) => setShowSkipped(e.target.checked)}
-              /> {uiText("Show skipped messages (OTPs, declined, internal moves)")} </label>
+              />{" "}
+              {uiText(
+                "Show skipped messages (OTPs, declined, internal moves)",
+              )}{" "}
+            </label>
             <div className="csv-table">
               <table>
                 <thead>
@@ -671,7 +738,10 @@ export function SmsImport({
                           {t &&
                             r.dateSource === "fallback" &&
                             !edits[r.index]?.date && (
-                              <small className="muted"> {uiText("no date in SMS")}</small>
+                              <small className="muted">
+                                {" "}
+                                {uiText("no date in SMS")}
+                              </small>
                             )}
                         </td>
                         <td>
@@ -710,7 +780,9 @@ export function SmsImport({
                                   })
                                 }
                               >
-                                <option value="">{uiText("Uncategorised")}</option>
+                                <option value="">
+                                  {uiText("Uncategorised")}
+                                </option>
                                 {ledger.categories.map((c) => (
                                   <option key={c.id} value={c.id}>
                                     {c.emoji ? `${c.emoji} ` : ""}
@@ -746,7 +818,10 @@ export function SmsImport({
           </>
         )}
         {done && (
-          <p role="status">{uiText("Imported")} {progress} {uiText("transactions successfully.")}</p>
+          <p role="status">
+            {uiText("Imported")} {progress}{" "}
+            {uiText("transactions successfully.")}
+          </p>
         )}
       </div>
       <div className="modal-actions">
@@ -766,7 +841,9 @@ export function SmsImport({
             disabled={busy || !selected.length || !account}
             onClick={() => void submit()}
           >
-            {busy ? uiText("Importing…") : `Import ${selected.length} transactions`}
+            {busy
+              ? uiText("Importing…")
+              : `Import ${selected.length} transactions`}
           </button>
         )}
       </div>

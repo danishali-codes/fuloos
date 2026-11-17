@@ -160,7 +160,17 @@ export function TransactionsPanel({
         sort.key,
         sort.dir,
       ),
-    [register, ledger, from, to, search, kindFilter, categoryFilter, tagFilter, sort],
+    [
+      register,
+      ledger,
+      from,
+      to,
+      search,
+      kindFilter,
+      categoryFilter,
+      tagFilter,
+      sort,
+    ],
   );
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -229,10 +239,17 @@ export function TransactionsPanel({
     );
   };
   const categoryCell = (e: RegisterEntry) => {
-    if (e.direction) return <span className="tx-transfer">{uiText("Transfer")}</span>;
+    if (e.direction)
+      return <span className="tx-transfer">{uiText("Transfer")}</span>;
     if (e.tx.splits && e.tx.splits.length > 0) {
       return (
-        <span className="tx-category split-badge" title={entryCategory(e, ledger)}> {uiText("Split (")}{e.tx.splits.length})
+        <span
+          className="tx-category split-badge"
+          title={entryCategory(e, ledger)}
+        >
+          {" "}
+          {uiText("Split (")}
+          {e.tx.splits.length})
         </span>
       );
     }
@@ -263,7 +280,10 @@ export function TransactionsPanel({
             setCategorizing(null);
           }}
         >
-          <option value="" disabled> {uiText("Choose a category…")} </option>
+          <option value="" disabled>
+            {" "}
+            {uiText("Choose a category…")}{" "}
+          </option>
           {ledger.categories.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
@@ -281,14 +301,19 @@ export function TransactionsPanel({
           if (ledger.categories.length) setCategorizing(e.key);
           else onEdit(e.tx);
         }}
-      > {uiText("Categorize")} </button>
+      >
+        {" "}
+        {uiText("Categorize")}{" "}
+      </button>
     );
   };
 
   const endIdx = Math.min(startIdx + pageSize, rows.length);
   const more = rows.length > 0 && (
     <div className="tx-more tx-pagination">
-      <span className="muted small"> {uiText("Showing")} {startIdx + 1}–{endIdx} {uiText("of")} {rows.length}
+      <span className="muted small">
+        {" "}
+        {uiText("Showing")} {startIdx + 1}–{endIdx} {uiText("of")} {rows.length}
       </span>
       <label className="tx-page-size">
         <span className="muted small">{uiText("Rows")}</span>
@@ -313,8 +338,11 @@ export function TransactionsPanel({
             disabled={currentPage <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
           >
-            <ChevronLeft size={15} /> {uiText("Prev")} </button>
-          <span className="muted small"> {uiText("Page")} {currentPage} {uiText("of")} {totalPages}
+            <ChevronLeft size={15} /> {uiText("Prev")}{" "}
+          </button>
+          <span className="muted small">
+            {" "}
+            {uiText("Page")} {currentPage} {uiText("of")} {totalPages}
           </span>
           <button
             type="button"
@@ -322,7 +350,9 @@ export function TransactionsPanel({
             aria-label={uiText("Next page")}
             disabled={currentPage >= totalPages}
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-          > {uiText("Next")} <ChevronRight size={15} />
+          >
+            {" "}
+            {uiText("Next")} <ChevronRight size={15} />
           </button>
         </div>
       )}
@@ -397,8 +427,12 @@ export function TransactionsPanel({
                 </span>
               ))}
               {t.receipt && (
-                <span className="tag-badge receipt-badge" title={uiText("Receipt attached")}>
-                  <Paperclip size={11} /> {uiText("Receipt")} </span>
+                <span
+                  className="tag-badge receipt-badge"
+                  title={uiText("Receipt attached")}
+                >
+                  <Paperclip size={11} /> {uiText("Receipt")}{" "}
+                </span>
               )}
             </span>
           )}
@@ -471,9 +505,13 @@ export function TransactionsPanel({
           type="button"
           className="icon-button"
           aria-label={
-            sort.dir === "asc" ? uiText("Sorted ascending") : uiText("Sorted descending")
+            sort.dir === "asc"
+              ? uiText("Sorted ascending")
+              : uiText("Sorted descending")
           }
-          title={sort.dir === "asc" ? uiText("Ascending") : uiText("Descending")}
+          title={
+            sort.dir === "asc" ? uiText("Ascending") : uiText("Descending")
+          }
           onClick={() => toggleSort(sort.key)}
         >
           {sort.dir === "asc" ? <ArrowUp size={16} /> : <ArrowDown size={16} />}
@@ -503,7 +541,10 @@ export function TransactionsPanel({
           className="secondary"
           disabled={busy || loading || !ledger.accounts.length}
           onClick={onImport}
-        > {uiText("Import CSV")} </button>
+        >
+          {" "}
+          {uiText("Import CSV")}{" "}
+        </button>
         <button
           className="secondary"
           disabled={busy || loading || !ledger.accounts.length}
@@ -518,7 +559,8 @@ export function TransactionsPanel({
             disabled={busy || loading}
             onClick={onOpenCaptureAlerts}
           >
-            {tr("settings.capturedAlerts")}{pendingAlertCount > 0 ? ` (${pendingAlertCount})` : ""}
+            {tr("settings.capturedAlerts")}
+            {pendingAlertCount > 0 ? ` (${pendingAlertCount})` : ""}
           </button>
         )}
         <button
@@ -607,7 +649,8 @@ export function TransactionsPanel({
           </select>
         )}
         <span className="muted small">
-          {visibleIds.length} {uiText("transaction")}{visibleIds.length === 1 ? "" : "s"}
+          {visibleIds.length} {uiText("transaction")}
+          {visibleIds.length === 1 ? "" : "s"}
         </span>
       </div>
       <div className="bulk-toolbar">
@@ -615,9 +658,7 @@ export function TransactionsPanel({
           <input
             type="checkbox"
             disabled={busy || loading || !pageIds.length}
-            checked={
-              pageIds.length > 0 && selectedOnPage === pageIds.length
-            }
+            checked={pageIds.length > 0 && selectedOnPage === pageIds.length}
             onChange={(e) => {
               const next = new Set(selected);
               for (const id of pageIds) {
@@ -632,7 +673,9 @@ export function TransactionsPanel({
             : `Select all ${pageIds.length} results`}
         </label>
         <span>
-          {selected.size} {uiText("selected ·")} {selectedOnPage} {uiText("on this page")} </span>
+          {selected.size} {uiText("selected ·")} {selectedOnPage}{" "}
+          {uiText("on this page")}{" "}
+        </span>
         <button
           className="secondary"
           disabled={busy || loading || !selected.size}
@@ -641,7 +684,10 @@ export function TransactionsPanel({
               ledger.transactions.filter((t) => selected.has(t.id)),
             )
           }
-        > {uiText("Edit selected")} </button>
+        >
+          {" "}
+          {uiText("Edit selected")}{" "}
+        </button>
         <button
           className="secondary danger-outline"
           disabled={busy || loading || !selected.size}
@@ -651,12 +697,16 @@ export function TransactionsPanel({
             )
           }
         >
-          <Trash2 size={15} /> {uiText("Delete selected")} </button>
+          <Trash2 size={15} /> {uiText("Delete selected")}{" "}
+        </button>
         <button
           className="text-button"
           disabled={busy || !selected.size}
           onClick={() => onSelectionChange(new Set())}
-        > {uiText("Clear selection")} </button>
+        >
+          {" "}
+          {uiText("Clear selection")}{" "}
+        </button>
       </div>
       {rows.length && density === "relaxed" ? (
         relaxedView
@@ -839,7 +889,11 @@ export function TransactionsPanel({
         <div className="empty">
           <ReceiptText size={28} />
           <h3>{uiText("Nothing here yet")}</h3>
-          <p>{uiText("Add a transaction, or try a different period, search or filter.")}</p>
+          <p>
+            {uiText(
+              "Add a transaction, or try a different period, search or filter.",
+            )}
+          </p>
         </div>
       )}
     </section>

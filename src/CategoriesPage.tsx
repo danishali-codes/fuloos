@@ -31,14 +31,20 @@ export function CategoriesPage({
     <>
       {onOpenRules && (
         <div className="panel bulk-toolbar category-toolbar">
-          <span className="muted small"> {uiText("Automate categorization & tagging with deterministic rules.")} </span>
+          <span className="muted small">
+            {" "}
+            {uiText(
+              "Automate categorization & tagging with deterministic rules.",
+            )}{" "}
+          </span>
           <button
             type="button"
             className="secondary"
             disabled={busy}
             onClick={onOpenRules}
           >
-            <Wand2 size={15} /> {uiText("Manage rules (")}{ledger.rules?.length ?? 0})
+            <Wand2 size={15} /> {uiText("Manage rules (")}
+            {ledger.rules?.length ?? 0})
           </button>
         </div>
       )}
@@ -67,8 +73,12 @@ export function CategoriesPage({
                     : new Set(),
                 )
               }
-            /> {uiText("Select all")} </label>
-          <span className="muted small">{selectedCategories.size} {uiText("selected")}</span>
+            />{" "}
+            {uiText("Select all")}{" "}
+          </label>
+          <span className="muted small">
+            {selectedCategories.size} {uiText("selected")}
+          </span>
           <button
             className="secondary danger-outline"
             disabled={busy || !selectedCategories.size}
@@ -80,13 +90,17 @@ export function CategoriesPage({
               )
             }
           >
-            <Trash2 size={15} /> {uiText("Delete selected")} </button>
+            <Trash2 size={15} /> {uiText("Delete selected")}{" "}
+          </button>
           {selectedCategories.size > 0 && (
             <button
               className="text-button"
               disabled={busy}
               onClick={() => setSelectedCategories(new Set())}
-            > {uiText("Clear selection")} </button>
+            >
+              {" "}
+              {uiText("Clear selection")}{" "}
+            </button>
           )}
         </div>
       )}
@@ -123,9 +137,7 @@ export function CategoriesPage({
               <span className="muted compact-text" title={c.description}>
                 {c.description || "—"}
               </span>
-              <span className="num muted">
-                {categoryCounts.get(c.id) ?? 0}
-              </span>
+              <span className="num muted">{categoryCounts.get(c.id) ?? 0}</span>
               <span className="compact-actions">
                 <button
                   className="icon-button"

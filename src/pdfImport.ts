@@ -1,8 +1,4 @@
-import {
-  minor,
-  validateTransaction,
-  type Ledger,
-} from "./domain.ts";
+import { minor, validateTransaction, type Ledger } from "./domain.ts";
 import { transactionKey, type ImportTransaction } from "./csv.ts";
 import { applyRules } from "./rules.ts";
 import { categorise, type CategorySuggestion } from "./ledger/categoriser.ts";
@@ -106,9 +102,7 @@ export function groupTextItemsIntoLines(
       const prevEnd = prev.x + (prev.width ?? 0);
       const gap = prev.width !== undefined ? curr.x - prevEnd : 2;
       const needsSpace =
-        gap > 1.5 &&
-        !text.endsWith(" ") &&
-        !curr.str.startsWith(" ");
+        gap > 1.5 && !text.endsWith(" ") && !curr.str.startsWith(" ");
       text += (needsSpace ? " " : "") + curr.str;
     }
     return {
@@ -137,7 +131,7 @@ export async function extractPdfPages(
   try {
     loadingTask = pdfjs.getDocument({
       data: new Uint8Array(buffer),
-      ...(password ? {password} : {}),
+      ...(password ? { password } : {}),
     });
     const doc = await loadingTask.promise;
     const pages: PdfLine[][] = [];
@@ -165,10 +159,7 @@ export async function extractPdfPages(
         ? String((err as { name: unknown }).name)
         : "";
     const msg = err instanceof Error ? err.message : String(err);
-    if (
-      name === "PasswordException" ||
-      /password/i.test(msg)
-    ) {
+    if (name === "PasswordException" || /password/i.test(msg)) {
       throw new Error(
         "This PDF is password-protected. Unlock it first, then try again.",
       );
@@ -280,9 +271,7 @@ export function extractLeadingDate(
   }
 
   // DD MMM YYYY or DD-MMM-YYYY or DD MMM YY
-  m = trimmed.match(
-    /^(\d{1,2})[\s\-]+([A-Za-z]{3,9})[\s\-,]+(\d{2,4})\b(.*)$/,
-  );
+  m = trimmed.match(/^(\d{1,2})[\s\-]+([A-Za-z]{3,9})[\s\-,]+(\d{2,4})\b(.*)$/);
   if (m) {
     const mon = MONTHS[m[2].toLowerCase()];
     if (mon) {
@@ -292,9 +281,7 @@ export function extractLeadingDate(
   }
 
   // MMM DD, YYYY
-  m = trimmed.match(
-    /^([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{2,4})\b(.*)$/,
-  );
+  m = trimmed.match(/^([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{2,4})\b(.*)$/);
   if (m) {
     const mon = MONTHS[m[1].toLowerCase()];
     if (mon) {
@@ -391,11 +378,7 @@ function detectHeaderColumns(line: PdfLine): ColumnPositions | null {
     }
   }
 
-  if (
-    debitX !== undefined ||
-    creditX !== undefined ||
-    balanceX !== undefined
-  ) {
+  if (debitX !== undefined || creditX !== undefined || balanceX !== undefined) {
     return { debitX, creditX, balanceX };
   }
   return null;
@@ -436,7 +419,11 @@ interface CandidateRow {
 function resolveAmountAndKind(
   c: CandidateRow,
   prevBalance: number | null,
-): { amount: number; kind: "expense" | "income"; balance: number | null } | null {
+): {
+  amount: number;
+  kind: "expense" | "income";
+  balance: number | null;
+} | null {
   const { tokens, cols, description } = c;
   if (!tokens.length) return null;
 
@@ -606,7 +593,11 @@ export function parsePdfStatement(
           .replace(/\s+/g, " ")
           .trim();
         current.rawLine = `${current.rawLine} | ${line.text}`;
-      } else if (current && current.tokens.length === 0 && lineTokens.length > 0) {
+      } else if (
+        current &&
+        current.tokens.length === 0 &&
+        lineTokens.length > 0
+      ) {
         // Amount appeared on the wrapped line
         current.tokens = lineTokens;
         const extraDesc = line.text.slice(0, lineTokens[0].startIndex).trim();

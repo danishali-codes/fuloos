@@ -69,7 +69,12 @@ export function AccountsPage({
         <div>
           <span>{uiText("Total net balance")}</span>
           <strong>{concealed(net)}</strong>
-          <small> {uiText("Credit card debt is shown as a negative balance. Enter a negative balance for amounts you owe.")} </small>
+          <small>
+            {" "}
+            {uiText(
+              "Credit card debt is shown as a negative balance. Enter a negative balance for amounts you owe.",
+            )}{" "}
+          </small>
         </div>
         <div className="accounts-summary-actions">
           <button
@@ -77,7 +82,8 @@ export function AccountsPage({
             className="secondary"
             onClick={() => setDebtToolsOpen(true)}
           >
-            <Calculator size={16} /> {uiText("Debt payoff planner")} </button>
+            <Calculator size={16} /> {uiText("Debt payoff planner")}{" "}
+          </button>
         </div>
       </div>
       {density === "compact" ? (
@@ -124,8 +130,11 @@ export function AccountsPage({
                         <span className="compact-cc-sub">
                           {cardSummary.creditLimitFils > 0 && (
                             <span>
-                              {cardSummary.utilizationPct.toFixed(0)}{uiText("% used ·")}{" "}
-                              {concealed(cardSummary.availableCreditFils)} {uiText("avail")} </span>
+                              {cardSummary.utilizationPct.toFixed(0)}
+                              {uiText("% used ·")}{" "}
+                              {concealed(cardSummary.availableCreditFils)}{" "}
+                              {uiText("avail")}{" "}
+                            </span>
                           )}
                           {dueLabel && (
                             <span className={dueBadgeClass(cardSummary)}>
@@ -138,7 +147,9 @@ export function AccountsPage({
                 </button>
                 <span className="muted">
                   {ACCOUNT_TYPES[a.type]}
-                  {a.currency && a.currency !== "AED" ? ` · AED balance / ${a.currency} purchases` : ""}
+                  {a.currency && a.currency !== "AED"
+                    ? ` · AED balance / ${a.currency} purchases`
+                    : ""}
                 </span>
                 <span className="muted">{balanceNote(a, true)}</span>
                 <strong className={`num ${value < 0 ? "is-negative" : ""}`}>
@@ -191,7 +202,9 @@ export function AccountsPage({
                   </span>
                   <span className="account-kind">
                     {ACCOUNT_TYPES[a.type]}
-                    {a.currency && a.currency !== "AED" ? ` · AED balance / ${a.currency} purchases` : ""}
+                    {a.currency && a.currency !== "AED"
+                      ? ` · AED balance / ${a.currency} purchases`
+                      : ""}
                   </span>
                   <div className="row-actions">
                     <button
@@ -224,11 +237,15 @@ export function AccountsPage({
                     {cardSummary.creditLimitFils > 0 && (
                       <>
                         <div className="cc-util-row">
-                          <span> {uiText("Utilization")}{" "}
+                          <span>
+                            {" "}
+                            {uiText("Utilization")}{" "}
                             <b>{cardSummary.utilizationPct.toFixed(1)}%</b>
                           </span>
                           <span>
-                            {concealed(cardSummary.availableCreditFils)}{" "} {uiText("available")} </span>
+                            {concealed(cardSummary.availableCreditFils)}{" "}
+                            {uiText("available")}{" "}
+                          </span>
                         </div>
                         <div
                           className="cc-util-bar"
@@ -242,7 +259,9 @@ export function AccountsPage({
                           aria-label={`${a.name} credit utilization`}
                         >
                           <div
-                            className={utilFillClass(cardSummary.utilizationPct)}
+                            className={utilFillClass(
+                              cardSummary.utilizationPct,
+                            )}
                             style={{
                               width: `${Math.min(100, cardSummary.utilizationPct)}%`,
                             }}
@@ -251,13 +270,14 @@ export function AccountsPage({
                       </>
                     )}
                     <div className="cc-details-row">
-                      <span> {uiText("Cycle")}{" "}
+                      <span>
+                        {" "}
+                        {uiText("Cycle")}{" "}
                         {formatShortWindow(
                           cardSummary.statementWindow.start,
                           cardSummary.statementWindow.end,
                         )}
-                        :{" "}
-                        <b>{concealed(cardSummary.statementBalanceFils)}</b>
+                        : <b>{concealed(cardSummary.statementBalanceFils)}</b>
                       </span>
                       {dueLabel && (
                         <span className={dueBadgeClass(cardSummary)}>
@@ -270,7 +290,9 @@ export function AccountsPage({
                 <button
                   className="text-button"
                   onClick={() => onSelectAccount(a.id)}
-                > {uiText("View transactions")} <ArrowRight size={15} />
+                >
+                  {" "}
+                  {uiText("View transactions")} <ArrowRight size={15} />
                 </button>
               </article>
             );

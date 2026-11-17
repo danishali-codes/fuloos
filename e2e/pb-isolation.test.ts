@@ -5,7 +5,9 @@ import { checkSchemaStatus } from "../src/schemaStatus.ts";
 
 const pbUrl = process.env.FULOOS_PB_URL;
 if (!pbUrl) {
-  throw new Error("FULOOS_PB_URL must be set when running pb-isolation.test.ts");
+  throw new Error(
+    "FULOOS_PB_URL must be set when running pb-isolation.test.ts",
+  );
 }
 
 function makeBackend(): PocketBaseBackend {
@@ -34,7 +36,9 @@ test("PocketBase migrations apply cleanly and enforce strict two-user isolation"
   assert.ok(signUpB.session?.user.id);
 
   // 1. All expected fuloos_* collections exist after migrations run from empty.
-  const schema = await checkSchemaStatus((table) => backendA.probeCollection(table));
+  const schema = await checkSchemaStatus((table) =>
+    backendA.probeCollection(table),
+  );
   assert.equal(schema.checked, true);
   assert.equal(schema.ok, true);
   assert.deepEqual(schema.missing, []);
@@ -182,7 +186,8 @@ test("PocketBase migrations apply cleanly and enforce strict two-user isolation"
   });
   const pushSubA = await backendA.savePushSubscription({
     endpoint: `https://push.example.com/sub/${suffix}`,
-    p256dh: "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM",
+    p256dh:
+      "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM",
     auth: "tBHItJI5svbpez7KI4CCXg",
     user_agent: "FuloosTest/1.0",
     created_at_iso: "2026-01-15T10:00:00.000Z",
@@ -525,10 +530,14 @@ test("PocketBase migrations apply cleanly and enforce strict two-user isolation"
 
   // 8. Shared / Household Mode: selective sharing & non-member isolation.
   const backendC = makeBackend();
-  const signUpC = await backendC.signUp(`user-c-${suffix}@example.com`, password);
+  const signUpC = await backendC.signUp(
+    `user-c-${suffix}@example.com`,
+    password,
+  );
   assert.ok(signUpC.session?.user.id);
 
-  const { household: householdA } = await backendA.createHousehold("User A Home");
+  const { household: householdA } =
+    await backendA.createHousehold("User A Home");
   const invite = await backendA.createHouseholdInvite(householdA.id, "editor");
   assert.ok(invite.invite_code);
 
@@ -579,58 +588,227 @@ test("PocketBase migrations apply cleanly and enforce strict two-user isolation"
   });
   assert.equal(sharedTxByB.account_id, accountA.id);
 
-  assert.ok((await backendB.load()).categories.some(c => c.id === categoryA.id));
-  await backendB.updateTransactions([{...txA,payee:"Edited by household editor"}],()=>{});
-  const viewerInvite=await backendA.createHouseholdInvite(householdA.id,"viewer");
-  const viewer=await backendC.joinHouseholdByCode(viewerInvite.invite_code!);
-  assert.ok((await backendC.load()).accounts.some(a => a.id === accountA.id));
-  await assert.rejects(() => backendC.save("accounts",{name:"Viewer edit"},accountA.id), isRejectedIsolation);
-  await assert.rejects(() => backendC.save("transactions",{payee:"Viewer edit"},txA.id), isRejectedIsolation);
-  await assert.rejects(() => backendC.remove("transactions",txA.id), isRejectedIsolation);
-  await assert.rejects(() => backendC.save("transactions",{type:"expense",amount:1,account_id:accountA.id,to_account_id:"",category_id:categoryA.id,date:"2026-01-22",payee:"Viewer create",notes:""}), isRejectedIsolation);
+  assert.ok(
+    (await backendB.load()).categories.some((c) => c.id === categoryA.id),
+  );
+  await assert.rejects(
+    () => backendA.save("categories", { household_id: null }, categoryA.id),
+    isRejectedIsolation,
+  );
+  await backendB.updateTransactions(
+    [{ ...txA, payee: "Edited by household editor" }],
+    () => {},
+  );
+  const viewerInvite = await backendA.createHouseholdInvite(
+    householdA.id,
+    "viewer",
+  );
+  const viewer = await backendC.joinHouseholdByCode(viewerInvite.invite_code!);
+  assert.ok((await backendC.load()).accounts.some((a) => a.id === accountA.id));
+  await assert.rejects(
+    () => backendC.save("accounts", { name: "Viewer edit" }, accountA.id),
+    isRejectedIsolation,
+  );
+  await assert.rejects(
+    () => backendC.save("transactions", { payee: "Viewer edit" }, txA.id),
+    isRejectedIsolation,
+  );
+  await assert.rejects(
+    () => backendC.remove("transactions", txA.id),
+    isRejectedIsolation,
+  );
+  await assert.rejects(
+    () =>
+      backendC.save("transactions", {
+        type: "expense",
+        amount: 1,
+        account_id: accountA.id,
+        to_account_id: "",
+        category_id: categoryA.id,
+        date: "2026-01-22",
+        payee: "Viewer create",
+        notes: "",
+      }),
+    isRejectedIsolation,
+  );
   await backendA.removeHouseholdMember(viewer.member.id);
-  assert.equal((await backendC.load()).accounts.some(a => a.id === accountA.id),false);
-  await assert.rejects(() => backendC.joinHouseholdByCode(viewerInvite.invite_code!));
-
+  assert.equal(
+    (await backendC.load()).accounts.some((a) => a.id === accountA.id),
+    false,
+  );
+  await assert.rejects(() =>
+    backendC.joinHouseholdByCode(viewerInvite.invite_code!),
+  );
 });
 
 test("atomic operations roll back, are idempotent, preserve isolation and use fresh totals", async () => {
-  const a = makeBackend(), b = makeBackend();
+  const a = makeBackend(),
+    b = makeBackend();
   const suffix = crypto.randomUUID();
   await a.signUp("atomic-a-" + suffix + "@example.com", "TestPassword123!");
   await b.signUp("atomic-b-" + suffix + "@example.com", "TestPassword123!");
-  const acc = await a.save("accounts", {name:"Cash",type:"cash",opening_balance:0,opening_date:"2026-01-01",color:"#123456"});
-  const goal = await a.save("goals", {name:"Savings",kind:"savings",status:"active",target_amount:100000,current_amount:0,color:"#123456",notes:""});
-  const tx = {type:"expense",amount:100,account_id:acc.id,to_account_id:"",category_id:"",date:"2026-01-02",payee:"Goal",notes:""};
-  const body = {amount:100,date:"2026-01-02",notes:"first",record_transaction:tx,operation_key:crypto.randomUUID()};
+  const acc = await a.save("accounts", {
+    name: "Cash",
+    type: "cash",
+    opening_balance: 0,
+    opening_date: "2026-01-01",
+    color: "#123456",
+  });
+  const goal = await a.save("goals", {
+    name: "Savings",
+    kind: "savings",
+    status: "active",
+    target_amount: 100000,
+    current_amount: 0,
+    color: "#123456",
+    notes: "",
+  });
+  const tx = {
+    type: "expense",
+    amount: 100,
+    account_id: acc.id,
+    to_account_id: "",
+    category_id: "",
+    date: "2026-01-02",
+    payee: "Goal",
+    notes: "",
+  };
+  const body = {
+    amount: 100,
+    date: "2026-01-02",
+    notes: "first",
+    record_transaction: tx,
+    operation_key: crypto.randomUUID(),
+  };
   const first = await a.contributeGoal(goal.id, body);
   const retry = await a.contributeGoal(goal.id, body);
   assert.equal(first.contribution.id, retry.contribution.id);
   assert.equal((await a.load()).transactions.length, 1);
-  await assert.rejects(() => b.contributeGoal(goal.id, {...body, operation_key:crypto.randomUUID()}), isRejectedIsolation);
-  await Promise.all([100,200].map(amount => a.contributeGoal(goal.id, {amount,date:"2026-01-03",notes:"parallel",operation_key:crypto.randomUUID()})));
+  await assert.rejects(
+    () =>
+      b.contributeGoal(goal.id, {
+        ...body,
+        operation_key: crypto.randomUUID(),
+      }),
+    isRejectedIsolation,
+  );
+  await Promise.all(
+    [100, 200].map((amount) =>
+      a.contributeGoal(goal.id, {
+        amount,
+        date: "2026-01-03",
+        notes: "parallel",
+        operation_key: crypto.randomUUID(),
+      }),
+    ),
+  );
   assert.equal((await a.load()).goals?.[0].current_amount, 400);
-  await assert.rejects(() => a.contributeGoal(goal.id, {...body, date:"bad",operation_key:crypto.randomUUID()}));
-  assert.equal((await a.load()).transactions.length, 1, "failed contribution rolls back its transaction");
+  await assert.rejects(() =>
+    a.contributeGoal(goal.id, {
+      ...body,
+      date: "bad",
+      operation_key: crypto.randomUUID(),
+    }),
+  );
+  assert.equal(
+    (await a.load()).transactions.length,
+    1,
+    "failed contribution rolls back its transaction",
+  );
   const reduced = await a.removeGoalContribution(first.contribution.id);
-  assert.equal(reduced.current_amount,300);
+  assert.equal(reduced.current_amount, 300);
   await a.removeGoalContribution(first.contribution.id);
-  assert.equal((await a.load()).goals?.[0].current_amount,300);
-  const alert = await a.createCapturedAlert({source:"shortcut",subject:"",raw_text:"Bank purchase AED 1",parsed_type:"expense",parsed_amount:100,parsed_date:"2026-01-02",parsed_payee:"Coffee",parsed_notes:"",account_hint:"",status:"pending",created_at_iso:new Date().toISOString()});
-  const imported = await a.importCapturedAlert(alert.id,tx);
-  const importedRetry = await a.importCapturedAlert(alert.id,tx);
-  assert.equal(importedRetry.id,imported.id);
-  assert.equal((await a.load()).transactions.length,2);
-  await assert.rejects(() => b.importCapturedAlert(alert.id,tx), isRejectedIsolation);
-  const item = await a.saveNetWorthItemAtomic({name:"Investment",kind:"asset",category:"investment",current_value:1000,as_of_date:"2026-01-01",color:"#123456",notes:""},undefined,crypto.randomUUID());
-  const valuationKey=crypto.randomUUID();
-  const valued = await a.saveNetWorthValuationAtomic(item.item.id,2000,"2026-02-01","",valuationKey);
-  const valuedRetry = await a.saveNetWorthValuationAtomic(item.item.id,2000,"2026-02-01","",valuationKey);
-  assert.equal(valuedRetry.snapshots.length,2);
-  const newest=valued.snapshots.find(s => s.date === "2026-02-01")!;
-  const reverted=await a.deleteNetWorthSnapshotAtomic(newest.id);
-  assert.equal(reverted.item.current_value,1000);
-  assert.equal(reverted.item.as_of_date,"2026-01-01");
-  await assert.rejects(() => a.deleteNetWorthSnapshotAtomic(reverted.snapshots[0].id));
-  await assert.rejects(() => b.saveNetWorthValuationAtomic(item.item.id,5000,"2026-03-01","",crypto.randomUUID()), isRejectedIsolation);
+  assert.equal((await a.load()).goals?.[0].current_amount, 300);
+  const alert = await a.createCapturedAlert({
+    source: "shortcut",
+    subject: "",
+    raw_text: "Bank purchase AED 1",
+    parsed_type: "expense",
+    parsed_amount: 100,
+    parsed_date: "2026-01-02",
+    parsed_payee: "Coffee",
+    parsed_notes: "",
+    account_hint: "",
+    status: "pending",
+    created_at_iso: new Date().toISOString(),
+  });
+  const imported = await a.importCapturedAlert(alert.id, tx);
+  const importedRetry = await a.importCapturedAlert(alert.id, tx);
+  assert.equal(importedRetry.id, imported.id);
+  assert.equal((await a.load()).transactions.length, 2);
+  await assert.rejects(
+    () => b.importCapturedAlert(alert.id, tx),
+    isRejectedIsolation,
+  );
+  const item = await a.saveNetWorthItemAtomic(
+    {
+      name: "Investment",
+      kind: "asset",
+      category: "investment",
+      current_value: 1000,
+      as_of_date: "2026-01-01",
+      color: "#123456",
+      notes: "",
+    },
+    undefined,
+    crypto.randomUUID(),
+  );
+  const valuationKey = crypto.randomUUID();
+  const valued = await a.saveNetWorthValuationAtomic(
+    item.item.id,
+    2000,
+    "2026-02-01",
+    "",
+    valuationKey,
+  );
+  const valuedRetry = await a.saveNetWorthValuationAtomic(
+    item.item.id,
+    2000,
+    "2026-02-01",
+    "",
+    valuationKey,
+  );
+  assert.equal(valuedRetry.snapshots.length, 2);
+  const sameDay = await a.saveNetWorthValuationAtomic(
+    item.item.id,
+    2500,
+    "2026-02-01",
+    "Same day",
+    crypto.randomUUID(),
+  );
+  assert.equal(sameDay.item.current_value, 2500);
+  const sameDaySnap = sameDay.snapshots.find((s) => s.value === 2500)!;
+  assert.equal(
+    (await a.deleteNetWorthSnapshotAtomic(sameDaySnap.id)).item.current_value,
+    2000,
+  );
+  const backdated = await a.saveNetWorthValuationAtomic(
+    item.item.id,
+    500,
+    "2026-01-15",
+    "Backdated",
+    crypto.randomUUID(),
+  );
+  assert.equal(backdated.item.current_value, 2000);
+  await a.deleteNetWorthSnapshotAtomic(
+    backdated.snapshots.find((s) => s.date === "2026-01-15")!.id,
+  );
+  const newest = valued.snapshots.find((s) => s.date === "2026-02-01")!;
+  const reverted = await a.deleteNetWorthSnapshotAtomic(newest.id);
+  assert.equal(reverted.item.current_value, 1000);
+  assert.equal(reverted.item.as_of_date, "2026-01-01");
+  await assert.rejects(() =>
+    a.deleteNetWorthSnapshotAtomic(reverted.snapshots[0].id),
+  );
+  await assert.rejects(
+    () =>
+      b.saveNetWorthValuationAtomic(
+        item.item.id,
+        5000,
+        "2026-03-01",
+        "",
+        crypto.randomUUID(),
+      ),
+    isRejectedIsolation,
+  );
 });

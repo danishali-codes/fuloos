@@ -30,10 +30,7 @@ import {
 } from "./domain";
 import { Editor, type EditorModalState } from "./EditorModal";
 import { RulesManagerModal } from "./RulesManager";
-import {
-  ConfirmOccurrenceModal,
-  RecurringEditorModal,
-} from "./RecurringView";
+import { ConfirmOccurrenceModal, RecurringEditorModal } from "./RecurringView";
 import { HouseholdSettings } from "./HouseholdSettings";
 import { NotificationSettings } from "./NotificationSettings";
 import { SettingsDialog } from "./Settings";
@@ -308,9 +305,17 @@ export function AppModals({
                   : undefined
               }
               onToggleCategoryShare={async (id, household_id) => {
-                if (demo) {setLedger({...ledger,categories:ledger.categories.map(c=>c.id===id?{...c,household_id}:c)}); return;}
+                if (demo) {
+                  setLedger({
+                    ...ledger,
+                    categories: ledger.categories.map((c) =>
+                      c.id === id ? { ...c, household_id } : c,
+                    ),
+                  });
+                  return;
+                }
                 if (!backend) return;
-                await backend.save("categories",{household_id},id);
+                await backend.save("categories", { household_id }, id);
                 await load();
               }}
               onToggleAccountShare={async (accountId, householdId) => {
@@ -326,7 +331,7 @@ export function AppModals({
                   return;
                 }
                 if (!backend) return;
-                await backend.shareAccountWithHousehold(accountId,householdId);
+                await backend.shareAccountWithHousehold(accountId, householdId);
                 await load();
               }}
               onToggleBudgetShare={async (budgetId, householdId) => {
@@ -342,7 +347,7 @@ export function AppModals({
                   return;
                 }
                 if (!backend) return;
-                await backend.shareBudgetWithHousehold(budgetId,householdId);
+                await backend.shareBudgetWithHousehold(budgetId, householdId);
                 await load();
               }}
               onReloadLedger={!demo && backend ? load : undefined}
@@ -433,7 +438,13 @@ export function AppModals({
             ledger={ledger}
             onClose={() => setImportOpen(false)}
             onImport={(rows, progress, paired) =>
-              importTransactions(rows, progress, "CSV import:", undefined, paired)
+              importTransactions(
+                rows,
+                progress,
+                "CSV import:",
+                undefined,
+                paired,
+              )
             }
             onCreateCategories={createCategories}
             presetStore={presetStore}
@@ -462,7 +473,13 @@ export function AppModals({
             ledger={ledger}
             onClose={() => setPdfOpen(false)}
             onImport={(rows, progress, paired) =>
-              importTransactions(rows, progress, "PDF import:", undefined, paired)
+              importTransactions(
+                rows,
+                progress,
+                "PDF import:",
+                undefined,
+                paired,
+              )
             }
           />
         </Suspense>

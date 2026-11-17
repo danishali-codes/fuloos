@@ -89,7 +89,10 @@ export function TagInput({
             className="secondary compact-btn"
             disabled={disabled || tags.length >= MAX_TAGS_PER_TX}
             onClick={() => addRaw(draft)}
-          > {uiText("Add")} </button>
+          >
+            {" "}
+            {uiText("Add")}{" "}
+          </button>
         )}
       </div>
       {unusedSuggestions.length > 0 && (

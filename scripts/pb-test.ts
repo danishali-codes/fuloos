@@ -25,7 +25,9 @@ function platformAsset(): { osName: string; arch: string; ext: string } {
   const osName = osMap[process.platform];
   const arch = archMap[process.arch];
   if (!osName || !arch) {
-    throw new Error(`Unsupported platform: ${process.platform}/${process.arch}`);
+    throw new Error(
+      `Unsupported platform: ${process.platform}/${process.arch}`,
+    );
   }
   return { osName, arch, ext: process.platform === "win32" ? ".exe" : "" };
 }
@@ -44,16 +46,22 @@ async function ensurePocketBaseBinary(): Promise<string> {
   console.log(`Downloading ${url}...`);
   const res = await fetch(url);
   if (!res.ok) {
-    throw new Error(`Failed to download PocketBase (${res.status} ${res.statusText})`);
+    throw new Error(
+      `Failed to download PocketBase (${res.status} ${res.statusText})`,
+    );
   }
   const zipPath = path.join(cacheDir, zipName);
   const buf = Buffer.from(await res.arrayBuffer());
   fs.writeFileSync(zipPath, buf);
 
   await new Promise<void>((resolve, reject) => {
-    const proc = spawn("unzip", ["-o", zipPath, `pocketbase${ext}`, "-d", cacheDir], {
-      stdio: "inherit",
-    });
+    const proc = spawn(
+      "unzip",
+      ["-o", zipPath, `pocketbase${ext}`, "-d", cacheDir],
+      {
+        stdio: "inherit",
+      },
+    );
     proc.on("error", reject);
     proc.on("exit", (code) =>
       code === 0 ? resolve() : reject(new Error(`unzip exited with ${code}`)),
@@ -83,7 +91,10 @@ function getFreePort(): Promise<number> {
   });
 }
 
-async function waitForHealth(baseUrl: string, timeoutMs = 15000): Promise<void> {
+async function waitForHealth(
+  baseUrl: string,
+  timeoutMs = 15000,
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
@@ -104,9 +115,14 @@ async function main() {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "fuloos-pb-test-"));
 
   const testMigrations = path.join(dataDir, "migrations");
-  fs.cpSync(migrationsDir, testMigrations, {recursive:true});
-  fs.writeFileSync(path.join(testMigrations,"9999999999_test_batch.js"), `migrate((app) => {const settings=app.settings(); settings.batch.enabled=true; settings.batch.maxRequests=100; app.save(settings);});`);
-  console.log(`Starting PocketBase ${pbVersion} on ${baseUrl} (migrations: ${migrationsDir})`);
+  fs.cpSync(migrationsDir, testMigrations, { recursive: true });
+  fs.writeFileSync(
+    path.join(testMigrations, "9999999999_test_batch.js"),
+    `migrate((app) => {const settings=app.settings(); settings.batch.enabled=true; settings.batch.maxRequests=100; app.save(settings);});`,
+  );
+  console.log(
+    `Starting PocketBase ${pbVersion} on ${baseUrl} (migrations: ${migrationsDir})`,
+  );
   const pb = spawn(
     binPath,
     [
