@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import { ColorPicker, EmojiField } from "./Appearance";
 import type { Category } from "./domain";
 
@@ -25,11 +26,12 @@ export function CsvMissingCategories({
   if (!missingCategories.length) return null;
   return (
     <section className="missing-categories">
-      <h3>Missing categories</h3>
+      <h3>{uiText("Missing categories")}</h3>
       <p className="muted">
-        {missingCategories.length} missing categories. Create them all with
-        random colors and blank descriptions and emojis, or configure each one
-        yourself.
+        {missingCategories.length}{" "}
+        {uiText(
+          "missing categories. Create them all with random colors and blank descriptions and emojis, or configure each one yourself.",
+        )}{" "}
       </p>
       <div className="csv-category-actions">
         <button
@@ -37,7 +39,8 @@ export function CsvMissingCategories({
           disabled={busy || reading}
           onClick={onCreateAll}
         >
-          Create all missing categories
+          {" "}
+          {uiText("Create all missing categories")}{" "}
         </button>
         <button
           className="secondary"
@@ -46,8 +49,8 @@ export function CsvMissingCategories({
           onClick={onToggleManual}
         >
           {manualCategories
-            ? "Hide individual configuration"
-            : "Configure individually"}
+            ? uiText("Hide individual configuration")
+            : uiText("Configure individually")}
         </button>
       </div>
       {manualCategories &&
@@ -58,7 +61,8 @@ export function CsvMissingCategories({
               disabled={busy || reading}
               onClick={() => onSetCreating(name)}
             >
-              Create {name}
+              {" "}
+              {uiText("Create")} {name}
             </button>
             {creating === name && (
               <form
@@ -77,25 +81,30 @@ export function CsvMissingCategories({
                   <p>{name}</p>
                   {name.length > 80 && (
                     <p role="alert">
-                      Correct this category name in the CSV: maximum 80
-                      characters.
+                      {" "}
+                      {uiText(
+                        "Correct this category name in the CSV: maximum 80 characters.",
+                      )}{" "}
                     </p>
                   )}
                   <label>
-                    Description (optional)
+                    {" "}
+                    {uiText("Description (optional)")}{" "}
                     <input name="description" maxLength={500} />
                   </label>
                   <EmojiField />
                   <ColorPicker />
                   <button className="primary" disabled={name.length > 80}>
-                    Confirm creation
+                    {" "}
+                    {uiText("Confirm creation")}{" "}
                   </button>
                   <button
                     type="button"
                     className="secondary"
                     onClick={() => onSetCreating(null)}
                   >
-                    Cancel
+                    {" "}
+                    {uiText("Cancel")}{" "}
                   </button>
                 </fieldset>
               </form>

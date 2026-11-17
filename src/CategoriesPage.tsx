@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import { Pencil, Plus, Tags, Trash2, Wand2 } from "lucide-react";
 import { plural, type Ledger } from "./domain";
 import type { EditorModalState } from "./EditorModal";
@@ -31,7 +32,10 @@ export function CategoriesPage({
       {onOpenRules && (
         <div className="panel bulk-toolbar category-toolbar">
           <span className="muted small">
-            Automate categorization &amp; tagging with deterministic rules.
+            {" "}
+            {uiText(
+              "Automate categorization & tagging with deterministic rules.",
+            )}{" "}
           </span>
           <button
             type="button"
@@ -39,7 +43,8 @@ export function CategoriesPage({
             disabled={busy}
             onClick={onOpenRules}
           >
-            <Wand2 size={15} /> Manage rules ({ledger.rules?.length ?? 0})
+            <Wand2 size={15} /> {uiText("Manage rules (")}
+            {ledger.rules?.length ?? 0})
           </button>
         </div>
       )}
@@ -68,10 +73,12 @@ export function CategoriesPage({
                     : new Set(),
                 )
               }
-            />
-            Select all
+            />{" "}
+            {uiText("Select all")}{" "}
           </label>
-          <span className="muted small">{selectedCategories.size} selected</span>
+          <span className="muted small">
+            {selectedCategories.size} {uiText("selected")}
+          </span>
           <button
             className="secondary danger-outline"
             disabled={busy || !selectedCategories.size}
@@ -83,7 +90,7 @@ export function CategoriesPage({
               )
             }
           >
-            <Trash2 size={15} /> Delete selected
+            <Trash2 size={15} /> {uiText("Delete selected")}{" "}
           </button>
           {selectedCategories.size > 0 && (
             <button
@@ -91,7 +98,8 @@ export function CategoriesPage({
               disabled={busy}
               onClick={() => setSelectedCategories(new Set())}
             >
-              Clear selection
+              {" "}
+              {uiText("Clear selection")}{" "}
             </button>
           )}
         </div>
@@ -99,9 +107,9 @@ export function CategoriesPage({
       {density === "compact" ? (
         <section className="panel compact-list">
           <div className="compact-head categories" aria-hidden>
-            <span>Category</span>
-            <span>Description</span>
-            <span className="num">Transactions</span>
+            <span>{uiText("Category")}</span>
+            <span>{uiText("Description")}</span>
+            <span className="num">{uiText("Transactions")}</span>
             <span />
           </div>
           {ledger.categories.map((c) => (
@@ -129,9 +137,7 @@ export function CategoriesPage({
               <span className="muted compact-text" title={c.description}>
                 {c.description || "—"}
               </span>
-              <span className="num muted">
-                {categoryCounts.get(c.id) ?? 0}
-              </span>
+              <span className="num muted">{categoryCounts.get(c.id) ?? 0}</span>
               <span className="compact-actions">
                 <button
                   className="icon-button"
@@ -153,7 +159,7 @@ export function CategoriesPage({
           ))}
           {!ledger.categories.length && (
             <Empty
-              title="Make it your own"
+              title={uiText("Make it your own")}
               text="Create categories that fit your life."
             />
           )}
@@ -214,8 +220,8 @@ export function CategoriesPage({
             <span>
               <Plus size={22} />
             </span>
-            <b>Add a category</b>
-            <small>Groceries, rent, salary, anything</small>
+            <b>{uiText("Add a category")}</b>
+            <small>{uiText("Groceries, rent, salary, anything")}</small>
           </button>
         </div>
       )}

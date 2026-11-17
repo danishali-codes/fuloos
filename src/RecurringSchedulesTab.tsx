@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import { useMemo, useState } from "react";
 import {
   ArrowDownLeft,
@@ -10,18 +11,10 @@ import {
   Tags,
   Trash2,
 } from "lucide-react";
-import type {
-  Ledger,
-  RecurringKind,
-  RecurringSchedule,
-} from "./domain.ts";
+import type { Ledger, RecurringKind, RecurringSchedule } from "./domain.ts";
 import { describeScheduleStatus } from "./recurring.ts";
 import type { IntelligentForecast } from "./recurringAutomation.ts";
-import {
-  formatFullDate,
-  frequencyLabels,
-  statusLabels,
-} from "./RecurringView";
+import { formatFullDate, frequencyLabels, statusLabels } from "./RecurringView";
 
 export function RecurringSchedulesTab({
   ledger,
@@ -75,7 +68,8 @@ export function RecurringSchedulesTab({
     () => ({
       all: summaries.length,
       active: summaries.filter(
-        (s) => s.schedule.status === "active" && s.paymentStatus !== "completed",
+        (s) =>
+          s.schedule.status === "active" && s.paymentStatus !== "completed",
       ).length,
       overdue: summaries.filter((s) => s.paymentStatus === "overdue").length,
       paused: summaries.filter((s) => s.schedule.status === "paused").length,
@@ -101,9 +95,11 @@ export function RecurringSchedulesTab({
         if (accountFilter && item.schedule.account_id !== accountFilter)
           return false;
         if (q) {
-          const cat = categoryById.get(item.schedule.category_id ?? "")?.name ?? "";
+          const cat =
+            categoryById.get(item.schedule.category_id ?? "")?.name ?? "";
           const acc = accountById.get(item.schedule.account_id)?.name ?? "";
-          const haystack = `${item.schedule.name} ${item.schedule.notes} ${cat} ${acc}`.toLowerCase();
+          const haystack =
+            `${item.schedule.name} ${item.schedule.notes} ${cat} ${acc}`.toLowerCase();
           if (!haystack.includes(q)) return false;
         }
         return true;
@@ -131,18 +127,21 @@ export function RecurringSchedulesTab({
       <div className="panel-heading recurring-panel-head">
         <div>
           <h2>
-            Recurring schedules{" "}
+            {" "}
+            {uiText("Recurring schedules")}{" "}
             <span className="count">{filteredSchedules.length}</span>
           </h2>
           <p>
-            Subscriptions, bills and regular income. Balances update only when
-            you confirm a payment.
+            {" "}
+            {uiText(
+              "Subscriptions, bills and regular income. Balances update only when you confirm a payment.",
+            )}{" "}
           </p>
         </div>
         <div
           className="status-tabs"
           role="tablist"
-          aria-label="Schedule status filter"
+          aria-label={uiText("Schedule status filter")}
         >
           {(
             [
@@ -170,18 +169,18 @@ export function RecurringSchedulesTab({
         <label className="search">
           <Search size={17} />
           <input
-            aria-label="Search recurring schedules"
-            placeholder="Search subscriptions & bills…"
+            aria-label={uiText("Search recurring schedules")}
+            placeholder={uiText("Search subscriptions & bills…")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </label>
         <select
-          aria-label="Filter recurring account"
+          aria-label={uiText("Filter recurring account")}
           value={accountFilter}
           onChange={(e) => setAccountFilter(e.target.value)}
         >
-          <option value="">All accounts</option>
+          <option value="">{uiText("All accounts")}</option>
           {ledger.accounts.map((a) => (
             <option key={a.id} value={a.id}>
               {a.name}
@@ -189,15 +188,13 @@ export function RecurringSchedulesTab({
           ))}
         </select>
         <select
-          aria-label="Filter recurring type"
+          aria-label={uiText("Filter recurring type")}
           value={kindFilter}
-          onChange={(e) =>
-            setKindFilter(e.target.value as "" | RecurringKind)
-          }
+          onChange={(e) => setKindFilter(e.target.value as "" | RecurringKind)}
         >
-          <option value="">All types</option>
-          <option value="expense">Expenses</option>
-          <option value="income">Income</option>
+          <option value="">{uiText("All types")}</option>
+          <option value="expense">{uiText("Expenses")}</option>
+          <option value="income">{uiText("Income")}</option>
         </select>
       </div>
 
@@ -209,10 +206,7 @@ export function RecurringSchedulesTab({
             const account = accountById.get(schedule.account_id);
             const profile = forecast.profiles[schedule.id];
             return (
-              <div
-                className="transaction-row recurring-row"
-                key={schedule.id}
-              >
+              <div className="transaction-row recurring-row" key={schedule.id}>
                 <button
                   type="button"
                   className="transaction-main"
@@ -250,15 +244,17 @@ export function RecurringSchedulesTab({
                         {frequencyLabels[schedule.frequency]}
                       </span>
                       {schedule.amount_type === "variable" && (
-                        <span className="mini-tag variable">Variable</span>
+                        <span className="mini-tag variable">
+                          {uiText("Variable")}
+                        </span>
                       )}
                     </b>
                     <small>
                       {category?.name ?? "Uncategorized"} ·{" "}
                       {account?.name ?? "Unknown account"} ·{" "}
                       {nextDueDate
-                        ? `${paymentStatus === "overdue" ? "Due" : "Next due"} ${formatFullDate(nextDueDate)}`
-                        : "No remaining occurrences"}
+                        ? `${paymentStatus === "overdue" ? "Due" : uiText("Next due")} ${formatFullDate(nextDueDate)}`
+                        : uiText("No remaining occurrences")}
                       {schedule.end_date
                         ? ` · Ends ${formatFullDate(schedule.end_date)}`
                         : ""}
@@ -276,8 +272,8 @@ export function RecurringSchedulesTab({
                       {schedule.amount_type === "variable"
                         ? profile?.hasRange
                           ? `Range ${concealed(profile.lowAmount)} – ${concealed(profile.highAmount)}`
-                          : "Expected · variable"
-                        : "Fixed amount"}
+                          : uiText("Expected · variable")
+                        : uiText("Fixed amount")}
                     </small>
                   </span>
                 </button>
@@ -289,7 +285,8 @@ export function RecurringSchedulesTab({
                       disabled={busy}
                       onClick={() => onConfirmOccurrence(schedule, nextDueDate)}
                     >
-                      Mark paid
+                      {" "}
+                      {uiText("Mark paid")}{" "}
                     </button>
                   )}
                   <button
@@ -301,7 +298,11 @@ export function RecurringSchedulesTab({
                         ? `Resume ${schedule.name}`
                         : `Pause ${schedule.name}`
                     }
-                    title={schedule.status === "paused" ? "Resume" : "Pause"}
+                    title={
+                      schedule.status === "paused"
+                        ? uiText("Resume")
+                        : uiText("Pause")
+                    }
                     onClick={() => onTogglePause(schedule)}
                   >
                     {schedule.status === "paused" ? (
@@ -338,13 +339,15 @@ export function RecurringSchedulesTab({
           <Repeat size={28} />
           <h3>
             {(ledger.recurring ?? []).length
-              ? "No schedules match these filters"
-              : "No recurring schedules yet"}
+              ? uiText("No schedules match these filters")
+              : uiText("No recurring schedules yet")}
           </h3>
           <p>
             {(ledger.recurring ?? []).length
-              ? "Try switching filters or clearing your search."
-              : "Add your subscriptions, utility bills or salary to see upcoming dates."}
+              ? uiText("Try switching filters or clearing your search.")
+              : uiText(
+                  "Add your subscriptions, utility bills or salary to see upcoming dates.",
+                )}
           </p>
           {!(ledger.recurring ?? []).length && (
             <button
@@ -353,7 +356,7 @@ export function RecurringSchedulesTab({
               disabled={busy}
               onClick={onAddSchedule}
             >
-              <Plus size={16} /> Add recurring
+              <Plus size={16} /> {uiText("Add recurring")}{" "}
             </button>
           )}
         </div>

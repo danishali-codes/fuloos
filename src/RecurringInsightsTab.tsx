@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import type { IntelligentForecast } from "./recurringAutomation.ts";
 import { formatShortDate } from "./RecurringView";
 
@@ -13,10 +14,12 @@ export function RecurringInsightsTab({
       <section className="panel section">
         <div className="panel-heading">
           <div>
-            <h2>30, 60 &amp; 90-day cash flow horizons</h2>
+            <h2>{uiText("30, 60 & 90-day cash flow horizons")}</h2>
             <p>
-              Scheduled and predicted recurring payments. Confirmed payments are
-              already recorded and never counted twice.
+              {" "}
+              {uiText(
+                "Scheduled and predicted recurring payments. Confirmed payments are already recorded and never counted twice.",
+              )}{" "}
             </p>
           </div>
         </div>
@@ -27,7 +30,9 @@ export function RecurringInsightsTab({
             return (
               <div className="horizon-card" key={h}>
                 <div className="horizon-head">
-                  <b>Next {h} days</b>
+                  <b>
+                    {uiText("Next")} {h} {uiText("days")}
+                  </b>
                   <span>
                     {formatShortDate(hz.fromDate)} –{" "}
                     {formatShortDate(hz.toDate)}
@@ -36,29 +41,31 @@ export function RecurringInsightsTab({
 
                 <div className="horizon-metrics">
                   <div className="horizon-metric">
-                    <span className="muted">Expected expenses</span>
+                    <span className="muted">{uiText("Expected expenses")}</span>
                     <strong>−{concealed(hz.expense.expected)}</strong>
                     {hz.expense.low !== hz.expense.high && (
                       <small>
-                        Range {concealed(hz.expense.low)} –{" "}
+                        {" "}
+                        {uiText("Range")} {concealed(hz.expense.low)} –{" "}
                         {concealed(hz.expense.high)}
                       </small>
                     )}
                   </div>
                   <div className="horizon-metric">
-                    <span className="muted">Expected income</span>
+                    <span className="muted">{uiText("Expected income")}</span>
                     <strong className="green-text">
                       +{concealed(hz.income.expected)}
                     </strong>
                     {hz.income.low !== hz.income.high && (
                       <small>
-                        Range {concealed(hz.income.low)} –{" "}
+                        {" "}
+                        {uiText("Range")} {concealed(hz.income.low)} –{" "}
                         {concealed(hz.income.high)}
                       </small>
                     )}
                   </div>
                   <div className="horizon-metric net">
-                    <span className="muted">Net recurring</span>
+                    <span className="muted">{uiText("Net recurring")}</span>
                     <strong
                       className={hz.net.expected >= 0 ? "green-text" : ""}
                     >
@@ -66,8 +73,9 @@ export function RecurringInsightsTab({
                       {concealed(Math.abs(hz.net.expected))}
                     </strong>
                     <small>
-                      {hz.unconfirmedCount} payment
-                      {hz.unconfirmedCount === 1 ? "" : "s"} expected
+                      {hz.unconfirmedCount} {uiText("payment")}{" "}
+                      {hz.unconfirmedCount === 1 ? "" : "s"}{" "}
+                      {uiText("expected")}{" "}
                     </small>
                   </div>
                 </div>
@@ -80,10 +88,12 @@ export function RecurringInsightsTab({
       <section className="panel section">
         <div className="panel-heading">
           <div>
-            <h2>Projected account balances</h2>
+            <h2>{uiText("Projected account balances")}</h2>
             <p>
-              Current ledger balances adjusted for scheduled payments. Recorded
-              balances stay untouched until you confirm.
+              {" "}
+              {uiText(
+                "Current ledger balances adjusted for scheduled payments. Recorded balances stay untouched until you confirm.",
+              )}{" "}
             </p>
           </div>
         </div>
@@ -92,12 +102,12 @@ export function RecurringInsightsTab({
           <table className="projected-table">
             <thead>
               <tr>
-                <th>Account</th>
-                <th>Current balance</th>
-                <th>Scheduled 30d delta</th>
-                <th>Projected (30d)</th>
-                <th>Projected (60d)</th>
-                <th>Projected (90d)</th>
+                <th>{uiText("Account")}</th>
+                <th>{uiText("Current balance")}</th>
+                <th>{uiText("Scheduled 30d delta")}</th>
+                <th>{uiText("Projected (30d)")}</th>
+                <th>{uiText("Projected (60d)")}</th>
+                <th>{uiText("Projected (90d)")}</th>
               </tr>
             </thead>
             <tbody>
@@ -110,9 +120,7 @@ export function RecurringInsightsTab({
                   <td>
                     <span
                       className={
-                        ap.horizons[30].scheduledDelta >= 0
-                          ? "green-text"
-                          : ""
+                        ap.horizons[30].scheduledDelta >= 0 ? "green-text" : ""
                       }
                     >
                       {ap.horizons[30].scheduledDelta >= 0 ? "+" : "−"}
@@ -162,35 +170,47 @@ export function RecurringInsightsTab({
       <section className="panel section monthly-commitment-panel">
         <div className="panel-heading">
           <div>
-            <h2>Monthly recurring commitment breakdown</h2>
-            <p>Analysis of fixed commitments vs variable estimated bills</p>
+            <h2>{uiText("Monthly recurring commitment breakdown")}</h2>
+            <p>
+              {uiText(
+                "Analysis of fixed commitments vs variable estimated bills",
+              )}
+            </p>
           </div>
         </div>
 
         <div className="commitments-breakdown-row">
           <div className="commitment-stat-box">
-            <span className="muted">Fixed expenses / mo</span>
-            <strong>{concealed(forecast.monthlyCommitment.fixedExpense)}</strong>
-            <small>Subscriptions, rent &amp; contracts</small>
+            <span className="muted">{uiText("Fixed expenses / mo")}</span>
+            <strong>
+              {concealed(forecast.monthlyCommitment.fixedExpense)}
+            </strong>
+            <small>{uiText("Subscriptions, rent & contracts")}</small>
           </div>
           <div className="commitment-stat-box">
-            <span className="muted">Variable expenses / mo</span>
+            <span className="muted">{uiText("Variable expenses / mo")}</span>
             <strong>
               {concealed(forecast.monthlyCommitment.variableExpense)}
             </strong>
-            <small>Estimated utilities &amp; fluctuating bills</small>
+            <small>{uiText("Estimated utilities & fluctuating bills")}</small>
           </div>
           <div className="commitment-stat-box">
-            <span className="muted">Total recurring expenses / mo</span>
-            <strong>{concealed(forecast.monthlyCommitment.totalExpense)}</strong>
-            <small>Combined monthly commitment</small>
+            <span className="muted">
+              {uiText("Total recurring expenses / mo")}
+            </span>
+            <strong>
+              {concealed(forecast.monthlyCommitment.totalExpense)}
+            </strong>
+            <small>{uiText("Combined monthly commitment")}</small>
           </div>
           <div className="commitment-stat-box">
-            <span className="muted">Annualized recurring expenses</span>
+            <span className="muted">
+              {uiText("Annualized recurring expenses")}
+            </span>
             <strong>
               {concealed(forecast.monthlyCommitment.annualizedExpense)}
             </strong>
-            <small>12-month recurring expenditure</small>
+            <small>{uiText("12-month recurring expenditure")}</small>
           </div>
         </div>
       </section>

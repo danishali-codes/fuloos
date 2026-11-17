@@ -1,9 +1,6 @@
+import { translateText as uiText } from "./i18n";
 import { money, plural, type Account, type Ledger } from "./domain";
-import type {
-  CsvOptions,
-  ImportTransaction,
-  previewCsv,
-} from "./csv";
+import type { CsvOptions, ImportTransaction, previewCsv } from "./csv";
 import type { TransferDecision, TransferMatch } from "./transferMatch";
 
 type CsvPreviewRow = ReturnType<typeof previewCsv>[number];
@@ -90,18 +87,18 @@ export function CsvReviewSection({
     <>
       {matches.length > 0 && !parseError && !done && (
         <section className="transfer-matches" aria-labelledby="tm-title">
-          <h3 id="tm-title">Transfers between your accounts</h3>
+          <h3 id="tm-title">{uiText("Transfers between your accounts")}</h3>
           <p className="muted">
-            {transferSummary(applied)} Change any row with its type menu in the
-            table.
+            {transferSummary(applied)}{" "}
+            {uiText("Change any row with its type menu in the table.")}{" "}
           </p>
           {pendingMatches.length > 0 && (
             <>
               <p>
                 {pendingMatches.length === 1
-                  ? "One more row looks like a transfer."
+                  ? uiText("One more row looks like a transfer.")
                   : `${pendingMatches.length} more rows look like transfers.`}{" "}
-                Confirm the ones that are:
+                {uiText("Confirm the ones that are:")}{" "}
               </p>
               <ul className="transfer-match-list">
                 {pendingMatches.map((m) => {
@@ -127,7 +124,8 @@ export function CsvReviewSection({
                           disabled={busy}
                           onClick={() => onDecide([m.index], "accept")}
                         >
-                          Confirm
+                          {" "}
+                          {uiText("Confirm")}{" "}
                         </button>
                         <button
                           type="button"
@@ -135,7 +133,8 @@ export function CsvReviewSection({
                           disabled={busy}
                           onClick={() => onDecide([m.index], "reject")}
                         >
-                          Not a transfer
+                          {" "}
+                          {uiText("Not a transfer")}{" "}
                         </button>
                       </div>
                     </li>
@@ -155,7 +154,8 @@ export function CsvReviewSection({
                       )
                     }
                   >
-                    Confirm all {pendingMatches.length}
+                    {" "}
+                    {uiText("Confirm all")} {pendingMatches.length}
                   </button>
                   <button
                     type="button"
@@ -168,7 +168,8 @@ export function CsvReviewSection({
                       )
                     }
                   >
-                    None are transfers
+                    {" "}
+                    {uiText("None are transfers")}{" "}
                   </button>
                 </div>
               )}
@@ -178,10 +179,11 @@ export function CsvReviewSection({
       )}
       {!!preview.length && !parseError && (
         <>
-          <h3>Review transactions</h3>
+          <h3>{uiText("Review transactions")}</h3>
           <p>
-            {selected.length} selected · {invalidCount} invalid ·{" "}
-            {duplicateCount} possible duplicates
+            {selected.length} {uiText("selected ·")} {invalidCount}{" "}
+            {uiText("invalid ·")} {duplicateCount}{" "}
+            {uiText("possible duplicates")}{" "}
           </p>
           <label className="csv-check">
             <input
@@ -189,21 +191,40 @@ export function CsvReviewSection({
               disabled={busy || done}
               checked={includeDuplicates}
               onChange={(e) => onSetIncludeDuplicates(e.target.checked)}
-            />
-            Include possible duplicates (same account, date, amount and payee)
+            />{" "}
+            {uiText(
+              "Include possible duplicates (same account, date, amount and payee)",
+            )}{" "}
           </label>
           <label>
-            Show rows
-            <select value={filter} onChange={(e) => onSetFilter(e.target.value)}>
-              <option value="all">All rows ({preview.length})</option>
-              <option value="invalid">Invalid fields ({invalidCount})</option>
-              <option value="duplicates">
-                Possible duplicates ({duplicateCount})
+            {" "}
+            {uiText("Show rows")}{" "}
+            <select
+              value={filter}
+              onChange={(e) => onSetFilter(e.target.value)}
+            >
+              <option value="all">
+                {uiText("All rows (")}
+                {preview.length})
               </option>
-              <option value="selected">Selected ({selected.length})</option>
+              <option value="invalid">
+                {uiText("Invalid fields (")}
+                {invalidCount})
+              </option>
+              <option value="duplicates">
+                {" "}
+                {uiText("Possible duplicates (")}
+                {duplicateCount})
+              </option>
+              <option value="selected">
+                {uiText("Selected (")}
+                {selected.length})
+              </option>
               {matches.length > 0 && (
                 <option value="transfers">
-                  Transfers found ({matches.length})
+                  {" "}
+                  {uiText("Transfers found (")}
+                  {matches.length})
                 </option>
               )}
             </select>
@@ -212,13 +233,13 @@ export function CsvReviewSection({
             <table>
               <thead>
                 <tr>
-                  <th>Include</th>
-                  <th>Row</th>
-                  <th>Date</th>
-                  <th>Payee</th>
-                  <th>Amount</th>
-                  <th>Type / transfer account</th>
-                  <th>Status</th>
+                  <th>{uiText("Include")}</th>
+                  <th>{uiText("Row")}</th>
+                  <th>{uiText("Date")}</th>
+                  <th>{uiText("Payee")}</th>
+                  <th>{uiText("Amount")}</th>
+                  <th>{uiText("Type / transfer account")}</th>
+                  <th>{uiText("Status")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -246,7 +267,9 @@ export function CsvReviewSection({
                     </td>
                     <td>{r.index + skip + (header ? 2 : 1)}</td>
                     <td>
-                      {r.transaction?.date ?? data[r.index]?.[options.date] ?? "—"}
+                      {r.transaction?.date ??
+                        data[r.index]?.[options.date] ??
+                        "—"}
                     </td>
                     <td>
                       {r.transaction?.payee ||
@@ -273,12 +296,13 @@ export function CsvReviewSection({
                           })
                         }
                       >
-                        <option value="">Income / expense</option>
+                        <option value="">{uiText("Income / expense")}</option>
                         {ledger.accounts
                           .filter((a) => a.id !== options.account)
                           .map((a) => (
                             <option key={a.id} value={a.id}>
-                              Transfer · {a.name}
+                              {" "}
+                              {uiText("Transfer ·")} {a.name}
                             </option>
                           ))}
                       </select>
@@ -286,9 +310,8 @@ export function CsvReviewSection({
                         <small>
                           {accountById.get(r.transaction.account_id)?.name} →{" "}
                           {
-                            accountById.get(
-                              r.transaction.to_account_id ?? "",
-                            )?.name
+                            accountById.get(r.transaction.to_account_id ?? "")
+                              ?.name
                           }
                         </small>
                       )}
@@ -304,12 +327,14 @@ export function CsvReviewSection({
                               disabled={busy || done}
                               onClick={() => onDecide([r.index], "reject")}
                             >
-                              Not a transfer
+                              {" "}
+                              {uiText("Not a transfer")}{" "}
                             </button>
                           </>
                         ) : matchByIndex.has(r.index) ? (
                           <>
-                            Possible{" "}
+                            {" "}
+                            {uiText("Possible")}{" "}
                             {matchLabel(matchByIndex.get(r.index)!).replace(
                               /^Transfer|^Already/,
                               (w) => w.toLowerCase(),
@@ -320,7 +345,8 @@ export function CsvReviewSection({
                               disabled={busy || done}
                               onClick={() => onDecide([r.index], "accept")}
                             >
-                              Confirm
+                              {" "}
+                              {uiText("Confirm")}{" "}
                             </button>
                           </>
                         ) : r.duplicate ? (

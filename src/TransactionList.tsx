@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import { useMemo } from "react";
 import {
   ArrowDownLeft,
@@ -5,11 +6,7 @@ import {
   ReceiptText,
   Trash2,
 } from "lucide-react";
-import {
-  startingBalance,
-  type Ledger,
-  type Transaction,
-} from "./domain";
+import { startingBalance, type Ledger, type Transaction } from "./domain";
 
 export function Empty({ title, text }: { title: string; text: string }) {
   return (
@@ -130,8 +127,8 @@ export function TransactionList({
                 <b>
                   {t.payee ||
                     (t.type === "transfer"
-                      ? "Account transfer"
-                      : "Transaction")}
+                      ? uiText("Account transfer")
+                      : uiText("Transaction"))}
                 </b>
                 <small>
                   {t.type === "transfer"
@@ -142,12 +139,13 @@ export function TransactionList({
               <span className="transaction-value">
                 <small>
                   {account?.name}: {concealed(balances.get(t.id)?.source ?? 0)}{" "}
-                  balance
+                  {uiText("balance")}{" "}
                 </small>
                 {t.to_account_id && (
                   <small>
                     {toAccount?.name}:{" "}
-                    {concealed(balances.get(t.id)?.destination ?? 0)} balance
+                    {concealed(balances.get(t.id)?.destination ?? 0)}{" "}
+                    {uiText("balance")}{" "}
                   </small>
                 )}
                 <b className={t.type === "income" ? "green-text" : ""}>
@@ -179,7 +177,7 @@ export function TransactionList({
     </div>
   ) : (
     <Empty
-      title="A fresh start"
+      title={uiText("A fresh start")}
       text="Add your first transaction, or try a different month or filter."
     />
   );

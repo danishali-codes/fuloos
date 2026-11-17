@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ArrowDownLeft,
@@ -177,13 +178,13 @@ export function QuickAddModal({
     >
       <div className="modal-head">
         <div>
-          <span className="eyebrow">QUICK ADD · AED</span>
-          <h2 id="quick-add-title">Add transaction</h2>
+          <span className="eyebrow">{uiText("QUICK ADD · AED")}</span>
+          <h2 id="quick-add-title">{uiText("Add transaction")}</h2>
         </div>
         <button
           type="button"
           className="icon-button"
-          aria-label="Close"
+          aria-label={uiText("Close")}
           onClick={onClose}
         >
           <X size={18} />
@@ -193,19 +194,22 @@ export function QuickAddModal({
       {offlineLocked && (
         <div className="pwa-inline-notice" role="status">
           <WifiOff size={15} />
-          <span>You're offline — reconnect to save changes.</span>
+          <span>{uiText("You're offline — reconnect to save changes.")}</span>
         </div>
       )}
 
       {ledger.accounts.length === 0 ? (
         <div className="quick-add-empty">
           <p className="muted">
-            Create an account first so Fuloos knows where this transaction
-            belongs.
+            {" "}
+            {uiText(
+              "Create an account first so Fuloos knows where this transaction belongs.",
+            )}{" "}
           </p>
           <div className="modal-actions">
             <button type="button" className="secondary" onClick={onClose}>
-              Cancel
+              {" "}
+              {uiText("Cancel")}{" "}
             </button>
             <button
               type="button"
@@ -216,33 +220,37 @@ export function QuickAddModal({
                 onAddAccount();
               }}
             >
-              Add account
+              {" "}
+              {uiText("Add account")}{" "}
             </button>
           </div>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="quick-add-form">
-          <div className="quick-add-kinds" role="group" aria-label="Type">
+          <div
+            className="quick-add-kinds"
+            role="group"
+            aria-label={uiText("Type")}
+          >
             <button
               type="button"
               className={type === "expense" ? "active" : ""}
               onClick={() => setType("expense")}
             >
-              <ArrowUpRight size={15} />
-              Expense
+              <ArrowUpRight size={15} /> {uiText("Expense")}{" "}
             </button>
             <button
               type="button"
               className={type === "income" ? "active" : ""}
               onClick={() => setType("income")}
             >
-              <ArrowDownLeft size={15} />
-              Income
+              <ArrowDownLeft size={15} /> {uiText("Income")}{" "}
             </button>
           </div>
 
           <label>
-            Amount (AED)
+            {" "}
+            {uiText("Amount (AED)")}{" "}
             <input
               ref={amountRef}
               required
@@ -265,21 +273,28 @@ export function QuickAddModal({
                     const checked = e.target.checked;
                     setForeignEnabled(checked);
                     if (checked) {
-                      syncAedFromForeign(originalAmount, originalCurrency, fxRate);
+                      syncAedFromForeign(
+                        originalAmount,
+                        originalCurrency,
+                        fxRate,
+                      );
                     }
                   }}
                 />
-                <span>Foreign currency</span>
+                <span>{uiText("Foreign currency")}</span>
               </label>
               {foreignEnabled && (
-                <span className="muted small">Explicit FX to AED</span>
+                <span className="muted small">
+                  {uiText("Explicit FX to AED")}
+                </span>
               )}
             </div>
             {foreignEnabled && (
               <>
                 <div className="form-row">
                   <label>
-                    Currency
+                    {" "}
+                    {uiText("Currency")}{" "}
                     <select
                       name="original_currency"
                       value={originalCurrency}
@@ -302,7 +317,9 @@ export function QuickAddModal({
                     </select>
                   </label>
                   <label>
-                    Original ({originalCurrency})
+                    {" "}
+                    {uiText("Original (")}
+                    {originalCurrency})
                     <input
                       name="original_amount"
                       inputMode="decimal"
@@ -317,7 +334,8 @@ export function QuickAddModal({
                     />
                   </label>
                   <label>
-                    Rate to AED
+                    {" "}
+                    {uiText("Rate to AED")}{" "}
                     <input
                       name="fx_rate"
                       inputMode="decimal"
@@ -343,7 +361,8 @@ export function QuickAddModal({
 
           <div className="form-row">
             <label>
-              Account
+              {" "}
+              {uiText("Account")}{" "}
               <select
                 name="account_id"
                 value={accountId}
@@ -365,19 +384,22 @@ export function QuickAddModal({
                   <option key={a.id} value={a.id}>
                     {a.emoji ? `${a.emoji} ` : ""}
                     {a.name}
-                    {a.currency && a.currency !== "AED" ? ` (${a.currency})` : ""}
+                    {a.currency && a.currency !== "AED"
+                      ? ` (${a.currency})`
+                      : ""}
                   </option>
                 ))}
               </select>
             </label>
             <label>
-              Category
+              {" "}
+              {uiText("Category")}{" "}
               <select
                 name="category_id"
                 value={categoryId}
                 onChange={(e) => setCategoryId(e.target.value)}
               >
-                <option value="">Uncategorized</option>
+                <option value="">{uiText("Uncategorized")}</option>
                 {ledger.categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.emoji ? `${c.emoji} ` : ""}
@@ -390,17 +412,20 @@ export function QuickAddModal({
 
           <div className="form-row">
             <label>
-              Payee <span className="muted">Optional</span>
+              {" "}
+              {uiText("Payee")}{" "}
+              <span className="muted">{uiText("Optional")}</span>
               <input
                 name="payee"
                 maxLength={120}
-                placeholder="e.g. Carrefour, DEWA"
+                placeholder={uiText("e.g. Carrefour, DEWA")}
                 value={payee}
                 onChange={(e) => setPayee(e.target.value)}
               />
             </label>
             <label>
-              Date
+              {" "}
+              {uiText("Date")}{" "}
               <input
                 required
                 type="date"
@@ -413,7 +438,9 @@ export function QuickAddModal({
 
           <div className="field-block">
             <span className="field-label">
-              Tags <span className="muted">Optional</span>
+              {" "}
+              {uiText("Tags")}{" "}
+              <span className="muted">{uiText("Optional")}</span>
             </span>
             <TagInput
               tags={tags}
@@ -436,7 +463,8 @@ export function QuickAddModal({
               disabled={busy}
               onClick={onClose}
             >
-              Cancel
+              {" "}
+              {uiText("Cancel")}{" "}
             </button>
             <button
               type="submit"
@@ -444,12 +472,12 @@ export function QuickAddModal({
               disabled={busy || offlineLocked}
             >
               {busy
-                ? "Saving…"
+                ? uiText("Saving…")
                 : offlineLocked
-                  ? "Offline"
+                  ? uiText("Offline")
                   : type === "income"
-                    ? "Add income"
-                    : "Add expense"}
+                    ? uiText("Add income")
+                    : uiText("Add expense")}
               <Check size={16} />
             </button>
           </div>
@@ -470,8 +498,8 @@ export function QuickAddFab({
     <button
       type="button"
       className="quick-add-fab"
-      aria-label="Quick add transaction"
-      title="Quick add transaction (N)"
+      aria-label={uiText("Quick add transaction")}
+      title={uiText("Quick add transaction (N)")}
       disabled={disabled}
       onClick={onClick}
     >
@@ -504,30 +532,36 @@ export function PwaBanners({
           <span>
             <WifiOff size={15} />
             {demo
-              ? "You're offline. Demo workspace changes stay in memory."
-              : "You're offline. Viewing cached app shell — saving changes is paused until you reconnect."}
+              ? uiText("You're offline. Demo workspace changes stay in memory.")
+              : uiText(
+                  "You're offline. Viewing cached app shell — saving changes is paused until you reconnect.",
+                )}
           </span>
         </div>
       )}
       {updateAvailable && (
         <div className="pwa-banner pwa-banner-update" role="status">
           <span>
-            <RefreshCw size={15} />
-            A new version of Fuloos is ready.
+            <RefreshCw size={15} />{" "}
+            {uiText("A new version of Fuloos is ready.")}{" "}
           </span>
           <button type="button" onClick={onApplyUpdate}>
-            Update now
+            {" "}
+            {uiText("Update now")}{" "}
           </button>
         </div>
       )}
       {canInstall && online && !updateAvailable && (
         <div className="pwa-banner pwa-banner-install">
           <span>
-            <Download size={15} />
-            Install Fuloos for faster access and quick-add shortcuts.
+            <Download size={15} />{" "}
+            {uiText(
+              "Install Fuloos for faster access and quick-add shortcuts.",
+            )}{" "}
           </span>
           <button type="button" onClick={onInstall}>
-            Install app
+            {" "}
+            {uiText("Install app")}{" "}
           </button>
         </div>
       )}

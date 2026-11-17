@@ -160,7 +160,10 @@ export class BackendError extends Error {
 export class MissingCollectionError extends BackendError {}
 export class MfaRequiredError extends BackendError {
   readonly mfaId: string;
-  constructor(mfaId: string, message = "Multi-factor authentication required.") {
+  constructor(
+    mfaId: string,
+    message = "Multi-factor authentication required.",
+  ) {
     super(message, 401);
     this.name = "MfaRequiredError";
     this.mfaId = mfaId;
@@ -790,6 +793,70 @@ export class PocketBaseBackend {
       throw new Error("Session changed. Please sign in again.");
     return this.normalize(table, record);
   }
+  async contributeGoal(
+    goalId: string,
+    body: Record<string, unknown>,
+  ): Promise<{
+    goal: SavingsGoal;
+    contribution: GoalContribution;
+    transaction: Transaction | null;
+  }> {
+    return this.request(
+      "/api/fuloos/goals/" + encodeURIComponent(goalId) + "/contributions",
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  }
+  async removeGoalContribution(id: string): Promise<SavingsGoal> {
+    return this.request(
+      "/api/fuloos/goal-contributions/" + encodeURIComponent(id),
+      { method: "DELETE" },
+    );
+  }
+  async importCapturedAlert(
+    id: string,
+    transaction: Record<string, unknown>,
+  ): Promise<Transaction> {
+    return this.request(
+      "/api/fuloos/captured-alerts/" + encodeURIComponent(id) + "/import",
+      { method: "POST", body: JSON.stringify({ transaction }) },
+    );
+  }
+  async saveNetWorthItemAtomic(
+    draft: Record<string, unknown>,
+    id: string | undefined,
+    operationKey: string,
+  ): Promise<{ item: NetWorthItem; snapshots: NetWorthSnapshot[] }> {
+    return this.request("/api/fuloos/net-worth/items", {
+      method: "POST",
+      body: JSON.stringify({ draft, id, operation_key: operationKey }),
+    });
+  }
+  async saveNetWorthValuationAtomic(
+    itemId: string,
+    value: number,
+    date: string,
+    notes: string,
+    operationKey: string,
+  ): Promise<{ item: NetWorthItem; snapshots: NetWorthSnapshot[] }> {
+    return this.request("/api/fuloos/net-worth/valuations", {
+      method: "POST",
+      body: JSON.stringify({
+        item_id: itemId,
+        value,
+        date,
+        notes,
+        operation_key: operationKey,
+      }),
+    });
+  }
+  async deleteNetWorthSnapshotAtomic(
+    id: string,
+  ): Promise<{ item: NetWorthItem; snapshots: NetWorthSnapshot[] }> {
+    return this.request(
+      "/api/fuloos/net-worth/snapshots/" + encodeURIComponent(id),
+      { method: "DELETE" },
+    );
+  }
   async saveTransactionWithReceipt(
     value: Record<string, unknown>,
     id?: string,
@@ -828,7 +895,7 @@ export class PocketBaseBackend {
       throw new Error("Session changed. Please sign in again.");
     return this.normalize("transactions", record);
   }
-  async getReceiptBlobUrl(txId: string, filename: string): Promise<string> {
+  async getReceiptBlob(txId: string, filename: string): Promise<Blob> {
     if (!this.session) throw new Error("Please sign in.");
     const { token } = await this.request<{ token: string }>(
       "/api/files/token",
@@ -844,8 +911,10 @@ export class PocketBaseBackend {
         response.status,
       );
     }
-    const blob = await response.blob();
-    return URL.createObjectURL(blob);
+    return response.blob();
+  }
+  async getReceiptBlobUrl(txId: string, filename: string): Promise<string> {
+    return URL.createObjectURL(await this.getReceiptBlob(txId, filename));
   }
   private normalize<K extends Table>(
     table: K,
@@ -906,7 +975,9 @@ export class PocketBaseBackend {
         id: r.id,
         name: String(r.name ?? ""),
         enabled: Boolean(r.enabled),
-        priority: Number.isFinite(Number(r.priority)) ? Math.trunc(Number(r.priority)) : 100,
+        priority: Number.isFinite(Number(r.priority))
+          ? Math.trunc(Number(r.priority))
+          : 100,
         match_field:
           r.match_field === "payee" || r.match_field === "notes"
             ? r.match_field
@@ -978,8 +1049,7 @@ export class PocketBaseBackend {
         id: m.id,
         household_id: m.household_id,
         user_id: m.user_id || null,
-        role:
-          m.role === "owner" || m.role === "viewer" ? m.role : "editor",
+        role: m.role === "owner" || m.role === "viewer" ? m.role : "editor",
         status: m.status === "pending" ? "pending" : "active",
         invite_code: m.invite_code || undefined,
         member_email: m.member_email || undefined,
@@ -1132,6 +1202,7 @@ export class PocketBaseBackend {
         value: Number(s.value ?? 0),
         date: String(s.date ?? ""),
         notes: s.notes ?? "",
+        ...(s.revision !== undefined ? { revision: Number(s.revision) } : {}),
       } as RecordTypes[K];
     }
     return record;
@@ -1166,7 +1237,6 @@ export class PocketBaseBackend {
               notes: t.notes,
               tags: t.tags ?? [],
               splits: t.splits ?? [],
-              user_id: session.user.id,
             },
           })),
         }),
@@ -1360,9 +1430,8 @@ export class PocketBaseBackend {
   }> {
     if (!this.session) throw new Error("Please sign in.");
     try {
-      const rows = await this.rows<SavedNotificationPreferences>(
-        "notification_prefs",
-      );
+      const rows =
+        await this.rows<SavedNotificationPreferences>("notification_prefs");
       return {
         prefs: rows[0]
           ? this.normalize("notification_prefs", rows[0])
@@ -1371,7 +1440,10 @@ export class PocketBaseBackend {
       };
     } catch (e) {
       if (e instanceof MissingCollectionError) {
-        return { prefs: { ...defaultNotificationPreferences }, supported: false };
+        return {
+          prefs: { ...defaultNotificationPreferences },
+          supported: false,
+        };
       }
       throw e;
     }
@@ -1415,13 +1487,10 @@ export class PocketBaseBackend {
   }> {
     if (!this.session) throw new Error("Please sign in.");
     try {
-      const rows = await this.rows<PushSubscriptionRecord>(
-        "push_subscriptions",
-      );
+      const rows =
+        await this.rows<PushSubscriptionRecord>("push_subscriptions");
       return {
-        subscriptions: rows.map((r) =>
-          this.normalize("push_subscriptions", r),
-        ),
+        subscriptions: rows.map((r) => this.normalize("push_subscriptions", r)),
         supported: true,
       };
     } catch (e) {
@@ -1435,9 +1504,8 @@ export class PocketBaseBackend {
     sub: Omit<PushSubscriptionRecord, "id">,
   ): Promise<PushSubscriptionRecord> {
     if (!this.session) throw new Error("Please sign in.");
-    const existing = await this.rows<PushSubscriptionRecord>(
-      "push_subscriptions",
-    );
+    const existing =
+      await this.rows<PushSubscriptionRecord>("push_subscriptions");
     const match = existing.find((r) => r.endpoint === sub.endpoint);
     return this.save(
       "push_subscriptions",
@@ -1661,13 +1729,19 @@ export class PocketBaseBackend {
     householdId: string | null,
   ): Promise<Account> {
     if (!this.session) throw new Error("Please sign in.");
-    return this.save("accounts", { household_id: householdId }, accountId);
+    return this.request("/api/fuloos/households/share-account", {
+      method: "POST",
+      body: JSON.stringify({ id: accountId, household_id: householdId }),
+    });
   }
   async shareBudgetWithHousehold(
     budgetId: string,
     householdId: string | null,
   ): Promise<Budget> {
     if (!this.session) throw new Error("Please sign in.");
-    return this.save("budgets", { household_id: householdId }, budgetId);
+    return this.request("/api/fuloos/households/share-budget", {
+      method: "POST",
+      body: JSON.stringify({ id: budgetId, household_id: householdId }),
+    });
   }
 }

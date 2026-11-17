@@ -1,21 +1,14 @@
+import { formatLocalizedAed } from "./i18n.ts";
 import { validateForeignCurrencyFields } from "./currency.ts";
 import { validateSplits, validateTags } from "./enrichment.ts";
 import type { NetWorthItem, NetWorthSnapshot } from "./netWorth.ts";
 
 export type AccountType =
-  | "current"
-  | "savings"
-  | "credit_card"
-  | "cash"
-  | "other";
+  "current" | "savings" | "credit_card" | "cash" | "other";
 export type Kind = "expense" | "income" | "transfer";
 export type RecurringKind = "expense" | "income";
 export type RecurringFrequency =
-  | "daily"
-  | "weekly"
-  | "monthly"
-  | "quarterly"
-  | "yearly";
+  "daily" | "weekly" | "monthly" | "quarterly" | "yearly";
 export type RecurringAmountType = "fixed" | "variable";
 export type RecurringStatus = "active" | "paused";
 export type OccurrenceMatchSource = "manual" | "auto";
@@ -39,6 +32,8 @@ export interface Account {
 }
 export interface Category {
   id: string;
+  household_id?: string | null;
+  user_id?: string;
   name: string;
   description: string;
   color: string;
@@ -162,14 +157,7 @@ export const defaultRecurringPreferences: RecurringPreferences = {
   auto_match: "auto",
   dismissed_keys: [],
 };
-export type DigestDay =
-  | "sun"
-  | "mon"
-  | "tue"
-  | "wed"
-  | "thu"
-  | "fri"
-  | "sat";
+export type DigestDay = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
 export interface NotificationPreferences {
   id?: string;
   email_enabled: boolean;
@@ -258,10 +246,7 @@ export function minor(value: string): number {
     throw new Error("Amount is too large.");
   return result === 0 ? 0 : negative ? -result : result;
 }
-export const money = (amount: number) =>
-  new Intl.NumberFormat("en-AE", { style: "currency", currency: "AED" }).format(
-    amount / 100,
-  );
+export const money = (amount: number) => formatLocalizedAed(amount);
 /**
  * An account's stored opening_balance is its balance at the start of
  * opening_date, before that day's transactions. The form shows this as

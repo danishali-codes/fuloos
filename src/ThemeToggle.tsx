@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 
@@ -61,7 +62,7 @@ export function ThemeToggle() {
       title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
     >
       {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-      <span>{theme === "dark" ? "Light" : "Dark"}</span>
+      <span>{theme === "dark" ? uiText("Light") : uiText("Dark")}</span>
     </button>
   );
 }

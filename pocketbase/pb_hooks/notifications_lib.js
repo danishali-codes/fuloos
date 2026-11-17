@@ -9,6 +9,15 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
+  function readAllRecords(find, collection, filter, params, mapper) {
+    var all = [];
+    for (var offset = 0; ; offset += 500) {
+      var rows = find(collection, filter, "id", 500, offset, params);
+      for (var i = 0; i < rows.length; i++) all.push(mapper(rows[i]));
+      if (rows.length < 500) return all;
+    }
+  }
+
   var WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
   function utcDate(year, monthIndex, day) {
@@ -64,12 +73,12 @@
     if (!parsed) throw new Error("Invalid ISO date: " + date);
     var d = new Date(
       utcDate(parsed.year, parsed.month - 1, parsed.day).getTime() +
-        days * 86400000
+        days * 86400000,
     );
     return formatIsoDate(
       d.getUTCFullYear(),
       d.getUTCMonth() + 1,
-      d.getUTCDate()
+      d.getUTCDate(),
     );
   }
 
@@ -80,7 +89,7 @@
     return Math.round(
       (utcDate(e.year, e.month - 1, e.day).getTime() -
         utcDate(s.year, s.month - 1, s.day).getTime()) /
-        86400000
+        86400000,
     );
   }
 
@@ -98,16 +107,13 @@
         start.year * 12 + (start.month - 1) + step * monthsPerStep;
       var targetYear = Math.floor(totalMonths / 12);
       var targetMonth = (((totalMonths % 12) + 12) % 12) + 1;
-      var targetDay = Math.min(
-        start.day,
-        daysInMonth(targetYear, targetMonth)
-      );
+      var targetDay = Math.min(start.day, daysInMonth(targetYear, targetMonth));
       return formatIsoDate(targetYear, targetMonth, targetDay);
     }
     var yearlyTargetYear = start.year + step;
     var yearlyTargetDay = Math.min(
       start.day,
-      daysInMonth(yearlyTargetYear, start.month)
+      daysInMonth(yearlyTargetYear, start.month),
     );
     return formatIsoDate(yearlyTargetYear, start.month, yearlyTargetDay);
   }
@@ -128,7 +134,10 @@
         : frequency === "quarterly"
           ? Math.max(0, Math.floor(monthsDiff / 3))
           : Math.max(0, t.year - s.year);
-    while (k > 0 && occurrenceAtStep(startDate, frequency, k - 1) >= targetDate) {
+    while (
+      k > 0 &&
+      occurrenceAtStep(startDate, frequency, k - 1) >= targetDate
+    ) {
       k--;
     }
     while (occurrenceAtStep(startDate, frequency, k) < targetDate) {
@@ -159,7 +168,7 @@
     var step = firstStepOnOrAfter(
       schedule.start_date,
       schedule.frequency,
-      effectiveFrom
+      effectiveFrom,
     );
     for (;;) {
       var occ = occurrenceAtStep(schedule.start_date, schedule.frequency, step);
@@ -223,7 +232,7 @@
     return formatIsoDate(
       shifted.getUTCFullYear(),
       shifted.getUTCMonth() + 1,
-      shifted.getUTCDate()
+      shifted.getUTCDate(),
     );
   }
 
@@ -247,7 +256,9 @@
 
   function computeRecurringAlerts(ledger, asOfDate, upcomingDays) {
     var days =
-      typeof upcomingDays === "number" && upcomingDays >= 1 && upcomingDays <= 30
+      typeof upcomingDays === "number" &&
+      upcomingDays >= 1 &&
+      upcomingDays <= 30
         ? Math.floor(upcomingDays)
         : 3;
     var upcomingEnd = addDays(asOfDate, days);
@@ -275,7 +286,12 @@
           schedule: s,
           scheduledDate: date,
           daysUntil: daysBetween(asOfDate, date),
-          status: date < asOfDate ? "overdue" : date === asOfDate ? "due_today" : "upcoming",
+          status:
+            date < asOfDate
+              ? "overdue"
+              : date === asOfDate
+                ? "due_today"
+                : "upcoming",
         };
         if (date < asOfDate) {
           overdue.push(item);
@@ -311,12 +327,20 @@
     for (var i = 0; i < transactions.length; i++) {
       var t = transactions[i];
       if (
-        t.type === "expense" &&
-        t.category_id &&
-        typeof t.date === "string" &&
-        t.date.slice(0, 7) === month
-      ) {
-        spentByCat[t.category_id] = (spentByCat[t.category_id] || 0) + t.amount;
+        t.type !== "expense" ||
+        typeof t.date !== "string" ||
+        t.date.slice(0, 7) !== month
+      )
+        continue;
+      var allocations =
+        Array.isArray(t.splits) && t.splits.length
+          ? t.splits
+          : [{ category_id: t.category_id, amount: t.amount }];
+      for (var ai = 0; ai < allocations.length; ai++) {
+        var allocation = allocations[ai];
+        if (allocation.category_id)
+          spentByCat[allocation.category_id] =
+            (spentByCat[allocation.category_id] || 0) + allocation.amount;
       }
     }
 
@@ -415,8 +439,7 @@
       budget_80_enabled: Boolean(p.budget_80_enabled),
       budget_100_enabled: Boolean(p.budget_100_enabled),
       weekly_digest_enabled: Boolean(p.weekly_digest_enabled),
-      digest_day:
-        WEEKDAYS.indexOf(p.digest_day) >= 0 ? p.digest_day : "sun",
+      digest_day: WEEKDAYS.indexOf(p.digest_day) >= 0 ? p.digest_day : "sun",
       timezone:
         typeof p.timezone === "string" && p.timezone.trim()
           ? p.timezone.trim()
@@ -446,7 +469,12 @@
     if (activeChannels.length === 0) return [];
 
     var events = [];
-    var pushForAllChannels = function (eventType, periodKey, keySuffix, payload) {
+    var pushForAllChannels = function (
+      eventType,
+      periodKey,
+      keySuffix,
+      payload,
+    ) {
       for (var c = 0; c < activeChannels.length; c++) {
         var ch = activeChannels[c];
         events.push({
@@ -462,7 +490,7 @@
     var recurringAlerts = computeRecurringAlerts(
       ledger,
       asOfDate,
-      prefs.upcoming_bill_days
+      prefs.upcoming_bill_days,
     );
 
     if (prefs.upcoming_bill_enabled) {
@@ -478,7 +506,7 @@
             amount: up.schedule.amount,
             scheduledDate: up.scheduledDate,
             daysUntil: up.daysUntil,
-          }
+          },
         );
       }
     }
@@ -498,7 +526,7 @@
             amount: ov.schedule.amount,
             scheduledDate: ov.scheduledDate,
             daysOverdue: Math.abs(ov.daysUntil),
-          }
+          },
         );
       }
     }
@@ -518,7 +546,7 @@
               month: month,
               budget: row.budget,
               actual: row.actual,
-            }
+            },
           );
         } else if (
           (row.status === "near" || row.status === "over") &&
@@ -533,7 +561,7 @@
               month: month,
               budget: row.budget,
               actual: row.actual,
-            }
+            },
           );
         }
       }
@@ -552,7 +580,8 @@
   }
 
   function formatAed(fils) {
-    var n = typeof fils === "number" && Number.isFinite(fils) ? Math.round(fils) : 0;
+    var n =
+      typeof fils === "number" && Number.isFinite(fils) ? Math.round(fils) : 0;
     var neg = n < 0;
     var abs = Math.abs(n);
     var whole = Math.floor(abs / 100);
@@ -616,7 +645,10 @@
             : p.daysUntil === 1
               ? "due tomorrow (" + p.scheduledDate + ")"
               : "due in " + p.daysUntil + " days (" + p.scheduledDate + ")";
-        var label = p.scheduleType === "income" ? "Upcoming recurring income" : "Upcoming bill due";
+        var label =
+          p.scheduleType === "income"
+            ? "Upcoming recurring income"
+            : "Upcoming bill due";
         subject = "Fuloos: " + p.scheduleName + " " + when;
         text =
           label +
@@ -659,8 +691,16 @@
         break;
       }
       case "budget_80": {
-        var pct80 = p.budget > 0 ? Math.round((p.actual / p.budget) * 100) : 100;
-        subject = "Fuloos: " + p.categoryName + " budget at " + pct80 + "% (" + p.month + ")";
+        var pct80 =
+          p.budget > 0 ? Math.round((p.actual / p.budget) * 100) : 100;
+        subject =
+          "Fuloos: " +
+          p.categoryName +
+          " budget at " +
+          pct80 +
+          "% (" +
+          p.month +
+          ")";
         text =
           "Your " +
           p.categoryName +
@@ -687,7 +727,8 @@
         break;
       }
       case "budget_100": {
-        subject = "Fuloos: " + p.categoryName + " budget exceeded (" + p.month + ")";
+        subject =
+          "Fuloos: " + p.categoryName + " budget exceeded (" + p.month + ")";
         text =
           "Your " +
           p.categoryName +
@@ -710,7 +751,8 @@
         break;
       }
       case "weekly_digest": {
-        subject = "Fuloos: Weekly summary (" + p.fromDate + " to " + p.toDate + ")";
+        subject =
+          "Fuloos: Weekly summary (" + p.fromDate + " to " + p.toDate + ")";
         text =
           "Weekly summary (" +
           p.fromDate +
@@ -875,6 +917,7 @@
   }
 
   return {
+    readAllRecords: readAllRecords,
     WEEKDAYS: WEEKDAYS,
     daysInMonth: daysInMonth,
     parseIsoDate: parseIsoDate,

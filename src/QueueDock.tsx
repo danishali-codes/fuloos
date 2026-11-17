@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { CheckCircle2, ChevronDown, ChevronUp, Loader2, X } from "lucide-react";
 import type { QueueTask, TaskQueue } from "./taskQueue";
@@ -36,7 +37,9 @@ function TaskRow({
         <span className="queue-task-state">
           {task.status === "queued" && "Waiting"}
           {task.status === "running" &&
-            (task.total > 1 ? `${task.done} / ${task.total}` : "Saving…")}
+            (task.total > 1
+              ? `${task.done} / ${task.total}`
+              : uiText("Saving…"))}
           {task.status === "done" && "Saved"}
           {task.status === "failed" && "Failed"}
         </span>
@@ -92,7 +95,7 @@ export function QueueDock({ queue }: { queue: TaskQueue }) {
   return (
     <aside
       className={`queue-dock${failed ? " has-failed" : ""}`}
-      aria-label="Background saves"
+      aria-label={uiText("Background saves")}
     >
       <button
         className="queue-dock-head"
@@ -128,8 +131,10 @@ export function QueueDock({ queue }: { queue: TaskQueue }) {
           </ul>
           {pending > 0 && (
             <p className="queue-note">
-              You can keep using Fuloos. Keep this tab open until saving
-              finishes.
+              {" "}
+              {uiText(
+                "You can keep using Fuloos. Keep this tab open until saving finishes.",
+              )}{" "}
             </p>
           )}
         </>

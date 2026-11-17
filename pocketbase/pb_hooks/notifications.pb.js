@@ -82,12 +82,14 @@ cronAdd("fuloos_notifications_hourly", "0 * * * *", () => {
       : undefined,
   });
 
-  const prefRecords = $app.findRecordsByFilter(
+  const find = (collection, filter, sort, limit, offset, params) =>
+    $app.findRecordsByFilter(collection, filter, sort, limit, offset, params);
+  const prefRecords = lib.readAllRecords(
+    find,
     "fuloos_notification_prefs",
     "email_enabled = true || channels != ''",
-    "",
-    500,
-    0,
+    {},
+    (record) => record,
   );
 
   for (const prefRec of prefRecords) {
@@ -124,7 +126,9 @@ cronAdd("fuloos_notifications_hourly", "0 * * * *", () => {
       } catch (_) {
         continue;
       }
-      const userEmail = userRec.email ? userRec.email() : userRec.getString("email");
+      const userEmail = userRec.email
+        ? userRec.email()
+        : userRec.getString("email");
 
       const asOfDate = lib.todayInTimezone(prefs.timezone, new Date());
 
@@ -168,19 +172,30 @@ cronAdd("fuloos_notifications_hourly", "0 * * * *", () => {
         amount: t.getInt("amount"),
         category_id: t.getString("category_id") || null,
         date: t.getString("date"),
+        splits: t.get("splits") || [],
       });
 
       const loadAll = (collection, mapper) => {
         try {
-          const rows = $app.findRecordsByFilter(
+          const relation =
+            collection === "fuloos_transactions"
+              ? "account_id.household_id"
+              : collection === "fuloos_budgets" ||
+                  collection === "fuloos_categories"
+                ? "household_id"
+                : null;
+          const shared = relation
+            ? `${relation} != '' && (${relation}.owner_id = {:uid} || (${relation}.fuloos_household_members_via_household_id.user_id ?= {:uid} && ${relation}.fuloos_household_members_via_household_id.status ?= 'active'))`
+            : "";
+          const filter =
+            "user_id = {:uid}" + (shared ? " || (" + shared + ")" : "");
+          return lib.readAllRecords(
+            find,
             collection,
-            "user_id = {:uid}",
-            "",
-            2000,
-            0,
+            filter,
             { uid: userId },
+            mapper,
           );
-          return rows.map(mapper);
         } catch (_) {
           return [];
         }
@@ -302,10 +317,14 @@ routerAdd("POST", "/api/fuloos/notify-test", (e) => {
   );
   if (recentHour.length >= 3) {
     return e.json(429, {
-      message: "Rate limit exceeded. You can send up to 3 test emails per hour.",
+      message:
+        "Rate limit exceeded. You can send up to 3 test emails per hour.",
     });
   }
-  if (recentHour.length > 0 && recentHour[0].getString("sent_at") >= oneMinAgo) {
+  if (
+    recentHour.length > 0 &&
+    recentHour[0].getString("sent_at") >= oneMinAgo
+  ) {
     return e.json(429, {
       message: "Please wait a minute before sending another test email.",
     });

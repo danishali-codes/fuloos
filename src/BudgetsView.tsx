@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { PeriodPicker } from "./PeriodPicker";
 import {
@@ -105,7 +106,7 @@ function BudgetRow({
           />
         </div>
         <p>
-          {concealed(row.actual)} of {concealed(row.budget)}
+          {concealed(row.actual)} {uiText("of")} {concealed(row.budget)}
           {pct !== null && ` · ${pct}%`}
           {caption && ` · ${caption}`}
         </p>
@@ -175,12 +176,15 @@ export function BudgetsPage({
           activeMonths={budgetMonths}
           onChange={(next) => onMonthChange(next.month)}
         />
-        <span className="muted">Budgets compare against expenses only</span>
+        <span className="muted">
+          {uiText("Budgets compare against expenses only")}
+        </span>
       </div>
       <section className="stats">
         <article className="stat net">
           <div className="stat-label">
-            Budgeted <PiggyBank size={17} />
+            {" "}
+            {uiText("Budgeted")} <PiggyBank size={17} />
           </div>
           <h2>{concealed(report.totalBudget)}</h2>
           <small>
@@ -191,22 +195,22 @@ export function BudgetsPage({
           <div className="stat-decoration" />
         </article>
         <article className="stat">
-          <div className="stat-label">Spent against budgets</div>
+          <div className="stat-label">{uiText("Spent against budgets")}</div>
           <h2>{concealed(report.totalActual)}</h2>
           <small>
             {report.totalBudget > 0
               ? `${Math.round((report.totalActual / report.totalBudget) * 100)}% used`
-              : "No limits set"}{" "}
+              : uiText("No limits set")}{" "}
             <span>
               {report.unbudgeted > 0
                 ? `${concealed(report.unbudgeted)} unbudgeted`
-                : "All spending budgeted"}
+                : uiText("All spending budgeted")}
             </span>
           </small>
         </article>
         <article className="stat">
           <div className="stat-label">
-            {left < 0 ? "Over budget" : "Left to spend"}
+            {left < 0 ? uiText("Over budget") : uiText("Left to spend")}
           </div>
           <h2 className={left < 0 ? "budget-over-text" : undefined}>
             {concealed(Math.abs(left))}
@@ -214,7 +218,7 @@ export function BudgetsPage({
           <small>
             {overCount
               ? `${overCount} ${overCount === 1 ? "category" : "categories"} over`
-              : "Nothing over budget"}
+              : uiText("Nothing over budget")}
           </small>
         </article>
       </section>
@@ -223,7 +227,7 @@ export function BudgetsPage({
           <div className="panel-heading">
             <div>
               <h2>{monthLabel(month)}</h2>
-              <p>Spending against each category's monthly limit</p>
+              <p>{uiText("Spending against each category's monthly limit")}</p>
             </div>
             <span className="count">{report.rows.length}</span>
           </div>
@@ -261,11 +265,17 @@ export function BudgetsPage({
           {!report.rows.length && (
             <div className="empty">
               <PiggyBank size={28} />
-              <h3>No budgets for {monthLabel(month)}</h3>
+              <h3>
+                {uiText("No budgets for")} {monthLabel(month)}
+              </h3>
               <p>
                 {ledger.categories.length
-                  ? "Set a monthly limit for a category to track your spending against it."
-                  : "Create a category first, then give it a monthly limit."}
+                  ? uiText(
+                      "Set a monthly limit for a category to track your spending against it.",
+                    )
+                  : uiText(
+                      "Create a category first, then give it a monthly limit.",
+                    )}
               </p>
               {ledger.categories.length > 0 && (
                 <button
@@ -273,7 +283,7 @@ export function BudgetsPage({
                   disabled={busy}
                   onClick={() => onAdd({ start_month: month })}
                 >
-                  <Plus size={16} /> Add budget
+                  <Plus size={16} /> {uiText("Add budget")}{" "}
                 </button>
               )}
             </div>
@@ -284,8 +294,10 @@ export function BudgetsPage({
             <section className="panel">
               <div className="panel-heading">
                 <div>
-                  <h2>Not budgeted yet</h2>
-                  <p>Categories with spending this month but no limit</p>
+                  <h2>{uiText("Not budgeted yet")}</h2>
+                  <p>
+                    {uiText("Categories with spending this month but no limit")}
+                  </p>
                 </div>
               </div>
               {unbudgeted.map(({ category, actual }) => (
@@ -293,7 +305,9 @@ export function BudgetsPage({
                   <CategoryIcon category={category} />
                   <div>
                     <b>{category.name}</b>
-                    <p>{concealed(actual)} spent</p>
+                    <p>
+                      {concealed(actual)} {uiText("spent")}
+                    </p>
                   </div>
                   <button
                     className="text-button"
@@ -302,7 +316,8 @@ export function BudgetsPage({
                       onAdd({ category_id: category.id, start_month: month })
                     }
                   >
-                    Set budget <ArrowRight size={15} />
+                    {" "}
+                    {uiText("Set budget")} <ArrowRight size={15} />
                   </button>
                 </div>
               ))}
@@ -311,8 +326,8 @@ export function BudgetsPage({
           <section className="panel">
             <div className="panel-heading">
               <div>
-                <h2>All budgets</h2>
-                <p>Past, current and upcoming limits</p>
+                <h2>{uiText("All budgets")}</h2>
+                <p>{uiText("Past, current and upcoming limits")}</p>
               </div>
               <span className="count">{allBudgets.length}</span>
             </div>
@@ -326,11 +341,12 @@ export function BudgetsPage({
                     <b>
                       {category.name}{" "}
                       {b.household_id && (
-                        <span className="shared-badge">Shared</span>
+                        <span className="shared-badge">{uiText("Shared")}</span>
                       )}
                     </b>
                     <p>
-                      {concealed(b.amount)} a month · {budgetPeriod(b)}
+                      {concealed(b.amount)} {uiText("a month ·")}{" "}
+                      {budgetPeriod(b)}
                     </p>
                   </div>
                   <button
@@ -355,9 +371,12 @@ export function BudgetsPage({
             {!allBudgets.length && (
               <div className="empty">
                 <PiggyBank size={28} />
-                <h3>No budgets yet</h3>
+                <h3>{uiText("No budgets yet")}</h3>
                 <p>
-                  Budgets repeat every month until you give them an end month.
+                  {" "}
+                  {uiText(
+                    "Budgets repeat every month until you give them an end month.",
+                  )}{" "}
                 </p>
               </div>
             )}
@@ -392,21 +411,26 @@ export function BudgetReportPanel({
     <section className="panel budget-report">
       <div className="panel-heading">
         <div>
-          <h2>Budget vs actual</h2>
+          <h2>{uiText("Budget vs actual")}</h2>
           <p>
             {rangeLabel}
             {multiMonth && " · budgets add up across the months they cover"}
           </p>
         </div>
         <button className="text-button" onClick={onManage}>
-          Manage budgets <ArrowRight size={15} />
+          {" "}
+          {uiText("Manage budgets")} <ArrowRight size={15} />
         </button>
       </div>
       {report.rows.length > 0 ? (
         <>
           <div className="filters">
-            <b>Budgeted {concealed(report.totalBudget)}</b>
-            <b>Spent {concealed(report.totalActual)}</b>
+            <b>
+              {uiText("Budgeted")} {concealed(report.totalBudget)}
+            </b>
+            <b>
+              {uiText("Spent")} {concealed(report.totalActual)}
+            </b>
             <b
               className={
                 report.totalActual > report.totalBudget
@@ -420,7 +444,8 @@ export function BudgetReportPanel({
             </b>
             {report.unbudgeted > 0 && (
               <span className="muted">
-                Unbudgeted spending {concealed(report.unbudgeted)}
+                {" "}
+                {uiText("Unbudgeted spending")} {concealed(report.unbudgeted)}
               </span>
             )}
           </div>
@@ -440,9 +465,12 @@ export function BudgetReportPanel({
       ) : (
         <div className="empty">
           <PiggyBank size={28} />
-          <h3>No budgets in this period</h3>
+          <h3>{uiText("No budgets in this period")}</h3>
           <p>
-            Set monthly limits per category to compare them with your spending.
+            {" "}
+            {uiText(
+              "Set monthly limits per category to compare them with your spending.",
+            )}{" "}
           </p>
         </div>
       )}
@@ -519,13 +547,15 @@ export function BudgetEditorModal({
     >
       <div className="modal-head">
         <div>
-          <span className="eyebrow">SPEND WITH INTENTION</span>
-          <h2 id="budget-modal-title">{item ? "Edit" : "Add"} budget</h2>
+          <span className="eyebrow">{uiText("SPEND WITH INTENTION")}</span>
+          <h2 id="budget-modal-title">
+            {item ? uiText("Edit") : uiText("Add")} {uiText("budget")}
+          </h2>
         </div>
         <button
           disabled={busy}
           className="icon-button"
-          aria-label="Close dialog"
+          aria-label={uiText("Close dialog")}
           onClick={onClose}
         >
           <X size={21} />
@@ -533,10 +563,13 @@ export function BudgetEditorModal({
       </div>
       <form onSubmit={submit}>
         {!ledger.categories.length && (
-          <div className="notice">Create a category first to set a budget.</div>
+          <div className="notice">
+            {uiText("Create a category first to set a budget.")}
+          </div>
         )}
         <label>
-          Category
+          {" "}
+          {uiText("Category")}{" "}
           <select name="category_id" required defaultValue={defaultCategory}>
             {ledger.categories.map((c) => (
               <option value={c.id} key={c.id}>
@@ -546,7 +579,8 @@ export function BudgetEditorModal({
           </select>
         </label>
         <label>
-          Monthly limit <span className="muted">AED</span>
+          {" "}
+          {uiText("Monthly limit")} <span className="muted">AED</span>
           <input
             name="amount"
             required
@@ -562,7 +596,8 @@ export function BudgetEditorModal({
         </label>
         <div className="form-row">
           <label>
-            Starts
+            {" "}
+            {uiText("Starts")}{" "}
             <input
               name="start_month"
               type="month"
@@ -575,7 +610,8 @@ export function BudgetEditorModal({
             />
           </label>
           <label>
-            Ends
+            {" "}
+            {uiText("Ends")}{" "}
             <input
               name="end_month"
               type="month"
@@ -594,13 +630,14 @@ export function BudgetEditorModal({
             type="checkbox"
             checked={repeats}
             onChange={(e) => setRepeats(e.target.checked)}
-          />
-          Repeat every month with no end date
+          />{" "}
+          {uiText("Repeat every month with no end date")}{" "}
         </label>
         <p className="form-hint">
-          Only expenses count toward a budget. Editing the amount changes every
-          month this budget covers; to change it from a later month, give this
-          budget an end month and add a new one.
+          {" "}
+          {uiText(
+            "Only expenses count toward a budget. Editing the amount changes every month this budget covers; to change it from a later month, give this budget an end month and add a new one.",
+          )}{" "}
         </p>
         {error && (
           <div className="error" role="alert">
@@ -614,13 +651,14 @@ export function BudgetEditorModal({
             disabled={busy}
             onClick={onClose}
           >
-            Cancel
+            {" "}
+            {uiText("Cancel")}{" "}
           </button>
           <button
             className="primary"
             disabled={busy || !ledger.categories.length}
           >
-            {busy ? "Saving…" : "Save budget"}
+            {busy ? uiText("Saving…") : uiText("Save budget")}
           </button>
         </div>
       </form>

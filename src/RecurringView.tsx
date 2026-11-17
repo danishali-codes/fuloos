@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDownLeft,
@@ -146,14 +147,21 @@ export function DashboardRecurring({
       <section className="panel recurring-forecast-panel">
         <div className="panel-heading">
           <div>
-            <h2>Monthly recurring · {monthName}</h2>
-            <p>Recorded ledger totals stay separate from scheduled forecasts</p>
+            <h2>
+              {uiText("Monthly recurring ·")} {monthName}
+            </h2>
+            <p>
+              {uiText(
+                "Recorded ledger totals stay separate from scheduled forecasts",
+              )}
+            </p>
           </div>
           <button
             className="text-button"
             onClick={() => onOpenRecurring("schedules", "all")}
           >
-            Manage <ArrowRight size={15} />
+            {" "}
+            {uiText("Manage")} <ArrowRight size={15} />
           </button>
         </div>
 
@@ -165,8 +173,9 @@ export function DashboardRecurring({
               </span>
               <div>
                 <b>
-                  {pendingAttentionCount} recurring pattern
-                  {pendingAttentionCount > 1 ? "s" : ""} to review
+                  {pendingAttentionCount} {uiText("recurring pattern")}{" "}
+                  {pendingAttentionCount > 1 ? "s" : ""}{" "}
+                  {uiText("to review")}{" "}
                 </b>
                 <p>
                   {detected.length > 0 &&
@@ -184,7 +193,8 @@ export function DashboardRecurring({
               className="secondary compact-btn"
               onClick={() => onOpenRecurring("suggestions")}
             >
-              Review suggestions <ArrowRight size={13} />
+              {" "}
+              {uiText("Review suggestions")} <ArrowRight size={13} />
             </button>
           </div>
         )}
@@ -193,45 +203,53 @@ export function DashboardRecurring({
           <div className="recurring-breakdown">
             <div className="recurring-metric-box">
               <div className="recurring-metric-head">
-                <span>Estimated recurring expenses</span>
+                <span>{uiText("Estimated recurring expenses")}</span>
                 <strong>{concealed(summary.monthly.estimated.expense)}</strong>
               </div>
               <div className="recurring-metric-sub">
                 <span>
-                  Paid (recorded): {concealed(summary.monthly.confirmed.expense)}
+                  {" "}
+                  {uiText("Paid (recorded):")}{" "}
+                  {concealed(summary.monthly.confirmed.expense)}
                 </span>
                 <span>
-                  Remaining forecast:{" "}
+                  {" "}
+                  {uiText("Remaining forecast:")}{" "}
                   {concealed(summary.monthly.unconfirmed.expense)}
                 </span>
               </div>
               <div className="recurring-metric-foot">
-                Actual {monthName} expenses{" "}
-                {concealed(summary.monthly.actual.expense)} · Projected month
-                total <b>{concealed(summary.monthly.projected.expense)}</b>
+                {" "}
+                {uiText("Actual")} {monthName} {uiText("expenses")}{" "}
+                {concealed(summary.monthly.actual.expense)}{" "}
+                {uiText("· Projected month total")}{" "}
+                <b>{concealed(summary.monthly.projected.expense)}</b>
               </div>
             </div>
             <div className="recurring-metric-box">
               <div className="recurring-metric-head">
-                <span>Estimated recurring income</span>
+                <span>{uiText("Estimated recurring income")}</span>
                 <strong className="green-text">
                   {concealed(summary.monthly.estimated.income)}
                 </strong>
               </div>
               <div className="recurring-metric-sub">
                 <span>
-                  Received (recorded):{" "}
+                  {" "}
+                  {uiText("Received (recorded):")}{" "}
                   {concealed(summary.monthly.confirmed.income)}
                 </span>
                 <span>
-                  Remaining forecast:{" "}
+                  {" "}
+                  {uiText("Remaining forecast:")}{" "}
                   {concealed(summary.monthly.unconfirmed.income)}
                 </span>
               </div>
               <div className="recurring-metric-foot">
-                Actual {monthName} income{" "}
-                {concealed(summary.monthly.actual.income)} · Projected month
-                total{" "}
+                {" "}
+                {uiText("Actual")} {monthName} {uiText("income")}{" "}
+                {concealed(summary.monthly.actual.income)}{" "}
+                {uiText("· Projected month total")}{" "}
                 <b className="green-text">
                   {concealed(summary.monthly.projected.income)}
                 </b>
@@ -240,25 +258,31 @@ export function DashboardRecurring({
 
             <div className="recurring-safe-note-wrap">
               <p className="recurring-safe-note">
-                Linked payments are counted once in recorded totals and never
-                modify balances twice.
+                {" "}
+                {uiText(
+                  "Linked payments are counted once in recorded totals and never modify balances twice.",
+                )}{" "}
               </p>
               <button
                 type="button"
                 className="text-link-button small"
                 onClick={() => onOpenRecurring("insights")}
               >
-                View 30/60/90d cash flow insights <ArrowRight size={12} />
+                {" "}
+                {uiText("View 30/60/90d cash flow insights")}{" "}
+                <ArrowRight size={12} />
               </button>
             </div>
           </div>
         ) : (
           <div className="empty">
             <Repeat size={28} />
-            <h3>Plan regular bills &amp; income</h3>
+            <h3>{uiText("Plan regular bills & income")}</h3>
             <p>
-              Track subscriptions, rent, utilities and salary without changing
-              account balances early.
+              {" "}
+              {uiText(
+                "Track subscriptions, rent, utilities and salary without changing account balances early.",
+              )}{" "}
             </p>
           </div>
         )}
@@ -268,15 +292,19 @@ export function DashboardRecurring({
         <div className="panel-heading">
           <div>
             <h2>
-              Upcoming · next 30 days{" "}
+              {" "}
+              {uiText("Upcoming · next 30 days")}{" "}
               <span className="count">
                 {forecast.horizons[30].unconfirmedCount}
               </span>
             </h2>
             <p>
-              Forecast: −{concealed(forecast.horizons[30].expense.expected)}{" "}
-              expenses · +{concealed(forecast.horizons[30].income.expected)}{" "}
-              income
+              {" "}
+              {uiText("Forecast: −")}
+              {concealed(forecast.horizons[30].expense.expected)}{" "}
+              {uiText("expenses · +")}
+              {concealed(forecast.horizons[30].income.expected)}{" "}
+              {uiText("income")}{" "}
             </p>
           </div>
           <div className="recurring-head-actions">
@@ -285,14 +313,15 @@ export function DashboardRecurring({
                 className="status-pill overdue"
                 onClick={() => onOpenRecurring("schedules", "overdue")}
               >
-                {summary.overdueCount} overdue
+                {summary.overdueCount} {uiText("overdue")}{" "}
               </button>
             )}
             <button
               className="text-button"
               onClick={() => onOpenRecurring("upcoming")}
             >
-              View all <ArrowRight size={15} />
+              {" "}
+              {uiText("View all")} <ArrowRight size={15} />
             </button>
           </div>
         </div>
@@ -334,15 +363,17 @@ export function DashboardRecurring({
                       <b className="recurring-title-line">
                         <span>{item.schedule.name}</span>
                         {item.schedule.amount_type === "variable" && (
-                          <span className="mini-tag variable">Variable</span>
+                          <span className="mini-tag variable">
+                            {uiText("Variable")}
+                          </span>
                         )}
                       </b>
                       <small>
                         {account?.name ?? "Account"} ·{" "}
                         {item.status === "due_today"
-                          ? "Due today"
+                          ? uiText("Due today")
                           : `Due ${formatShortDate(item.date)}`}{" "}
-                        · Forecast
+                        {uiText("· Forecast")}{" "}
                       </small>
                     </span>
                     <span className="transaction-value">
@@ -374,7 +405,8 @@ export function DashboardRecurring({
                     disabled={busy}
                     onClick={() => onConfirm(item.schedule, item.date)}
                   >
-                    Mark paid
+                    {" "}
+                    {uiText("Mark paid")}{" "}
                   </button>
                 </div>
               );
@@ -383,9 +415,12 @@ export function DashboardRecurring({
         ) : (
           <div className="empty">
             <Calendar size={28} />
-            <h3>Nothing due in the next 30 days</h3>
+            <h3>{uiText("Nothing due in the next 30 days")}</h3>
             <p>
-              All upcoming scheduled payments for the next 30 days are clear.
+              {" "}
+              {uiText(
+                "All upcoming scheduled payments for the next 30 days are clear.",
+              )}{" "}
             </p>
           </div>
         )}
@@ -395,11 +430,7 @@ export function DashboardRecurring({
 }
 
 export type RecurringTab =
-  | "schedules"
-  | "suggestions"
-  | "upcoming"
-  | "history"
-  | "insights";
+  "schedules" | "suggestions" | "upcoming" | "history" | "insights";
 
 export function RecurringPage({
   ledger,
@@ -504,46 +535,55 @@ export function RecurringPage({
       <section className="stats">
         <article className="stat net">
           <div className="stat-label">
-            Monthly recurring expenses <Repeat size={17} />
+            {" "}
+            {uiText("Monthly recurring expenses")} <Repeat size={17} />
           </div>
           <h2>{concealed(dashboard.monthly.estimated.expense)}</h2>
           <small>
-            Paid {concealed(dashboard.monthly.confirmed.expense)}{" "}
+            {" "}
+            {uiText("Paid")} {concealed(dashboard.monthly.confirmed.expense)}{" "}
             <span>
-              Forecast {concealed(dashboard.monthly.unconfirmed.expense)}
+              {" "}
+              {uiText("Forecast")}{" "}
+              {concealed(dashboard.monthly.unconfirmed.expense)}
             </span>
           </small>
           <div className="stat-decoration" />
         </article>
         <article className="stat">
           <div className="stat-label">
-            Monthly recurring income{" "}
+            {" "}
+            {uiText("Monthly recurring income")}{" "}
             <span className="round-icon green">
               <ArrowDownLeft size={19} />
             </span>
           </div>
           <h2>{concealed(dashboard.monthly.estimated.income)}</h2>
           <small>
-            Received {concealed(dashboard.monthly.confirmed.income)}{" "}
+            {" "}
+            {uiText("Received")} {concealed(dashboard.monthly.confirmed.income)}{" "}
             <span className="green-text">
-              Forecast {concealed(dashboard.monthly.unconfirmed.income)}
+              {" "}
+              {uiText("Forecast")}{" "}
+              {concealed(dashboard.monthly.unconfirmed.income)}
             </span>
           </small>
         </article>
         <article className="stat">
           <div className="stat-label">
-            Next 30 days due{" "}
+            {" "}
+            {uiText("Next 30 days due")}{" "}
             <span className="round-icon terracotta">
               <ArrowUpRight size={19} />
             </span>
           </div>
           <h2>{concealed(dashboard.upcoming30Days.expense)}</h2>
           <small>
-            {dashboard.upcoming30Days.items.length} upcoming{" "}
+            {dashboard.upcoming30Days.items.length} {uiText("upcoming")}{" "}
             <span>
               {dashboard.overdueCount
                 ? `${dashboard.overdueCount} overdue`
-                : "Balances untouched until paid"}
+                : uiText("Balances untouched until paid")}
             </span>
           </small>
         </article>
@@ -554,7 +594,7 @@ export function RecurringPage({
         <div
           className="recurring-tabs"
           role="tablist"
-          aria-label="Recurring views"
+          aria-label={uiText("Recurring views")}
         >
           <button
             type="button"
@@ -563,7 +603,7 @@ export function RecurringPage({
             className={`recurring-tab-btn ${activeTab === "schedules" ? "active" : ""}`}
             onClick={() => setActiveTab("schedules")}
           >
-            <Repeat size={16} /> Schedules
+            <Repeat size={16} /> {uiText("Schedules")}{" "}
             <span className="tab-count">{(ledger.recurring ?? []).length}</span>
           </button>
           <button
@@ -573,7 +613,7 @@ export function RecurringPage({
             className={`recurring-tab-btn ${activeTab === "suggestions" ? "active" : ""}`}
             onClick={() => setActiveTab("suggestions")}
           >
-            <Sparkles size={16} /> Suggestions
+            <Sparkles size={16} /> {uiText("Suggestions")}{" "}
             {suggestionsBadgeCount > 0 && (
               <span className="tab-count highlight">
                 {suggestionsBadgeCount}
@@ -587,7 +627,7 @@ export function RecurringPage({
             className={`recurring-tab-btn ${activeTab === "upcoming" ? "active" : ""}`}
             onClick={() => setActiveTab("upcoming")}
           >
-            <Calendar size={16} /> Upcoming
+            <Calendar size={16} /> {uiText("Upcoming")}{" "}
             <span className="tab-count">
               {forecast.horizons[30].unconfirmedCount}
             </span>
@@ -599,7 +639,7 @@ export function RecurringPage({
             className={`recurring-tab-btn ${activeTab === "history" ? "active" : ""}`}
             onClick={() => setActiveTab("history")}
           >
-            <ReceiptText size={16} /> History
+            <ReceiptText size={16} /> {uiText("History")}{" "}
             <span className="tab-count">
               {(ledger.recurring_occurrences ?? []).length}
             </span>
@@ -611,15 +651,15 @@ export function RecurringPage({
             className={`recurring-tab-btn ${activeTab === "insights" ? "active" : ""}`}
             onClick={() => setActiveTab("insights")}
           >
-            <TrendingUp size={16} /> Insights
+            <TrendingUp size={16} /> {uiText("Insights")}{" "}
           </button>
         </div>
 
         <button
           type="button"
           className={`icon-button settings-toggle ${showSettings ? "active" : ""}`}
-          aria-label="Automation preferences"
-          title="Automation preferences"
+          aria-label={uiText("Automation preferences")}
+          title={uiText("Automation preferences")}
           onClick={() => setShowSettings(!showSettings)}
         >
           <Settings size={17} />
@@ -633,17 +673,19 @@ export function RecurringPage({
             <div className="settings-title">
               <Settings size={18} />
               <div>
-                <b>Recurring Automation Preferences</b>
+                <b>{uiText("Recurring Automation Preferences")}</b>
                 <p>
-                  Control intelligent pattern detection, automatic statement
-                  matching, and dismissed items
+                  {" "}
+                  {uiText(
+                    "Control intelligent pattern detection, automatic statement matching, and dismissed items",
+                  )}{" "}
                 </p>
               </div>
             </div>
             <button
               type="button"
               className="icon-button"
-              aria-label="Close preferences"
+              aria-label={uiText("Close preferences")}
               onClick={() => setShowSettings(false)}
             >
               <X size={17} />
@@ -653,10 +695,12 @@ export function RecurringPage({
           <div className="settings-grid">
             <div className="setting-item">
               <label htmlFor="pref-auto-detect">
-                <b>Automatic pattern detection</b>
+                <b>{uiText("Automatic pattern detection")}</b>
                 <span className="muted">
-                  Discovers recurring subscriptions, bills and salaries from
-                  your history
+                  {" "}
+                  {uiText(
+                    "Discovers recurring subscriptions, bills and salaries from your history",
+                  )}{" "}
                 </span>
               </label>
               <select
@@ -669,16 +713,23 @@ export function RecurringPage({
                   })
                 }
               >
-                <option value="on">On · detect recurring patterns</option>
-                <option value="off">Off · do not detect patterns</option>
+                <option value="on">
+                  {uiText("On · detect recurring patterns")}
+                </option>
+                <option value="off">
+                  {uiText("Off · do not detect patterns")}
+                </option>
               </select>
             </div>
 
             <div className="setting-item">
               <label htmlFor="pref-auto-match">
-                <b>Transaction reconciliation mode</b>
+                <b>{uiText("Transaction reconciliation mode")}</b>
                 <span className="muted">
-                  How bank transactions and CSV imports match active schedules
+                  {" "}
+                  {uiText(
+                    "How bank transactions and CSV imports match active schedules",
+                  )}{" "}
                 </span>
               </label>
               <select
@@ -692,12 +743,16 @@ export function RecurringPage({
                 }
               >
                 <option value="auto">
-                  Auto · link high-confidence matches (≥88%)
+                  {" "}
+                  {uiText("Auto · link high-confidence matches (≥88%)")}{" "}
                 </option>
                 <option value="review">
-                  Review · require manual confirmation
+                  {" "}
+                  {uiText("Review · require manual confirmation")}{" "}
                 </option>
-                <option value="off">Off · disable reconciliation</option>
+                <option value="off">
+                  {uiText("Off · disable reconciliation")}
+                </option>
               </select>
             </div>
           </div>
@@ -707,7 +762,7 @@ export function RecurringPage({
               <span>
                 {prefs.dismissed_keys.length > 0
                   ? `${prefs.dismissed_keys.length} dismissed pattern${prefs.dismissed_keys.length > 1 ? "s or matches" : " or match"}`
-                  : "No dismissed items"}
+                  : uiText("No dismissed items")}
               </span>
               {prefs.dismissed_keys.length > 0 && onRestoreDismissed && (
                 <button
@@ -716,7 +771,7 @@ export function RecurringPage({
                   disabled={busy}
                   onClick={onRestoreDismissed}
                 >
-                  <RotateCcw size={13} /> Restore all dismissed
+                  <RotateCcw size={13} /> {uiText("Restore all dismissed")}{" "}
                 </button>
               )}
             </div>
@@ -727,7 +782,8 @@ export function RecurringPage({
                 disabled={busy || prefs.auto_match === "off"}
                 onClick={onRunReconciliation}
               >
-                <RefreshCw size={14} /> Reconcile transactions now
+                <RefreshCw size={14} />{" "}
+                {uiText("Reconcile transactions now")}{" "}
               </button>
             )}
           </div>

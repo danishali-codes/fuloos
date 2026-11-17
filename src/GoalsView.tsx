@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
@@ -106,10 +107,14 @@ function GoalCard({
           <div>
             <div className="goal-badges">
               <span className="goal-kind-pill">
-                {goal.kind === "sinking_fund" ? "Sinking fund" : "Savings goal"}
+                {goal.kind === "sinking_fund"
+                  ? uiText("Sinking fund")
+                  : uiText("Savings goal")}
               </span>
               {goal.status === "paused" ? (
-                <span className="goal-health-pill paused">Paused</span>
+                <span className="goal-health-pill paused">
+                  {uiText("Paused")}
+                </span>
               ) : (
                 <span className={`goal-health-pill ${item.healthStatus}`}>
                   {HEALTH_LABELS[item.healthStatus]}
@@ -118,7 +123,9 @@ function GoalCard({
             </div>
             <h3>{goal.name}</h3>
             {linkedAccount && (
-              <small className="muted">Linked to {linkedAccount.name}</small>
+              <small className="muted">
+                {uiText("Linked to")} {linkedAccount.name}
+              </small>
             )}
           </div>
         </div>
@@ -129,8 +136,7 @@ function GoalCard({
             disabled={busy}
             onClick={() => onContribute(goal)}
           >
-            <Plus size={15} />
-            Contribute
+            <Plus size={15} /> {uiText("Contribute")}{" "}
           </button>
           <button
             type="button"
@@ -156,7 +162,9 @@ function GoalCard({
       <div className="goal-amounts">
         <div>
           <strong>{concealed(item.effectiveAmount)}</strong>{" "}
-          <span className="muted">of {concealed(goal.target_amount)}</span>
+          <span className="muted">
+            {uiText("of")} {concealed(goal.target_amount)}
+          </span>
         </div>
         <span className="goal-pct">{pctRounded}%</span>
       </div>
@@ -174,43 +182,42 @@ function GoalCard({
           className={barStatus}
           style={{
             width: `${Math.min(100, item.progressPercent)}%`,
-            background:
-              barStatus === "on_track" ? goal.color : undefined,
+            background: barStatus === "on_track" ? goal.color : undefined,
           }}
         />
       </div>
 
       <div className="goal-meta-grid">
         <div>
-          <small>Remaining</small>
+          <small>{uiText("Remaining")}</small>
           <b>
             {item.remainingFils === 0
-              ? "Fully funded"
+              ? uiText("Fully funded")
               : concealed(item.remainingFils)}
           </b>
         </div>
         <div>
-          <small>Monthly needed</small>
+          <small>{uiText("Monthly needed")}</small>
           <b>
             {item.monthlyNeeded === null
-              ? "No deadline"
+              ? uiText("No deadline")
               : item.monthlyNeeded === 0
-                ? "Done"
+                ? uiText("Done")
                 : `${concealed(item.monthlyNeeded)}/mo`}
           </b>
         </div>
         <div>
-          <small>Target date</small>
+          <small>{uiText("Target date")}</small>
           <b>{goal.target_date ? formatDateShort(goal.target_date) : "—"}</b>
         </div>
         <div>
-          <small>Projected</small>
+          <small>{uiText("Projected")}</small>
           <b>
             {item.remainingFils === 0
-              ? "Funded"
+              ? uiText("Funded")
               : item.projectedDate
                 ? formatDateShort(item.projectedDate)
-                : "Need pace"}
+                : uiText("Need pace")}
           </b>
         </div>
       </div>
@@ -224,7 +231,9 @@ function GoalCard({
             className="text-button goal-history-toggle"
             onClick={() => setShowHistory((v) => !v)}
           >
-            {showHistory ? "Hide" : "Show"} activity ({item.contributions.length})
+            {showHistory ? uiText("Hide") : uiText("Show")}{" "}
+            {uiText("activity (")}
+            {item.contributions.length})
           </button>
           {showHistory && (
             <ul className="goal-history-list">
@@ -235,14 +244,18 @@ function GoalCard({
                     {c.notes && <span> · {c.notes}</span>}
                   </div>
                   <div className="goal-history-right">
-                    <b className={c.amount >= 0 ? "green-text" : "terracotta-text"}>
+                    <b
+                      className={
+                        c.amount >= 0 ? "green-text" : "terracotta-text"
+                      }
+                    >
                       {c.amount >= 0 ? "+" : "−"}
                       {concealed(Math.abs(c.amount))}
                     </b>
                     <button
                       type="button"
                       className="icon-button"
-                      aria-label="Remove contribution entry"
+                      aria-label={uiText("Remove contribution entry")}
                       disabled={busy}
                       onClick={() => onDeleteContribution(c)}
                     >
@@ -338,28 +351,37 @@ export function GoalsPage({
     <div className="goals-page">
       <section className="stats goals-stats">
         <article className="stat net">
-          <div className="stat-label">Saved toward goals</div>
+          <div className="stat-label">{uiText("Saved toward goals")}</div>
           <h2>{concealed(summary.totalSaved)}</h2>
           <small>
-            {summary.overallPercent}% of {concealed(summary.totalTarget)} target
+            {summary.overallPercent}
+            {uiText("% of")} {concealed(summary.totalTarget)}{" "}
+            {uiText("target")}{" "}
           </small>
         </article>
         <article className="stat">
-          <div className="stat-label">Active goals</div>
+          <div className="stat-label">{uiText("Active goals")}</div>
           <h2>{summary.activeCount}</h2>
           <small>
-            {summary.completedCount} completed · {summary.pausedCount} paused
+            {summary.completedCount} {uiText("completed ·")}{" "}
+            {summary.pausedCount} {uiText("paused")}{" "}
           </small>
         </article>
         <article className="stat">
-          <div className="stat-label">Remaining to fund</div>
-          <h2>{concealed(Math.max(0, summary.totalTarget - summary.totalSaved))}</h2>
-          <small>Across active and completed targets</small>
+          <div className="stat-label">{uiText("Remaining to fund")}</div>
+          <h2>
+            {concealed(Math.max(0, summary.totalTarget - summary.totalSaved))}
+          </h2>
+          <small>{uiText("Across active and completed targets")}</small>
         </article>
       </section>
 
       <div className="goals-toolbar">
-        <div className="tabs" role="tablist" aria-label="Filter goals by status">
+        <div
+          className="tabs"
+          role="tablist"
+          aria-label={uiText("Filter goals by status")}
+        >
           {(
             [
               ["all", "All"],
@@ -382,13 +404,13 @@ export function GoalsPage({
         </div>
         <div className="goals-kind-filter">
           <select
-            aria-label="Filter by goal type"
+            aria-label={uiText("Filter by goal type")}
             value={kindFilter}
             onChange={(e) => setKindFilter(e.target.value as "all" | GoalKind)}
           >
-            <option value="all">All types</option>
-            <option value="savings">Savings goals</option>
-            <option value="sinking_fund">Sinking funds</option>
+            <option value="all">{uiText("All types")}</option>
+            <option value="savings">{uiText("Savings goals")}</option>
+            <option value="sinking_fund">{uiText("Sinking funds")}</option>
           </select>
         </div>
       </div>
@@ -398,13 +420,15 @@ export function GoalsPage({
           <Target size={28} className="muted" />
           <h3>
             {goals.length === 0
-              ? "Give your savings a clear destination"
-              : "No goals match these filters"}
+              ? uiText("Give your savings a clear destination")
+              : uiText("No goals match these filters")}
           </h3>
           <p className="muted">
             {goals.length === 0
-              ? "Create a savings goal for an emergency fund or a sinking fund for annual expenses like car insurance and travel."
-              : "Try switching the status or type filter above."}
+              ? uiText(
+                  "Create a savings goal for an emergency fund or a sinking fund for annual expenses like car insurance and travel.",
+                )
+              : uiText("Try switching the status or type filter above.")}
           </p>
           {goals.length === 0 && (
             <button
@@ -413,8 +437,7 @@ export function GoalsPage({
               disabled={busy}
               onClick={onAddGoal}
             >
-              <Plus size={16} />
-              Create your first goal
+              <Plus size={16} /> {uiText("Create your first goal")}{" "}
             </button>
           )}
         </section>
@@ -471,11 +494,14 @@ export function DashboardGoals({
     <section className="section">
       <div className="section-title">
         <h2>
-          Savings goals <span className="count">{goals.length}</span>
+          {" "}
+          {uiText("Savings goals")}{" "}
+          <span className="count">{goals.length}</span>
         </h2>
         <div className="goal-dashboard-actions">
           <button type="button" className="text-button" onClick={onOpenGoals}>
-            View all goals <ArrowRight size={15} />
+            {" "}
+            {uiText("View all goals")} <ArrowRight size={15} />
           </button>
         </div>
       </div>
@@ -483,13 +509,16 @@ export function DashboardGoals({
       {goals.length === 0 ? (
         <article className="panel goal-dashboard-empty">
           <div>
-            <b>Set a savings goal or sinking fund</b>
+            <b>{uiText("Set a savings goal or sinking fund")}</b>
             <p className="muted">
-              Track your emergency reserve, annual renewals, or upcoming trips.
+              {" "}
+              {uiText(
+                "Track your emergency reserve, annual renewals, or upcoming trips.",
+              )}{" "}
             </p>
           </div>
           <button type="button" className="secondary" onClick={onAddGoal}>
-            <Plus size={15} /> Add goal
+            <Plus size={15} /> {uiText("Add goal")}{" "}
           </button>
         </article>
       ) : (
@@ -509,14 +538,14 @@ export function DashboardGoals({
                 <div className="goal-mini-title">
                   <b>{item.goal.name}</b>
                   <small className="muted">
-                    {concealed(item.effectiveAmount)} of{" "}
+                    {concealed(item.effectiveAmount)} {uiText("of")}{" "}
                     {concealed(item.goal.target_amount)}
                   </small>
                 </div>
                 <button
                   type="button"
                   className="icon-button"
-                  title="Contribute"
+                  title={uiText("Contribute")}
                   aria-label={`Contribute to ${item.goal.name}`}
                   onClick={() => onContributeGoal(item.goal)}
                 >
@@ -543,11 +572,13 @@ export function DashboardGoals({
               </div>
               <div className="goal-mini-foot">
                 <span className="muted">
-                  {Math.round(item.progressPercent)}% funded
+                  {Math.round(item.progressPercent)}
+                  {uiText("% funded")}{" "}
                 </span>
                 {item.monthlyNeeded !== null && item.monthlyNeeded > 0 && (
                   <span className="muted">
-                    {concealed(item.monthlyNeeded)}/mo needed
+                    {concealed(item.monthlyNeeded)}
+                    {uiText("/mo needed")}{" "}
                   </span>
                 )}
               </div>
@@ -556,13 +587,18 @@ export function DashboardGoals({
           {active.length === 0 && (
             <article className="panel goal-dashboard-empty">
               <div>
-                <b>{summary.completedCount} goals completed</b>
+                <b>
+                  {summary.completedCount} {uiText("goals completed")}
+                </b>
                 <p className="muted">
-                  All active targets are funded. Ready for the next milestone?
+                  {" "}
+                  {uiText(
+                    "All active targets are funded. Ready for the next milestone?",
+                  )}{" "}
                 </p>
               </div>
               <button type="button" className="secondary" onClick={onAddGoal}>
-                <Plus size={15} /> Add goal
+                <Plus size={15} /> {uiText("Add goal")}{" "}
               </button>
             </article>
           )}
@@ -636,14 +672,16 @@ export function GoalEditorModal({
     >
       <div className="modal-head">
         <div>
-          <span className="eyebrow">SAVE WITH PURPOSE</span>
-          <h2 id="goal-modal-title">{item ? "Edit" : "New"} goal</h2>
+          <span className="eyebrow">{uiText("SAVE WITH PURPOSE")}</span>
+          <h2 id="goal-modal-title">
+            {item ? uiText("Edit") : uiText("New")} {uiText("goal")}
+          </h2>
         </div>
         <button
           type="button"
           disabled={busy}
           className="icon-button"
-          aria-label="Close dialog"
+          aria-label={uiText("Close dialog")}
           onClick={onClose}
         >
           <X size={21} />
@@ -653,18 +691,20 @@ export function GoalEditorModal({
       <form onSubmit={submit}>
         <div className="form-row">
           <label style={{ flex: 1 }}>
-            Goal name
+            {" "}
+            {uiText("Goal name")}{" "}
             <input
               name="name"
               required
               autoFocus
               maxLength={80}
-              placeholder="e.g. Emergency reserve"
+              placeholder={uiText("e.g. Emergency reserve")}
               defaultValue={item?.name ?? ""}
             />
           </label>
           <label style={{ width: 90 }}>
-            Emoji
+            {" "}
+            {uiText("Emoji")}{" "}
             <input
               name="emoji"
               maxLength={8}
@@ -676,43 +716,45 @@ export function GoalEditorModal({
 
         <div className="form-row">
           <label>
-            Goal type
+            {" "}
+            {uiText("Goal type")}{" "}
             <select
               value={kind}
               onChange={(e) => setKind(e.target.value as GoalKind)}
             >
-              <option value="savings">Savings goal</option>
-              <option value="sinking_fund">Sinking fund</option>
+              <option value="savings">{uiText("Savings goal")}</option>
+              <option value="sinking_fund">{uiText("Sinking fund")}</option>
             </select>
           </label>
           <label>
-            Status
+            {" "}
+            {uiText("Status")}{" "}
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as GoalStatus)}
             >
-              <option value="active">Active</option>
-              <option value="paused">Paused</option>
-              <option value="completed">Completed</option>
+              <option value="active">{uiText("Active")}</option>
+              <option value="paused">{uiText("Paused")}</option>
+              <option value="completed">{uiText("Completed")}</option>
             </select>
           </label>
         </div>
 
         <div className="form-row">
           <label>
-            Target amount <span className="muted">AED</span>
+            {" "}
+            {uiText("Target amount")} <span className="muted">AED</span>
             <input
               name="target_amount"
               required
               inputMode="decimal"
               placeholder="10000.00"
-              defaultValue={
-                item ? (item.target_amount / 100).toFixed(2) : ""
-              }
+              defaultValue={item ? (item.target_amount / 100).toFixed(2) : ""}
             />
           </label>
           <label>
-            Current saved <span className="muted">AED</span>
+            {" "}
+            {uiText("Current saved")} <span className="muted">AED</span>
             <input
               name="current_amount"
               inputMode="decimal"
@@ -726,7 +768,9 @@ export function GoalEditorModal({
 
         <div className="form-row">
           <label>
-            Target date <span className="muted">Optional</span>
+            {" "}
+            {uiText("Target date")}{" "}
+            <span className="muted">{uiText("Optional")}</span>
             <input
               name="target_date"
               type="date"
@@ -736,9 +780,11 @@ export function GoalEditorModal({
             />
           </label>
           <label>
-            Linked account <span className="muted">Optional</span>
+            {" "}
+            {uiText("Linked account")}{" "}
+            <span className="muted">{uiText("Optional")}</span>
             <select name="account_id" defaultValue={item?.account_id ?? ""}>
-              <option value="">None</option>
+              <option value="">{uiText("None")}</option>
               {ledger.accounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
@@ -749,7 +795,8 @@ export function GoalEditorModal({
         </div>
 
         <label>
-          Color
+          {" "}
+          {uiText("Color")}{" "}
           <div className="swatches">
             {GOAL_COLORS.map((c) => (
               <button
@@ -765,12 +812,13 @@ export function GoalEditorModal({
         </label>
 
         <label>
-          Notes <span className="muted">Optional</span>
+          {" "}
+          {uiText("Notes")} <span className="muted">{uiText("Optional")}</span>
           <textarea
             name="notes"
             rows={2}
             maxLength={500}
-            placeholder="What is this goal for?"
+            placeholder={uiText("What is this goal for?")}
             defaultValue={item?.notes ?? ""}
           />
         </label>
@@ -788,10 +836,11 @@ export function GoalEditorModal({
             disabled={busy}
             onClick={onClose}
           >
-            Cancel
+            {" "}
+            {uiText("Cancel")}{" "}
           </button>
           <button className="primary" disabled={busy}>
-            {busy ? "Saving…" : "Save goal"}
+            {busy ? uiText("Saving…") : uiText("Save goal")}
           </button>
         </div>
       </form>
@@ -851,10 +900,11 @@ export function GoalContributeModal({
       if (absAmount <= 0) {
         throw new Error("Enter an amount greater than zero.");
       }
-      const signedAmount =
-        direction === "contribute" ? absAmount : -absAmount;
+      const signedAmount = direction === "contribute" ? absAmount : -absAmount;
       if (direction === "withdraw" && absAmount > goal.current_amount) {
-        throw new Error("Cannot withdraw more than the goal's current balance.");
+        throw new Error(
+          "Cannot withdraw more than the goal's current balance.",
+        );
       }
       const date = s("date");
       const notes = s("notes");
@@ -929,13 +979,13 @@ export function GoalContributeModal({
       <div className="modal-head">
         <div>
           <span className="eyebrow">{goal.name.toUpperCase()}</span>
-          <h2 id="goal-contrib-title">Contribute or withdraw</h2>
+          <h2 id="goal-contrib-title">{uiText("Contribute or withdraw")}</h2>
         </div>
         <button
           type="button"
           disabled={busy}
           className="icon-button"
-          aria-label="Close dialog"
+          aria-label={uiText("Close dialog")}
           onClick={onClose}
         >
           <X size={21} />
@@ -951,7 +1001,7 @@ export function GoalContributeModal({
             className={`tab-btn ${direction === "contribute" ? "active" : ""}`}
             onClick={() => setDirection("contribute")}
           >
-            <Plus size={14} /> Contribute
+            <Plus size={14} /> {uiText("Contribute")}{" "}
           </button>
           <button
             type="button"
@@ -960,13 +1010,14 @@ export function GoalContributeModal({
             className={`tab-btn ${direction === "withdraw" ? "active" : ""}`}
             onClick={() => setDirection("withdraw")}
           >
-            <Minus size={14} /> Withdraw
+            <Minus size={14} /> {uiText("Withdraw")}{" "}
           </button>
         </div>
 
         <div className="form-row">
           <label>
-            Amount <span className="muted">AED</span>
+            {" "}
+            {uiText("Amount")} <span className="muted">AED</span>
             <input
               name="amount"
               required
@@ -976,7 +1027,8 @@ export function GoalContributeModal({
             />
           </label>
           <label>
-            Date
+            {" "}
+            {uiText("Date")}{" "}
             <input
               name="date"
               type="date"
@@ -989,14 +1041,15 @@ export function GoalContributeModal({
         </div>
 
         <label>
-          Notes <span className="muted">Optional</span>
+          {" "}
+          {uiText("Notes")} <span className="muted">{uiText("Optional")}</span>
           <input
             name="notes"
             maxLength={500}
             placeholder={
               direction === "contribute"
-                ? "Monthly savings top-up"
-                : "Used for planned expense"
+                ? uiText("Monthly savings top-up")
+                : uiText("Used for planned expense")
             }
           />
         </label>
@@ -1007,8 +1060,8 @@ export function GoalContributeModal({
               type="checkbox"
               checked={recordTx}
               onChange={(e) => setRecordTx(e.target.checked)}
-            />
-            Also record a transaction in your ledger
+            />{" "}
+            {uiText("Also record a transaction in your ledger")}{" "}
           </label>
         )}
 
@@ -1016,19 +1069,24 @@ export function GoalContributeModal({
           <div className="goal-tx-box">
             <div className="form-row">
               <label>
-                Transaction type
+                {" "}
+                {uiText("Transaction type")}{" "}
                 <select
                   value={txType}
                   onChange={(e) =>
                     setTxType(e.target.value as "transfer" | "expense")
                   }
                 >
-                  <option value="transfer">Transfer between accounts</option>
-                  <option value="expense">Expense</option>
+                  <option value="transfer">
+                    {uiText("Transfer between accounts")}
+                  </option>
+                  <option value="expense">{uiText("Expense")}</option>
                 </select>
               </label>
               <label>
-                {txType === "transfer" ? "From account" : "Account"}
+                {txType === "transfer"
+                  ? uiText("From account")
+                  : uiText("Account")}
                 <select
                   value={sourceAccountId}
                   onChange={(e) => setSourceAccountId(e.target.value)}
@@ -1043,7 +1101,8 @@ export function GoalContributeModal({
             </div>
             {txType === "transfer" ? (
               <label>
-                To account
+                {" "}
+                {uiText("To account")}{" "}
                 <select
                   value={destAccountId}
                   onChange={(e) => setDestAccountId(e.target.value)}
@@ -1057,9 +1116,11 @@ export function GoalContributeModal({
               </label>
             ) : (
               <label>
-                Category <span className="muted">Optional</span>
+                {" "}
+                {uiText("Category")}{" "}
+                <span className="muted">{uiText("Optional")}</span>
                 <select name="category_id" defaultValue="">
-                  <option value="">Uncategorized</option>
+                  <option value="">{uiText("Uncategorized")}</option>
                   {ledger.categories.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -1084,14 +1145,15 @@ export function GoalContributeModal({
             disabled={busy}
             onClick={onClose}
           >
-            Cancel
+            {" "}
+            {uiText("Cancel")}{" "}
           </button>
           <button className="primary" disabled={busy}>
             {busy
-              ? "Saving…"
+              ? uiText("Saving…")
               : direction === "contribute"
-                ? "Add contribution"
-                : "Record withdrawal"}
+                ? uiText("Add contribution")
+                : uiText("Record withdrawal")}
           </button>
         </div>
       </form>

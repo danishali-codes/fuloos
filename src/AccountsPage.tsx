@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import { useState } from "react";
 import {
   ArrowRight,
@@ -66,11 +67,13 @@ export function AccountsPage({
     <>
       <div className="accounts-summary accounts-summary-bar">
         <div>
-          <span>Total net balance</span>
+          <span>{uiText("Total net balance")}</span>
           <strong>{concealed(net)}</strong>
           <small>
-            Credit card debt is shown as a negative balance. Enter a negative
-            balance for amounts you owe.
+            {" "}
+            {uiText(
+              "Credit card debt is shown as a negative balance. Enter a negative balance for amounts you owe.",
+            )}{" "}
           </small>
         </div>
         <div className="accounts-summary-actions">
@@ -79,17 +82,17 @@ export function AccountsPage({
             className="secondary"
             onClick={() => setDebtToolsOpen(true)}
           >
-            <Calculator size={16} /> Debt payoff planner
+            <Calculator size={16} /> {uiText("Debt payoff planner")}{" "}
           </button>
         </div>
       </div>
       {density === "compact" ? (
         <section className="panel compact-list">
           <div className="compact-head accounts" aria-hidden>
-            <span>Account</span>
-            <span>Type</span>
-            <span>Balance set</span>
-            <span className="num">Balance</span>
+            <span>{uiText("Account")}</span>
+            <span>{uiText("Type")}</span>
+            <span>{uiText("Balance set")}</span>
+            <span className="num">{uiText("Balance")}</span>
             <span />
           </div>
           {ledger.accounts.map((a) => {
@@ -119,7 +122,7 @@ export function AccountsPage({
                     <b>
                       {a.name}{" "}
                       {a.household_id && (
-                        <span className="shared-badge">Shared</span>
+                        <span className="shared-badge">{uiText("Shared")}</span>
                       )}
                     </b>
                     {cardSummary &&
@@ -127,8 +130,10 @@ export function AccountsPage({
                         <span className="compact-cc-sub">
                           {cardSummary.creditLimitFils > 0 && (
                             <span>
-                              {cardSummary.utilizationPct.toFixed(0)}% used ·{" "}
-                              {concealed(cardSummary.availableCreditFils)} avail
+                              {cardSummary.utilizationPct.toFixed(0)}
+                              {uiText("% used ·")}{" "}
+                              {concealed(cardSummary.availableCreditFils)}{" "}
+                              {uiText("avail")}{" "}
                             </span>
                           )}
                           {dueLabel && (
@@ -142,7 +147,9 @@ export function AccountsPage({
                 </button>
                 <span className="muted">
                   {ACCOUNT_TYPES[a.type]}
-                  {a.currency && a.currency !== "AED" ? ` · ${a.currency}` : ""}
+                  {a.currency && a.currency !== "AED"
+                    ? ` · AED balance / ${a.currency} purchases`
+                    : ""}
                 </span>
                 <span className="muted">{balanceNote(a, true)}</span>
                 <strong className={`num ${value < 0 ? "is-negative" : ""}`}>
@@ -170,7 +177,7 @@ export function AccountsPage({
           })}
           {!ledger.accounts.length && (
             <Empty
-              title="No accounts yet"
+              title={uiText("No accounts yet")}
               text="Add a current, savings, credit card or cash account."
             />
           )}
@@ -195,7 +202,9 @@ export function AccountsPage({
                   </span>
                   <span className="account-kind">
                     {ACCOUNT_TYPES[a.type]}
-                    {a.currency && a.currency !== "AED" ? ` · ${a.currency}` : ""}
+                    {a.currency && a.currency !== "AED"
+                      ? ` · AED balance / ${a.currency} purchases`
+                      : ""}
                   </span>
                   <div className="row-actions">
                     <button
@@ -218,7 +227,7 @@ export function AccountsPage({
                 <h3>
                   {a.name}{" "}
                   {a.household_id && (
-                    <span className="shared-badge">Shared</span>
+                    <span className="shared-badge">{uiText("Shared")}</span>
                   )}
                 </h3>
                 <strong className="large-amount">{concealed(value)}</strong>
@@ -229,12 +238,13 @@ export function AccountsPage({
                       <>
                         <div className="cc-util-row">
                           <span>
-                            Utilization{" "}
+                            {" "}
+                            {uiText("Utilization")}{" "}
                             <b>{cardSummary.utilizationPct.toFixed(1)}%</b>
                           </span>
                           <span>
                             {concealed(cardSummary.availableCreditFils)}{" "}
-                            available
+                            {uiText("available")}{" "}
                           </span>
                         </div>
                         <div
@@ -249,7 +259,9 @@ export function AccountsPage({
                           aria-label={`${a.name} credit utilization`}
                         >
                           <div
-                            className={utilFillClass(cardSummary.utilizationPct)}
+                            className={utilFillClass(
+                              cardSummary.utilizationPct,
+                            )}
                             style={{
                               width: `${Math.min(100, cardSummary.utilizationPct)}%`,
                             }}
@@ -259,13 +271,13 @@ export function AccountsPage({
                     )}
                     <div className="cc-details-row">
                       <span>
-                        Cycle{" "}
+                        {" "}
+                        {uiText("Cycle")}{" "}
                         {formatShortWindow(
                           cardSummary.statementWindow.start,
                           cardSummary.statementWindow.end,
                         )}
-                        :{" "}
-                        <b>{concealed(cardSummary.statementBalanceFils)}</b>
+                        : <b>{concealed(cardSummary.statementBalanceFils)}</b>
                       </span>
                       {dueLabel && (
                         <span className={dueBadgeClass(cardSummary)}>
@@ -279,7 +291,8 @@ export function AccountsPage({
                   className="text-button"
                   onClick={() => onSelectAccount(a.id)}
                 >
-                  View transactions <ArrowRight size={15} />
+                  {" "}
+                  {uiText("View transactions")} <ArrowRight size={15} />
                 </button>
               </article>
             );
@@ -291,8 +304,8 @@ export function AccountsPage({
             <span>
               <Plus size={22} />
             </span>
-            <b>Add an account</b>
-            <small>Current, savings, credit card or cash</small>
+            <b>{uiText("Add an account")}</b>
+            <small>{uiText("Current, savings, credit card or cash")}</small>
           </button>
         </div>
       )}

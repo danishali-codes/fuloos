@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import React, { useState } from "react";
 import { X } from "lucide-react";
 import {
@@ -38,7 +39,7 @@ export function TagInput({
   return (
     <div className="tag-input-wrap">
       {tags.length > 0 && (
-        <div className="tag-chips" aria-label="Selected tags">
+        <div className="tag-chips" aria-label={uiText("Selected tags")}>
           {tags.map((tag) => (
             <span className="tag-chip" key={tag}>
               #{tag}
@@ -89,7 +90,8 @@ export function TagInput({
             disabled={disabled || tags.length >= MAX_TAGS_PER_TX}
             onClick={() => addRaw(draft)}
           >
-            Add
+            {" "}
+            {uiText("Add")}{" "}
           </button>
         )}
       </div>

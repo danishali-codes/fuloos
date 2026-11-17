@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import { useMemo, useRef, useState, useEffect, type FormEvent } from "react";
 import {
   ArrowDownLeft,
@@ -192,7 +193,8 @@ export function BulkEdit({
         className="bulk-keep"
         onClick={() => set({ [key]: undefined })}
       >
-        Keep each
+        {" "}
+        {uiText("Keep each")}{" "}
       </button>
     ) : null;
 
@@ -211,16 +213,17 @@ export function BulkEdit({
     >
       <div className="modal-head">
         <div>
-          <span className="eyebrow">MAKE IT YOURS</span>
+          <span className="eyebrow">{uiText("MAKE IT YOURS")}</span>
           <h2 id="bulk-title">
-            Edit {items.length}{" "}
+            {" "}
+            {uiText("Edit")} {items.length}{" "}
             {items.length === 1 ? "transaction" : "transactions"}
           </h2>
         </div>
         <button
           disabled={busy}
           className="icon-button"
-          aria-label="Close dialog"
+          aria-label={uiText("Close dialog")}
           onClick={onClose}
         >
           <X size={21} />
@@ -252,20 +255,23 @@ export function BulkEdit({
                 className={kind === undefined ? "selected" : ""}
                 onClick={() => set({ type: undefined })}
               >
-                <Shuffle size={16} /> Keep each
+                <Shuffle size={16} /> {uiText("Keep each")}{" "}
               </button>
             )}
           </div>
           <label>
             <span className="bulk-label">
               <span>
-                Amount <span className="muted">AED</span>
+                {" "}
+                {uiText("Amount")} <span className="muted">AED</span>
               </span>
               {keepLink("amount")}
             </span>
             <input
               inputMode="decimal"
-              placeholder={mixed("amount") ? "Keep each amount" : "0.00"}
+              placeholder={
+                mixed("amount") ? uiText("Keep each amount") : "0.00"
+              }
               value={form.amount ?? ""}
               onChange={(e) =>
                 set({
@@ -279,7 +285,7 @@ export function BulkEdit({
           </label>
           <div className="form-row">
             <label>
-              {kind === "transfer" ? "From account" : "Account"}
+              {kind === "transfer" ? uiText("From account") : uiText("Account")}
               <select
                 value={form.account_id ?? KEEP}
                 onChange={(e) =>
@@ -290,7 +296,7 @@ export function BulkEdit({
                 }
               >
                 {mixed("account_id") && (
-                  <option value={KEEP}>Keep each account</option>
+                  <option value={KEEP}>{uiText("Keep each account")}</option>
                 )}
                 {ledger.accounts.map((a) => (
                   <option value={a.id} key={a.id}>
@@ -301,7 +307,8 @@ export function BulkEdit({
             </label>
             {showDestination ? (
               <label>
-                To account
+                {" "}
+                {uiText("To account")}{" "}
                 <select
                   value={form.to_account_id ?? KEEP}
                   onChange={(e) =>
@@ -312,10 +319,13 @@ export function BulkEdit({
                   }
                 >
                   {shared.type === "transfer" && mixed("to_account_id") ? (
-                    <option value={KEEP}>Keep each destination</option>
+                    <option value={KEEP}>
+                      {uiText("Keep each destination")}
+                    </option>
                   ) : (
                     <option value={KEEP} disabled>
-                      Choose account
+                      {" "}
+                      {uiText("Choose account")}{" "}
                     </option>
                   )}
                   {ledger.accounts.map((a) => (
@@ -327,7 +337,8 @@ export function BulkEdit({
               </label>
             ) : showCategory ? (
               <label>
-                Category
+                {" "}
+                {uiText("Category")}{" "}
                 <select
                   value={form.category_id ?? KEEP}
                   onChange={(e) =>
@@ -338,9 +349,9 @@ export function BulkEdit({
                   }
                 >
                   {mixed("category_id") && (
-                    <option value={KEEP}>Keep each category</option>
+                    <option value={KEEP}>{uiText("Keep each category")}</option>
                   )}
-                  <option value="">Uncategorized</option>
+                  <option value="">{uiText("Uncategorized")}</option>
                   {ledger.categories.map((c) => (
                     <option value={c.id} key={c.id}>
                       {c.name}
@@ -350,23 +361,26 @@ export function BulkEdit({
               </label>
             ) : (
               <label>
-                Category / to account
+                {" "}
+                {uiText("Category / to account")}{" "}
                 <select disabled value={KEEP}>
-                  <option value={KEEP}>Keep each</option>
+                  <option value={KEEP}>{uiText("Keep each")}</option>
                 </select>
               </label>
             )}
           </div>
           {!showCategory && !showDestination && (
             <p className="form-hint">
-              These include both transfers and income or expenses. Pick one type
-              above to change the category or the destination account.
+              {" "}
+              {uiText(
+                "These include both transfers and income or expenses. Pick one type above to change the category or the destination account.",
+              )}{" "}
             </p>
           )}
           <label>
             <span className="bulk-label">
-              Date
-              {keepLink("date")}
+              {" "}
+              {uiText("Date")} {keepLink("date")}
             </span>
             <input
               type="date"
@@ -381,12 +395,14 @@ export function BulkEdit({
               }
             />
             {mixed("date") && form.date === undefined && (
-              <small className="muted">Keep each date</small>
+              <small className="muted">{uiText("Keep each date")}</small>
             )}
           </label>
           <label>
             <span className="bulk-label">
-              {kind === "transfer" ? "Description" : "Payee / description"}
+              {kind === "transfer"
+                ? uiText("Description")
+                : uiText("Payee / description")}
               {keepLink("payee")}
             </span>
             <input
@@ -395,8 +411,8 @@ export function BulkEdit({
               placeholder={
                 mixed("payee")
                   ? form.payee === undefined
-                    ? "Keep each description"
-                    : "Left empty, this clears every description"
+                    ? uiText("Keep each description")
+                    : uiText("Left empty, this clears every description")
                   : kind === "income"
                     ? "e.g. Monthly salary"
                     : kind === "transfer"
@@ -409,7 +425,9 @@ export function BulkEdit({
           <label>
             <span className="bulk-label">
               <span>
-                Notes <span className="muted">Optional</span>
+                {" "}
+                {uiText("Notes")}{" "}
+                <span className="muted">{uiText("Optional")}</span>
               </span>
               {keepLink("notes")}
             </span>
@@ -419,9 +437,9 @@ export function BulkEdit({
               placeholder={
                 mixed("notes")
                   ? form.notes === undefined
-                    ? "Keep each note"
-                    : "Left empty, this clears every note"
-                  : "Anything you’d like to remember"
+                    ? uiText("Keep each note")
+                    : uiText("Left empty, this clears every note")
+                  : uiText("Anything you’d like to remember")
               }
               onChange={(e) => set({ notes: e.target.value })}
             />
@@ -432,8 +450,10 @@ export function BulkEdit({
                 type="checkbox"
                 checked={appendNotes}
                 onChange={(e) => setAppendNotes(e.target.checked)}
-              />
-              Add to the end of each note instead of replacing it
+              />{" "}
+              {uiText(
+                "Add to the end of each note instead of replacing it",
+              )}{" "}
             </label>
           )}
         </fieldset>
@@ -443,7 +463,9 @@ export function BulkEdit({
               ? `${invalid.length} of ${preview.length} can’t be saved like this: ${invalid[0].error}`
               : hasChanges
                 ? `Changes the ${list(changed)} on ${preview.length} ${preview.length === 1 ? "transaction" : "transactions"}. Everything else stays as it is.`
-                : "Fields the selected transactions share are filled in. Change any field to update them all.")}
+                : uiText(
+                    "Fields the selected transactions share are filled in. Change any field to update them all.",
+                  ))}
         </p>
         {error && (
           <div className="error" role="alert">
@@ -452,8 +474,10 @@ export function BulkEdit({
         )}
         {uncertain && (
           <p className="form-hint">
-            Close this editor and reload your workspace before making more
-            changes.
+            {" "}
+            {uiText(
+              "Close this editor and reload your workspace before making more changes.",
+            )}{" "}
           </p>
         )}
         {(busy || completed.size > 0) && (
@@ -470,7 +494,8 @@ export function BulkEdit({
             disabled={busy}
             onClick={onClose}
           >
-            Cancel
+            {" "}
+            {uiText("Cancel")}{" "}
           </button>
           <button
             className="primary"
@@ -482,7 +507,7 @@ export function BulkEdit({
               !preview.length
             }
           >
-            {busy ? "Saving…" : "Save changes"}
+            {busy ? uiText("Saving…") : uiText("Save changes")}
             <Check size={16} />
           </button>
         </div>

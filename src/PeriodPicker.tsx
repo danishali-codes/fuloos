@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import {
   useEffect,
   useId,
@@ -208,7 +209,7 @@ export function PeriodPicker({
           className="period-today"
           onClick={() => shift(monthsBetween(month, currentMonth) - 1)}
         >
-          {span === "month" ? "This month" : "Back to now"}
+          {span === "month" ? uiText("This month") : uiText("Back to now")}
         </button>
       )}
       {open && (
@@ -219,7 +220,11 @@ export function PeriodPicker({
           aria-label={`Choose ${label.toLowerCase()}`}
         >
           {choices.length > 0 && (
-            <div className="period-spans" role="group" aria-label="Length">
+            <div
+              className="period-spans"
+              role="group"
+              aria-label={uiText("Length")}
+            >
               {choices.map((s) => (
                 <button
                   key={s.value}
@@ -244,7 +249,10 @@ export function PeriodPicker({
           )}
           {span === "all" ? (
             <p className="period-all-note">
-              Showing every transaction. Pick a length above to browse by month.
+              {" "}
+              {uiText(
+                "Showing every transaction. Pick a length above to browse by month.",
+              )}{" "}
             </p>
           ) : (
             <>
@@ -252,7 +260,7 @@ export function PeriodPicker({
                 <button
                   type="button"
                   className="period-step"
-                  aria-label="Previous year"
+                  aria-label={uiText("Previous year")}
                   onClick={() => setYear((y) => y - 1)}
                 >
                   <ChevronLeft size={16} />
@@ -261,7 +269,7 @@ export function PeriodPicker({
                 <button
                   type="button"
                   className="period-step"
-                  aria-label="Next year"
+                  aria-label={uiText("Next year")}
                   onClick={() => setYear((y) => y + 1)}
                 >
                   <ChevronRight size={16} />
@@ -322,12 +330,14 @@ export function PeriodPicker({
                 <p className="period-hint" aria-live="polite">
                   {draftFrom
                     ? `Now pick the last month · ${shown ? periodLabel("custom", shown.last, shown.first) : ""}`
-                    : "Pick the first month, then the last"}
+                    : uiText("Pick the first month, then the last")}
                 </p>
               ) : (
                 span !== "month" && (
                   <p className="period-hint">
-                    Pick the last month · {periodLabel(span, preview ?? month)}
+                    {" "}
+                    {uiText("Pick the last month ·")}{" "}
+                    {periodLabel(span, preview ?? month)}
                   </p>
                 )
               )}

@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
@@ -69,10 +70,7 @@ export function CaptureAlertsModal({
   owner: string;
   learning: LearningStore;
   onClose: () => void;
-  onImportAlert: (
-    alert: CapturedAlert,
-    tx: ImportTransaction,
-  ) => Promise<void>;
+  onImportAlert: (alert: CapturedAlert, tx: ImportTransaction) => Promise<void>;
   onDismissAlert: (alertId: string) => Promise<void>;
   onAddAlert: (draft: Omit<CapturedAlert, "id">) => Promise<void>;
   onLoadToken?: () => Promise<{
@@ -220,9 +218,7 @@ export function CaptureAlertsModal({
     try {
       const d = drafts[alert.id] ?? {};
       const amount =
-        d.amountText !== undefined
-          ? minor(d.amountText)
-          : alert.parsed_amount;
+        d.amountText !== undefined ? minor(d.amountText) : alert.parsed_amount;
       const overrides: AlertDraftOverrides = {
         account_id:
           d.account_id ??
@@ -232,9 +228,7 @@ export function CaptureAlertsModal({
             tokenInfo?.default_account_id,
           ),
         category_id: d.category_id,
-        type:
-          d.type ??
-          (alert.parsed_type === "income" ? "income" : "expense"),
+        type: d.type ?? (alert.parsed_type === "income" ? "income" : "expense"),
         amount,
         date: d.date ?? (alert.parsed_date || uaeToday()),
         payee: d.payee,
@@ -340,16 +334,18 @@ export function CaptureAlertsModal({
     >
       <div className="modal-head">
         <div>
-          <span className="eyebrow">AUTOMATIC CAPTURE</span>
+          <span className="eyebrow">{uiText("AUTOMATIC CAPTURE")}</span>
           <h2 id="capture-alerts-title">
-            Captured Alerts ({pending.length})
+            {" "}
+            {uiText("Captured Alerts (")}
+            {pending.length})
           </h2>
         </div>
         <button
           className="icon-button"
           disabled={!!busyId}
           onClick={onClose}
-          aria-label="Close captured alerts"
+          aria-label={uiText("Close captured alerts")}
         >
           <X size={18} />
         </button>
@@ -357,9 +353,10 @@ export function CaptureAlertsModal({
 
       <div className="csv-body">
         <p className="muted">
-          Review bank alerts forwarded by email, iOS Shortcuts, Android Tasker,
-          or pasted from your clipboard. Nothing enters your ledger until you
-          confirm.
+          {" "}
+          {uiText(
+            "Review bank alerts forwarded by email, iOS Shortcuts, Android Tasker, or pasted from your clipboard. Nothing enters your ledger until you confirm.",
+          )}{" "}
         </p>
 
         {error && (
@@ -391,21 +388,23 @@ export function CaptureAlertsModal({
               marginBottom: "8px",
             }}
           >
-            <strong>Clipboard &amp; Quick-Parse</strong>
+            <strong>{uiText("Clipboard & Quick-Parse")}</strong>
             <button
               type="button"
               className="secondary"
               disabled={pasteBusy || !ledger.accounts.length}
               onClick={() => void handlePasteFromClipboard()}
             >
-              <ClipboardPaste size={15} /> Paste from clipboard
+              <ClipboardPaste size={15} /> {uiText("Paste from clipboard")}{" "}
             </button>
           </div>
           <textarea
             rows={2}
             value={pasteText}
             disabled={pasteBusy}
-            placeholder="Or paste a UAE bank SMS/email alert here (Liv, Mashreq, ADCB, FAB, ADIB, ENBD)…"
+            placeholder={uiText(
+              "Or paste a UAE bank SMS/email alert here (Liv, Mashreq, ADCB, FAB, ADIB, ENBD)…",
+            )}
             onChange={(e) => setPasteText(e.target.value)}
           />
           {pasteText.trim() && (
@@ -416,17 +415,24 @@ export function CaptureAlertsModal({
                 disabled={pasteBusy || !ledger.accounts.length}
                 onClick={() => void addAlertFromText(pasteText)}
               >
-                {pasteBusy ? "Parsing…" : "Parse & add to queue"}
+                {pasteBusy
+                  ? uiText("Parsing…")
+                  : uiText("Parse & add to queue")}
               </button>
             </div>
           )}
         </section>
 
-        <h3>Pending queue ({pending.length})</h3>
+        <h3>
+          {uiText("Pending queue (")}
+          {pending.length})
+        </h3>
         {pending.length === 0 ? (
           <p className="muted small">
-            No pending alerts. Forward a bank alert email, trigger a Shortcut,
-            or paste an alert above.
+            {" "}
+            {uiText(
+              "No pending alerts. Forward a bank alert email, trigger a Shortcut, or paste an alert above.",
+            )}{" "}
           </p>
         ) : (
           <div style={{ display: "grid", gap: "10px", marginBottom: "14px" }}>
@@ -477,7 +483,7 @@ export function CaptureAlertsModal({
                       {alert.source === "email" ? (
                         <>
                           <Mail size={13} style={{ verticalAlign: "-2px" }} />{" "}
-                          Email
+                          {uiText("Email")}{" "}
                         </>
                       ) : (
                         <>
@@ -485,7 +491,7 @@ export function CaptureAlertsModal({
                             size={13}
                             style={{ verticalAlign: "-2px" }}
                           />{" "}
-                          Shortcut / Clipboard
+                          {uiText("Shortcut / Clipboard")}{" "}
                         </>
                       )}
                       {alert.account_hint ? ` · ${alert.account_hint}` : ""}
@@ -495,13 +501,14 @@ export function CaptureAlertsModal({
                         ? money(
                             alert.parsed_amount * (type === "expense" ? -1 : 1),
                           )
-                        : "Amount needed"}
+                        : uiText("Amount needed")}
                     </strong>
                   </div>
 
                   <div className="csv-grid">
                     <label>
-                      Type
+                      {" "}
+                      {uiText("Type")}{" "}
                       <select
                         value={type}
                         disabled={isBusy}
@@ -511,12 +518,13 @@ export function CaptureAlertsModal({
                           })
                         }
                       >
-                        <option value="expense">Expense</option>
-                        <option value="income">Income</option>
+                        <option value="expense">{uiText("Expense")}</option>
+                        <option value="income">{uiText("Income")}</option>
                       </select>
                     </label>
                     <label>
-                      Account
+                      {" "}
+                      {uiText("Account")}{" "}
                       <select
                         value={accountId}
                         disabled={isBusy}
@@ -532,7 +540,8 @@ export function CaptureAlertsModal({
                       </select>
                     </label>
                     <label>
-                      Date
+                      {" "}
+                      {uiText("Date")}{" "}
                       <input
                         type="date"
                         value={date}
@@ -543,7 +552,8 @@ export function CaptureAlertsModal({
                       />
                     </label>
                     <label>
-                      Amount (AED)
+                      {" "}
+                      {uiText("Amount (AED)")}{" "}
                       <input
                         type="text"
                         inputMode="decimal"
@@ -555,7 +565,8 @@ export function CaptureAlertsModal({
                       />
                     </label>
                     <label>
-                      Payee
+                      {" "}
+                      {uiText("Payee")}{" "}
                       <input
                         type="text"
                         maxLength={120}
@@ -568,7 +579,8 @@ export function CaptureAlertsModal({
                     </label>
                     {type === "expense" && (
                       <label>
-                        Category
+                        {" "}
+                        {uiText("Category")}{" "}
                         <select
                           value={categoryId}
                           disabled={isBusy}
@@ -578,7 +590,7 @@ export function CaptureAlertsModal({
                             })
                           }
                         >
-                          <option value="">Uncategorised</option>
+                          <option value="">{uiText("Uncategorised")}</option>
                           {ledger.categories.map((c) => (
                             <option key={c.id} value={c.id}>
                               {c.emoji ? `${c.emoji} ` : ""}
@@ -591,8 +603,13 @@ export function CaptureAlertsModal({
                   </div>
 
                   <details>
-                    <summary className="small muted">Raw alert text</summary>
-                    <p className="small muted" style={{ whiteSpace: "pre-wrap" }}>
+                    <summary className="small muted">
+                      {uiText("Raw alert text")}
+                    </summary>
+                    <p
+                      className="small muted"
+                      style={{ whiteSpace: "pre-wrap" }}
+                    >
                       {alert.subject ? `${alert.subject}\n` : ""}
                       {alert.raw_text}
                     </p>
@@ -611,7 +628,7 @@ export function CaptureAlertsModal({
                       disabled={isBusy}
                       onClick={() => void handleDismiss(alert.id)}
                     >
-                      <Trash2 size={14} /> Dismiss
+                      <Trash2 size={14} /> {uiText("Dismiss")}{" "}
                     </button>
                     <button
                       type="button"
@@ -620,7 +637,9 @@ export function CaptureAlertsModal({
                       onClick={() => void handleImport(alert)}
                     >
                       <Check size={14} />{" "}
-                      {isBusy ? "Importing…" : "Confirm & import"}
+                      {isBusy
+                        ? uiText("Importing…")
+                        : uiText("Confirm & import")}
                     </button>
                   </div>
                 </div>
@@ -631,26 +650,32 @@ export function CaptureAlertsModal({
 
         <details>
           <summary>
-            <strong>Email-Forward &amp; Shortcut Setup</strong>
+            <strong>{uiText("Email-Forward & Shortcut Setup")}</strong>
           </summary>
           <div style={{ display: "grid", gap: "10px", marginTop: "10px" }}>
             {demo ? (
               <p className="muted small">
-                Sign in with a live PocketBase account to generate your personal
-                webhook token for Cloudflare Email Workers, iOS Shortcuts, or
-                Android Tasker.
+                {" "}
+                {uiText(
+                  "Sign in with a live PocketBase account to generate your personal webhook token for Cloudflare Email Workers, iOS Shortcuts, or Android Tasker.",
+                )}{" "}
               </p>
             ) : !tokenSupported ? (
               <p className="notice small">
-                Captured alerts migration (
-                <code>1794600000_captured_alerts.js</code>) is not installed on
-                the server yet.
+                {" "}
+                {uiText("Captured alerts migration (")}{" "}
+                <code>1794600000_captured_alerts.js</code>
+                {uiText(") is not installed on the server yet.")}{" "}
               </p>
             ) : (
               <>
                 <div>
-                  <span className="small muted">Personal Webhook URL</span>
-                  <div style={{ display: "flex", gap: "6px", marginTop: "4px" }}>
+                  <span className="small muted">
+                    {uiText("Personal Webhook URL")}
+                  </span>
+                  <div
+                    style={{ display: "flex", gap: "6px", marginTop: "4px" }}
+                  >
                     <input type="text" readOnly value={webhookUrl} />
                     <button
                       type="button"
@@ -658,7 +683,7 @@ export function CaptureAlertsModal({
                       onClick={() => copyText("url", webhookUrl)}
                     >
                       <Copy size={14} />{" "}
-                      {copiedKey === "url" ? "Copied" : "Copy"}
+                      {copiedKey === "url" ? uiText("Copied") : uiText("Copy")}
                     </button>
                   </div>
                 </div>
@@ -679,24 +704,28 @@ export function CaptureAlertsModal({
                   >
                     {tokenInfo ? (
                       <>
-                        <RefreshCw size={14} /> Rotate capture token
+                        <RefreshCw size={14} />{" "}
+                        {uiText("Rotate capture token")}{" "}
                       </>
                     ) : (
                       <>
-                        <KeyRound size={14} /> Generate capture token
+                        <KeyRound size={14} />{" "}
+                        {uiText("Generate capture token")}{" "}
                       </>
                     )}
                   </button>
                   {tokenInfo && (
                     <span className="small muted">
-                      Active token: <code>{tokenInfo.token_preview}</code>
+                      {" "}
+                      {uiText("Active token:")}{" "}
+                      <code>{tokenInfo.token_preview}</code>
                     </span>
                   )}
                 </div>
 
                 {revealedToken && (
                   <div className="notice small">
-                    <strong>New token (copy now):</strong>
+                    <strong>{uiText("New token (copy now):")}</strong>
                     <div
                       style={{ display: "flex", gap: "6px", marginTop: "4px" }}
                     >
@@ -707,7 +736,9 @@ export function CaptureAlertsModal({
                         onClick={() => copyText("token", revealedToken)}
                       >
                         <Copy size={14} />{" "}
-                        {copiedKey === "token" ? "Copied" : "Copy"}
+                        {copiedKey === "token"
+                          ? uiText("Copied")
+                          : uiText("Copy")}
                       </button>
                     </div>
                   </div>
@@ -723,11 +754,12 @@ export function CaptureAlertsModal({
                         onChange={(e) =>
                           void handleToggleEnabled(e.target.checked)
                         }
-                      />
-                      Enable inbound webhook
+                      />{" "}
+                      {uiText("Enable inbound webhook")}{" "}
                     </label>
                     <label>
-                      Default account for alerts
+                      {" "}
+                      {uiText("Default account for alerts")}{" "}
                       <select
                         value={tokenInfo.default_account_id ?? ""}
                         disabled={tokenBusy}
@@ -735,7 +767,9 @@ export function CaptureAlertsModal({
                           void handleDefaultAccount(e.target.value)
                         }
                       >
-                        <option value="">Auto-detect / first account</option>
+                        <option value="">
+                          {uiText("Auto-detect / first account")}
+                        </option>
                         {ledger.accounts.map((a) => (
                           <option key={a.id} value={a.id}>
                             {a.name}
@@ -746,18 +780,29 @@ export function CaptureAlertsModal({
                   </div>
                 )}
 
-                <div className="small muted" style={{ display: "grid", gap: "6px" }}>
+                <div
+                  className="small muted"
+                  style={{ display: "grid", gap: "6px" }}
+                >
                   <p>
-                    <strong>1. Email Forwarding (Cloudflare Email Worker / Postmark / Resend):</strong>{" "}
-                    Forward bank alert emails to a worker that POSTs{" "}
-                    <code>{`{ "token", "subject", "text", "html" }`}</code> to
-                    the webhook URL above.
+                    <strong>
+                      {uiText(
+                        "1. Email Forwarding (Cloudflare Email Worker / Postmark / Resend):",
+                      )}
+                    </strong>{" "}
+                    {uiText("Forward bank alert emails to a worker that POSTs")}{" "}
+                    <code>{`{ "token", "subject", "text", "html" }`}</code>{" "}
+                    {uiText("to the webhook URL above.")}{" "}
                   </p>
                   <p>
-                    <strong>2. iOS Shortcuts / Android Tasker:</strong> Create a
-                    shortcut or Tasker profile on bank SMS/notification that
-                    sends an HTTP POST JSON with{" "}
-                    <code>{`{ "token", "source": "shortcut", "text": "..." }`}</code>.
+                    <strong>
+                      {uiText("2. iOS Shortcuts / Android Tasker:")}
+                    </strong>{" "}
+                    {uiText(
+                      "Create a shortcut or Tasker profile on bank SMS/notification that sends an HTTP POST JSON with",
+                    )}{" "}
+                    <code>{`{ "token", "source": "shortcut", "text": "..." }`}</code>
+                    .
                   </p>
                   <pre
                     style={{
@@ -777,12 +822,9 @@ export function CaptureAlertsModal({
       </div>
 
       <div className="modal-actions">
-        <button
-          className="primary"
-          disabled={!!busyId}
-          onClick={onClose}
-        >
-          Done
+        <button className="primary" disabled={!!busyId} onClick={onClose}>
+          {" "}
+          {uiText("Done")}{" "}
         </button>
       </div>
     </dialog>

@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import React, { useEffect, useState } from "react";
 import { ArrowRight, Check, Leaf } from "lucide-react";
 import { BackendError, MfaRequiredError } from "./backend";
@@ -160,7 +161,9 @@ export function Auth({
       setResetPassword("");
       setResetPasswordConfirm("");
       setPassword("");
-      setNotice("Your password has been updated. Sign in with your new password.");
+      setNotice(
+        "Your password has been updated. Sign in with your new password.",
+      );
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -246,12 +249,8 @@ export function Auth({
           <span className="auth-tag">
             <Leaf size={16} /> {t("auth.welcome")}
           </span>
-          <h2>
-            {signup ? t("auth.signUpTitle") : t("auth.signInTitle")}
-          </h2>
-          <p>
-            {signup ? t("auth.signUpSubtitle") : t("auth.signInSubtitle")}
-          </p>
+          <h2>{signup ? t("auth.signUpTitle") : t("auth.signInTitle")}</h2>
+          <p>{signup ? t("auth.signUpSubtitle") : t("auth.signInSubtitle")}</p>
           <button
             type="button"
             className="google-sign-in"
@@ -284,11 +283,14 @@ export function Auth({
           {mfa ? (
             <form onSubmit={submitMfa} className="auth-mfa-form">
               <p className="muted small">
-                Two-factor verification is enabled for <b>{mfa.email}</b>. Enter
-                the one-time code sent to your email.
+                {" "}
+                {uiText("Two-factor verification is enabled for")}{" "}
+                <b>{mfa.email}</b>
+                {uiText(". Enter the one-time code sent to your email.")}{" "}
               </p>
               <label>
-                Verification code
+                {" "}
+                {uiText("Verification code")}{" "}
                 <input
                   required
                   autoFocus
@@ -296,7 +298,7 @@ export function Auth({
                   inputMode="numeric"
                   value={otpCode}
                   onChange={(e) => setOtpCode(e.target.value)}
-                  placeholder="Enter code from email"
+                  placeholder={uiText("Enter code from email")}
                 />
               </label>
               {(error || externalError) && (
@@ -310,7 +312,7 @@ export function Auth({
                 </div>
               )}
               <button className="primary auth-submit" disabled={busy}>
-                {busy ? "Verifying…" : "Verify and sign in"}
+                {busy ? uiText("Verifying…") : uiText("Verify and sign in")}
                 <ArrowRight size={17} />
               </button>
               <div className="auth-aux-actions">
@@ -320,7 +322,8 @@ export function Auth({
                   disabled={busy}
                   onClick={resendOtp}
                 >
-                  Resend code
+                  {" "}
+                  {uiText("Resend code")}{" "}
                 </button>
                 <button
                   type="button"
@@ -333,7 +336,8 @@ export function Auth({
                     setNotice("");
                   }}
                 >
-                  Back to sign in
+                  {" "}
+                  {uiText("Back to sign in")}{" "}
                 </button>
               </div>
             </form>
@@ -341,11 +345,14 @@ export function Auth({
             resetMode === "request" ? (
               <form onSubmit={submitResetRequest}>
                 <p className="muted small">
-                  Enter your account email and we will send a password reset
-                  link and token.
+                  {" "}
+                  {uiText(
+                    "Enter your account email and we will send a password reset link and token.",
+                  )}{" "}
                 </p>
                 <label>
-                  Email address
+                  {" "}
+                  {uiText("Email address")}{" "}
                   <input
                     required
                     type="email"
@@ -366,7 +373,7 @@ export function Auth({
                   </div>
                 )}
                 <button className="primary auth-submit" disabled={busy}>
-                  {busy ? "Sending…" : "Send reset email"}
+                  {busy ? uiText("Sending…") : uiText("Send reset email")}
                   <ArrowRight size={17} />
                 </button>
                 <div className="auth-aux-actions">
@@ -380,7 +387,8 @@ export function Auth({
                       setNotice("");
                     }}
                   >
-                    I have a reset token
+                    {" "}
+                    {uiText("I have a reset token")}{" "}
                   </button>
                   <button
                     type="button"
@@ -392,24 +400,27 @@ export function Auth({
                       setNotice("");
                     }}
                   >
-                    Back to sign in
+                    {" "}
+                    {uiText("Back to sign in")}{" "}
                   </button>
                 </div>
               </form>
             ) : (
               <form onSubmit={submitResetConfirm}>
                 <label>
-                  Reset token
+                  {" "}
+                  {uiText("Reset token")}{" "}
                   <input
                     required
                     autoComplete="off"
                     value={resetToken}
                     onChange={(e) => setResetToken(e.target.value)}
-                    placeholder="Paste token from email"
+                    placeholder={uiText("Paste token from email")}
                   />
                 </label>
                 <label>
-                  New password
+                  {" "}
+                  {uiText("New password")}{" "}
                   <input
                     required
                     type="password"
@@ -417,11 +428,12 @@ export function Auth({
                     autoComplete="new-password"
                     value={resetPassword}
                     onChange={(e) => setResetPassword(e.target.value)}
-                    placeholder="At least 8 characters"
+                    placeholder={uiText("At least 8 characters")}
                   />
                 </label>
                 <label>
-                  Confirm new password
+                  {" "}
+                  {uiText("Confirm new password")}{" "}
                   <input
                     required
                     type="password"
@@ -429,7 +441,7 @@ export function Auth({
                     autoComplete="new-password"
                     value={resetPasswordConfirm}
                     onChange={(e) => setResetPasswordConfirm(e.target.value)}
-                    placeholder="Repeat new password"
+                    placeholder={uiText("Repeat new password")}
                   />
                 </label>
                 {(error || externalError) && (
@@ -443,7 +455,7 @@ export function Auth({
                   </div>
                 )}
                 <button className="primary auth-submit" disabled={busy}>
-                  {busy ? "Updating…" : "Update password"}
+                  {busy ? uiText("Updating…") : uiText("Update password")}
                   <ArrowRight size={17} />
                 </button>
                 <div className="auth-aux-actions">
@@ -457,7 +469,8 @@ export function Auth({
                       setNotice("");
                     }}
                   >
-                    Back to sign in
+                    {" "}
+                    {uiText("Back to sign in")}{" "}
                   </button>
                 </div>
               </form>
@@ -555,11 +568,10 @@ export function Auth({
             <span>{t("auth.orDivider")}</span>
           </div>
           <button className="demo-button" onClick={onDemo}>
-            {t("auth.exploreDemo")} <ArrowRight size={16} className="rtl-flip" />
+            {t("auth.exploreDemo")}{" "}
+            <ArrowRight size={16} className="rtl-flip" />
           </button>
-          {!backend && (
-            <p className="setup-note">{t("auth.previewNote")}</p>
-          )}
+          {!backend && <p className="setup-note">{t("auth.previewNote")}</p>}
           <small className="auth-footnote">{t("auth.footnote")}</small>
         </div>
       </section>
