@@ -404,6 +404,7 @@ export function parseAndValidateBackup(rawText: string): {
       description,
       color,
       ...(emoji ? { emoji } : {}),
+      ...(typeof raw.household_id === "string" && raw.household_id ? {household_id:raw.household_id} : {}),
     };
   });
 
@@ -761,6 +762,7 @@ export function parseAndValidateBackup(rawText: string): {
       amount,
       start_month: raw.start_month,
       end_month,
+      ...(typeof raw.household_id === "string" && raw.household_id ? {household_id:raw.household_id} : {}),
     };
     const existingForCat = budgetsByCategory.get(budget.category_id) ?? [];
     if (existingForCat.some((b) => budgetsOverlap(b, budget))) {
@@ -1402,7 +1404,12 @@ export async function executeRestore(params: {
     advance(1);
   }
 
-  const {householdMap, receipts, ...extensions} = await restoreBackupExtensions(backup, existingLedger, {accountIdMap, categoryIdMap, txIdMap}, backend, demo, demoId, check);
+  const budgetIdMap = new Map<string,string>();
+  for (const old of backup.data.budgets) {
+    const match = [...(existingLedger.budgets ?? []),...createdBudgets].find(b=>b.category_id === categoryIdMap.get(old.category_id) && b.start_month === old.start_month && b.end_month === old.end_month);
+    if (match) budgetIdMap.set(old.id,match.id);
+  }
+  const {householdMap, receipts, ...extensions} = await restoreBackupExtensions(backup, existingLedger, {accountIdMap, categoryIdMap, txIdMap,budgetIdMap}, backend, demo, demoId, check);
   const nextLedger: Ledger = {
     ...existingLedger,
     ...extensions,
@@ -1411,7 +1418,11 @@ export async function executeRestore(params: {
       const household_id = original?.household_id ? householdMap.get(original.household_id) : undefined;
       return household_id ? {...a,household_id} : a;
     }),
-    categories: [...existingLedger.categories, ...createdCategories],
+    categories: [...existingLedger.categories, ...createdCategories].map(c => {
+      const original = backup.data.categories.find(old => categoryIdMap.get(old.id) === c.id);
+      const household_id = original?.household_id ? householdMap.get(original.household_id) : undefined;
+      return household_id ? {...c,household_id} : c;
+    }),
     transactions: [...existingLedger.transactions, ...createdTransactions].map(t => receipts.has(t.id) ? {...t,receipt:receipts.get(t.id)} : t),
     recurring: [...(existingLedger.recurring ?? []), ...createdRecurring],
     recurring_occurrences: [
@@ -1419,7 +1430,11 @@ export async function executeRestore(params: {
       ...createdOccurrences,
     ],
     recurring_prefs: nextPrefs,
-    budgets: [...(existingLedger.budgets ?? []), ...createdBudgets],
+    budgets: [...(existingLedger.budgets ?? []), ...createdBudgets].map(b => {
+      const original = backup.data.budgets.find(old => budgetIdMap.get(old.id) === b.id);
+      const household_id = original?.household_id ? householdMap.get(original.household_id) : undefined;
+      return household_id ? {...b,household_id} : b;
+    }),
   };
 
   return {
@@ -1502,7 +1517,7 @@ function validateBackupExtensions(d: Record<string, unknown>, ledger: Pick<Ledge
 
 async function restoreBackupExtensions(
   backup: FuloosBackup, existing: Ledger,
-  maps: {accountIdMap: Map<string,string>; categoryIdMap: Map<string,string>; txIdMap: Map<string,string>},
+  maps: {accountIdMap: Map<string,string>; categoryIdMap: Map<string,string>; txIdMap: Map<string,string>;budgetIdMap: Map<string,string>},
   backend: RestoreBackend | undefined, demo: boolean, demoId: () => string, check: () => void,
 ): Promise<Partial<Ledger> & {householdMap: Map<string,string>; receipts: Map<string,string>}> {
   const {accountIdMap:accounts,categoryIdMap:categories,txIdMap:transactions} = maps;
@@ -1537,6 +1552,17 @@ async function restoreBackupExtensions(
       if (!backend?.createHousehold) throw new Error("Household restore is unavailable.");
       const created = await backend.createHousehold(h.name);
       householdMap.set(h.id,created.household.id);
+    }
+  }
+  for (const c of backup.data.categories) {
+    const hid=c.household_id ? householdMap.get(c.household_id) : undefined, id=categories.get(c.id);
+    if (hid && id && !demo) await backend!.save("categories",{household_id:hid},id);
+  }
+  for (const b of backup.data.budgets) {
+    const hid=b.household_id ? householdMap.get(b.household_id) : undefined, id=maps.budgetIdMap.get(b.id);
+    if (hid && id && !demo) {
+      if (!backend?.shareBudgetWithHousehold) throw new Error("Budget sharing restore is unavailable.");
+      await backend.shareBudgetWithHousehold(id,hid);
     }
   }
   for (const a of backup.data.accounts) {

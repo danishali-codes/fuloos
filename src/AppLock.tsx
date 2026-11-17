@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import React, { useState } from "react";
 import { Leaf, Lock, LogOut } from "lucide-react";
 import {
@@ -73,14 +74,10 @@ export function AppLockScreen({
         <div className="applock-icon" aria-hidden="true">
           <Lock size={24} />
         </div>
-        <h1 id="applock-title">Fuloos is locked</h1>
-        <p className="muted small">
-          Signed in as <b>{email}</b>. Enter your PIN to view your workspace.
-        </p>
+        <h1 id="applock-title">{uiText("Fuloos is locked")}</h1>
+        <p className="muted small"> {uiText("Signed in as")} <b>{email}</b>{uiText(". Enter your PIN to view your workspace.")} </p>
         <form onSubmit={submit} className="applock-form">
-          <label>
-            PIN
-            <input
+          <label> {uiText("PIN")} <input
               autoFocus
               required
               type="password"
@@ -92,7 +89,7 @@ export function AppLockScreen({
               value={pin}
               disabled={busy}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-              placeholder="4–8 digits"
+              placeholder={uiText("4–8 digits")}
             />
           </label>
           {error && (
@@ -101,7 +98,7 @@ export function AppLockScreen({
             </div>
           )}
           <button type="submit" className="primary" disabled={busy || pin.length < 4}>
-            {busy ? "Checking…" : "Unlock"}
+            {busy ? uiText("Checking…") : uiText("Unlock")}
           </button>
         </form>
         <div className="applock-footer">
@@ -111,18 +108,13 @@ export function AppLockScreen({
             disabled={busy}
             onClick={onSignOut}
           >
-            <LogOut size={15} /> Sign out
-          </button>
+            <LogOut size={15} /> {uiText("Sign out")} </button>
           {attempts > 0 && (
-            <span className="muted small">
-              Failed attempts: {attempts} / {MAX_PIN_ATTEMPTS}
+            <span className="muted small"> {uiText("Failed attempts:")} {attempts} / {MAX_PIN_ATTEMPTS}
             </span>
           )}
         </div>
-        <p className="applock-note muted small">
-          Privacy screen only — hides financial data in this browser when idle
-          or reopened; does not encrypt local storage.
-        </p>
+        <p className="applock-note muted small"> {uiText("Privacy screen only — hides financial data in this browser when idle or reopened; does not encrypt local storage.")} </p>
       </div>
     </div>
   );

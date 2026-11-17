@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import { backend } from "./client";
 import { useRef, useState } from "react";
 import { Download, FileJson, FileSpreadsheet, Upload } from "lucide-react";
@@ -156,15 +157,8 @@ export function DataBackup({
     <section className="data-backup" aria-labelledby="data-backup-heading">
       <div className="data-backup-head">
         <div>
-          <h3 id="data-backup-heading">Data &amp; backup</h3>
-          <p className="muted small">
-            Export your transactions as CSV or download a full JSON backup
-            (accounts, categories, transactions, recurring schedules,
-            occurrences, preferences, budgets, goals, rules, net worth,
-            alerts, receipts and CSV presets). AI learning data, access tokens
-            and other household members are excluded. Restored household groups
-            need new invitations. Browser push must be enabled again.
-          </p>
+          <h3 id="data-backup-heading">{uiText("Data & backup")}</h3>
+          <p className="muted small"> {uiText("Export your transactions as CSV or download a full JSON backup (accounts, categories, transactions, recurring schedules, occurrences, preferences, budgets, goals, rules, net worth, alerts, receipts and CSV presets). AI learning data, access tokens and other household members are excluded. Restored household groups need new invitations. Browser push must be enabled again.")} </p>
         </div>
       </div>
 
@@ -175,21 +169,19 @@ export function DataBackup({
           disabled={disabled || ledger.transactions.length === 0}
           onClick={() => void handleExportCsv()}
         >
-          <FileSpreadsheet size={15} /> Export transactions (CSV)
-        </button>
+          <FileSpreadsheet size={15} /> {uiText("Export transactions (CSV)")} </button>
         <button
           type="button"
           className="secondary"
           disabled={disabled}
           onClick={() => void handleExportJson()}
         >
-          <FileJson size={15} /> <Download size={14} /> Full backup (JSON)
-        </button>
+          <FileJson size={15} /> <Download size={14} /> {uiText("Full backup (JSON)")} </button>
       </div>
 
       <div className="data-backup-restore">
         <label className="data-backup-file">
-          <span>Restore from JSON backup</span>
+          <span>{uiText("Restore from JSON backup")}</span>
           <input
             ref={fileInput}
             type="file"
@@ -203,8 +195,7 @@ export function DataBackup({
           <div className="data-backup-preview">
             <div className="data-backup-preview-head">
               <strong>{fileName || "Backup preview"}</strong>
-              <span className="muted small">
-                Format v{parsed.preview.formatVersion} · Exported{" "}
+              <span className="muted small"> {uiText("Format v")}{parsed.preview.formatVersion} {uiText("· Exported")}{" "}
                 {parsed.preview.exportedAt.slice(0, 10)}
               </span>
             </div>
@@ -219,7 +210,7 @@ export function DataBackup({
             </ul>
 
             <fieldset className="data-backup-modes">
-              <legend>Restore mode</legend>
+              <legend>{uiText("Restore mode")}</legend>
               <label className={!workspaceEmpty ? "is-disabled" : ""}>
                 <input
                   type="radio"
@@ -229,13 +220,9 @@ export function DataBackup({
                   checked={mode === "empty"}
                   onChange={() => setMode("empty")}
                 />
-                <span>
-                  Restore into empty account only
-                  {!workspaceEmpty && (
+                <span> {uiText("Restore into empty account only")} {!workspaceEmpty && (
                     <small className="muted">
-                      {" "}
-                      (Unavailable — workspace already has data)
-                    </small>
+                      {" "} {uiText("(Unavailable — workspace already has data)")} </small>
                   )}
                 </span>
               </label>
@@ -248,10 +235,7 @@ export function DataBackup({
                   checked={mode === "merge"}
                   onChange={() => setMode("merge")}
                 />
-                <span>
-                  Merge with existing data (reuses matching accounts &amp;
-                  categories, skips duplicate transactions)
-                </span>
+                <span> {uiText("Merge with existing data (reuses matching accounts & categories, skips duplicate transactions)")} </span>
               </label>
             </fieldset>
 
@@ -262,10 +246,7 @@ export function DataBackup({
                 disabled={disabled}
                 onChange={(e) => setConfirmed(e.target.checked)}
               />
-              <span>
-                I have reviewed the preview counts and want to restore this
-                backup.
-              </span>
+              <span> {uiText("I have reviewed the preview counts and want to restore this backup.")} </span>
             </label>
 
             <div className="data-backup-restore-actions">
@@ -276,7 +257,7 @@ export function DataBackup({
                 onClick={() => void handleRestore()}
               >
                 <Upload size={15} />{" "}
-                {restoring ? "Restoring…" : "Confirm & restore"}
+                {restoring ? uiText("Restoring…") : uiText("Confirm & restore")}
               </button>
               <button
                 type="button"
@@ -289,9 +270,7 @@ export function DataBackup({
                   setError("");
                   if (fileInput.current) fileInput.current.value = "";
                 }}
-              >
-                Cancel
-              </button>
+              > {uiText("Cancel")} </button>
             </div>
           </div>
         )}

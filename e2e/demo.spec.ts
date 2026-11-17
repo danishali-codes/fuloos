@@ -221,3 +221,72 @@ test.describe("Fuloos demo E2E critical flows", () => {
     ).toBeVisible();
   });
 });
+
+test.describe("Review regression browser flows", () => {
+ test("notification deep link survives entering the demo",async({page})=>{
+  await page.goto("/?settings=notifications");
+  await page.getByRole("button",{name:/explore the demo/i}).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByRole("heading",{name:"Notifications",exact:true})).toBeVisible();
+ });
+ test("create a goal and record a contribution",async({page})=>{
+  await enterDemo(page); await navTo(page,"Goals");
+  await page.getByRole("button",{name:"Add goal",exact:true}).click();
+  const dialog=page.getByRole("dialog");
+  await dialog.getByLabel("Goal name").fill("Regression savings");
+  await dialog.getByLabel("Target amount").fill("1000");
+  await dialog.getByRole("button",{name:"Save goal",exact:true}).click();
+  await expect(dialog).toBeHidden();
+  const card=page.locator(".goal-card").filter({hasText:"Regression savings"});
+  await card.getByRole("button",{name:/contribute/i}).click();
+  const contribute=page.getByRole("dialog");
+  await contribute.getByLabel("Amount",{exact:false}).fill("50");
+  await contribute.getByRole("button",{name:/add contribution|record contribution|contribute/i}).last().click();
+  await expect(contribute).toBeHidden();
+  await expect(card).toContainText("50");
+ });
+ test("create a net worth asset with valuation history",async({page})=>{
+  await enterDemo(page); await navTo(page,"Net Worth");
+  await page.getByRole("button",{name:"Add item",exact:true}).click();
+  const dialog=page.getByRole("dialog");
+  await dialog.getByLabel("Name",{exact:true}).fill("Regression fund");
+  await dialog.getByLabel("Current value (AED)").fill("500");
+  await dialog.getByRole("button",{name:/save|add item/i}).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText("Regression fund",{exact:true})).toBeVisible();
+  await expect(page.getByText("500.00",{exact:false}).first()).toBeVisible();
+ });
+ test("full backup contains newer features and supports preview",async({page})=>{
+  await enterDemo(page);
+  await page.locator("main").getByRole("button",{name:"Settings",exact:true}).click();
+  const dialog=page.getByRole("dialog");
+  const downloadEvent=page.waitForEvent("download");
+  await dialog.getByRole("button",{name:"Full backup (JSON)"}).click();
+  const download=await downloadEvent;
+  expect(download.suggestedFilename()).toMatch(/fuloos-backup/);
+  const stream=await download.createReadStream();
+  const chunks:Buffer[]=[];for await(const chunk of stream!)chunks.push(Buffer.from(chunk));
+  const data=JSON.parse(Buffer.concat(chunks).toString());
+  expect(data.format_version).toBe(2);
+  for(const key of ["goals","goal_contributions","rules","net_worth_items","net_worth_snapshots","captured_alerts","attachments"])expect(Array.isArray(data.data[key])).toBeTruthy();
+  await dialog.locator('input[type="file"]').setInputFiles({name:"backup.json",mimeType:"application/json",buffer:Buffer.from(JSON.stringify(data))});
+  await expect(dialog.getByText("Backup preview",{exact:true})).toBeVisible();
+ });
+ test("household setup and notification preferences work in demo",async({page})=>{
+  await enterDemo(page);
+  await page.locator("main").getByRole("button",{name:"Settings",exact:true}).click();
+  const dialog=page.getByRole("dialog");
+  await dialog.getByLabel("New household name",{exact:true}).fill("Regression home");
+  await dialog.getByRole("button",{name:"Create household",exact:true}).click();
+  await expect(dialog.getByText("Regression home",{exact:true})).toBeVisible();
+  await expect(dialog.getByText("Shared categories",{exact:true})).toBeVisible();
+  await dialog.getByRole("button",{name:"Save preferences",exact:true}).click();
+  await expect(dialog.getByText("Saved notification preferences in demo memory.")).toBeVisible();
+ });
+ test("Arabic translates goals and transaction editors without changing saved data",async({page})=>{
+  await enterDemo(page);
+  await page.getByRole("button",{name:"Switch language",exact:true}).click();
+  await expect(page.locator("html")).toHaveAttribute("dir","rtl");
+  await expect(page.getByText("نظرة عامة",{exact:true}).first()).toBeVisible();
+ });
+});

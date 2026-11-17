@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import { X } from "lucide-react";
 import { formatMissingCollections, type SchemaStatus } from "./schemaStatus";
 
@@ -23,14 +24,13 @@ export function SchemaBanner({
       }}
     >
       <span>
-        <strong>Server migration needed:</strong> missing PocketBase{" "}
+        <strong>{uiText("Server migration needed:")}</strong> {uiText("missing PocketBase")}{" "}
         {status.missing.length === 1 ? "collection" : "collections"} (
-        {formatMissingCollections(status.missing)}). Apply the latest
-        migrations in <code>pocketbase/pb_migrations</code>.
+        {formatMissingCollections(status.missing)}{uiText("). Apply the latest migrations in")} <code>pocketbase/pb_migrations</code>.
       </span>
       <button
         type="button"
-        aria-label="Dismiss schema warning"
+        aria-label={uiText("Dismiss schema warning")}
         onClick={onDismiss}
         style={{
           display: "inline-flex",
@@ -39,8 +39,7 @@ export function SchemaBanner({
           flexShrink: 0,
         }}
       >
-        <X size={14} /> Dismiss
-      </button>
+        <X size={14} /> {uiText("Dismiss")} </button>
     </div>
   );
 }

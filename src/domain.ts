@@ -1,3 +1,4 @@
+import { formatLocalizedAed } from "./i18n.ts";
 import { validateForeignCurrencyFields } from "./currency.ts";
 import { validateSplits, validateTags } from "./enrichment.ts";
 import type { NetWorthItem, NetWorthSnapshot } from "./netWorth.ts";
@@ -260,10 +261,7 @@ export function minor(value: string): number {
     throw new Error("Amount is too large.");
   return result === 0 ? 0 : negative ? -result : result;
 }
-export const money = (amount: number) =>
-  new Intl.NumberFormat("en-AE", { style: "currency", currency: "AED" }).format(
-    amount / 100,
-  );
+export const money = (amount: number) => formatLocalizedAed(amount);
 /**
  * An account's stored opening_balance is its balance at the start of
  * opening_date, before that day's transactions. The form shows this as

@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ArrowDownLeft,
@@ -177,13 +178,13 @@ export function QuickAddModal({
     >
       <div className="modal-head">
         <div>
-          <span className="eyebrow">QUICK ADD · AED</span>
-          <h2 id="quick-add-title">Add transaction</h2>
+          <span className="eyebrow">{uiText("QUICK ADD · AED")}</span>
+          <h2 id="quick-add-title">{uiText("Add transaction")}</h2>
         </div>
         <button
           type="button"
           className="icon-button"
-          aria-label="Close"
+          aria-label={uiText("Close")}
           onClick={onClose}
         >
           <X size={18} />
@@ -193,20 +194,15 @@ export function QuickAddModal({
       {offlineLocked && (
         <div className="pwa-inline-notice" role="status">
           <WifiOff size={15} />
-          <span>You're offline — reconnect to save changes.</span>
+          <span>{uiText("You're offline — reconnect to save changes.")}</span>
         </div>
       )}
 
       {ledger.accounts.length === 0 ? (
         <div className="quick-add-empty">
-          <p className="muted">
-            Create an account first so Fuloos knows where this transaction
-            belongs.
-          </p>
+          <p className="muted"> {uiText("Create an account first so Fuloos knows where this transaction belongs.")} </p>
           <div className="modal-actions">
-            <button type="button" className="secondary" onClick={onClose}>
-              Cancel
-            </button>
+            <button type="button" className="secondary" onClick={onClose}> {uiText("Cancel")} </button>
             <button
               type="button"
               className="primary"
@@ -215,35 +211,27 @@ export function QuickAddModal({
                 onClose();
                 onAddAccount();
               }}
-            >
-              Add account
-            </button>
+            > {uiText("Add account")} </button>
           </div>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="quick-add-form">
-          <div className="quick-add-kinds" role="group" aria-label="Type">
+          <div className="quick-add-kinds" role="group" aria-label={uiText("Type")}>
             <button
               type="button"
               className={type === "expense" ? "active" : ""}
               onClick={() => setType("expense")}
             >
-              <ArrowUpRight size={15} />
-              Expense
-            </button>
+              <ArrowUpRight size={15} /> {uiText("Expense")} </button>
             <button
               type="button"
               className={type === "income" ? "active" : ""}
               onClick={() => setType("income")}
             >
-              <ArrowDownLeft size={15} />
-              Income
-            </button>
+              <ArrowDownLeft size={15} /> {uiText("Income")} </button>
           </div>
 
-          <label>
-            Amount (AED)
-            <input
+          <label> {uiText("Amount (AED)")} <input
               ref={amountRef}
               required
               inputMode="decimal"
@@ -269,18 +257,16 @@ export function QuickAddModal({
                     }
                   }}
                 />
-                <span>Foreign currency</span>
+                <span>{uiText("Foreign currency")}</span>
               </label>
               {foreignEnabled && (
-                <span className="muted small">Explicit FX to AED</span>
+                <span className="muted small">{uiText("Explicit FX to AED")}</span>
               )}
             </div>
             {foreignEnabled && (
               <>
                 <div className="form-row">
-                  <label>
-                    Currency
-                    <select
+                  <label> {uiText("Currency")} <select
                       name="original_currency"
                       value={originalCurrency}
                       disabled={busy}
@@ -301,8 +287,7 @@ export function QuickAddModal({
                       ))}
                     </select>
                   </label>
-                  <label>
-                    Original ({originalCurrency})
+                  <label> {uiText("Original (")}{originalCurrency})
                     <input
                       name="original_amount"
                       inputMode="decimal"
@@ -316,9 +301,7 @@ export function QuickAddModal({
                       }}
                     />
                   </label>
-                  <label>
-                    Rate to AED
-                    <input
+                  <label> {uiText("Rate to AED")} <input
                       name="fx_rate"
                       inputMode="decimal"
                       placeholder="3.6725"
@@ -342,9 +325,7 @@ export function QuickAddModal({
           </div>
 
           <div className="form-row">
-            <label>
-              Account
-              <select
+            <label> {uiText("Account")} <select
                 name="account_id"
                 value={accountId}
                 onChange={(e) => {
@@ -370,14 +351,12 @@ export function QuickAddModal({
                 ))}
               </select>
             </label>
-            <label>
-              Category
-              <select
+            <label> {uiText("Category")} <select
                 name="category_id"
                 value={categoryId}
                 onChange={(e) => setCategoryId(e.target.value)}
               >
-                <option value="">Uncategorized</option>
+                <option value="">{uiText("Uncategorized")}</option>
                 {ledger.categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.emoji ? `${c.emoji} ` : ""}
@@ -389,19 +368,16 @@ export function QuickAddModal({
           </div>
 
           <div className="form-row">
-            <label>
-              Payee <span className="muted">Optional</span>
+            <label> {uiText("Payee")} <span className="muted">{uiText("Optional")}</span>
               <input
                 name="payee"
                 maxLength={120}
-                placeholder="e.g. Carrefour, DEWA"
+                placeholder={uiText("e.g. Carrefour, DEWA")}
                 value={payee}
                 onChange={(e) => setPayee(e.target.value)}
               />
             </label>
-            <label>
-              Date
-              <input
+            <label> {uiText("Date")} <input
                 required
                 type="date"
                 name="date"
@@ -412,8 +388,7 @@ export function QuickAddModal({
           </div>
 
           <div className="field-block">
-            <span className="field-label">
-              Tags <span className="muted">Optional</span>
+            <span className="field-label"> {uiText("Tags")} <span className="muted">{uiText("Optional")}</span>
             </span>
             <TagInput
               tags={tags}
@@ -435,21 +410,19 @@ export function QuickAddModal({
               className="secondary"
               disabled={busy}
               onClick={onClose}
-            >
-              Cancel
-            </button>
+            > {uiText("Cancel")} </button>
             <button
               type="submit"
               className="primary"
               disabled={busy || offlineLocked}
             >
               {busy
-                ? "Saving…"
+                ? uiText("Saving…")
                 : offlineLocked
-                  ? "Offline"
+                  ? uiText("Offline")
                   : type === "income"
-                    ? "Add income"
-                    : "Add expense"}
+                    ? uiText("Add income")
+                    : uiText("Add expense")}
               <Check size={16} />
             </button>
           </div>
@@ -470,8 +443,8 @@ export function QuickAddFab({
     <button
       type="button"
       className="quick-add-fab"
-      aria-label="Quick add transaction"
-      title="Quick add transaction (N)"
+      aria-label={uiText("Quick add transaction")}
+      title={uiText("Quick add transaction (N)")}
       disabled={disabled}
       onClick={onClick}
     >
@@ -504,31 +477,23 @@ export function PwaBanners({
           <span>
             <WifiOff size={15} />
             {demo
-              ? "You're offline. Demo workspace changes stay in memory."
-              : "You're offline. Viewing cached app shell — saving changes is paused until you reconnect."}
+              ? uiText("You're offline. Demo workspace changes stay in memory.")
+              : uiText("You're offline. Viewing cached app shell — saving changes is paused until you reconnect.")}
           </span>
         </div>
       )}
       {updateAvailable && (
         <div className="pwa-banner pwa-banner-update" role="status">
           <span>
-            <RefreshCw size={15} />
-            A new version of Fuloos is ready.
-          </span>
-          <button type="button" onClick={onApplyUpdate}>
-            Update now
-          </button>
+            <RefreshCw size={15} /> {uiText("A new version of Fuloos is ready.")} </span>
+          <button type="button" onClick={onApplyUpdate}> {uiText("Update now")} </button>
         </div>
       )}
       {canInstall && online && !updateAvailable && (
         <div className="pwa-banner pwa-banner-install">
           <span>
-            <Download size={15} />
-            Install Fuloos for faster access and quick-add shortcuts.
-          </span>
-          <button type="button" onClick={onInstall}>
-            Install app
-          </button>
+            <Download size={15} /> {uiText("Install Fuloos for faster access and quick-add shortcuts.")} </span>
+          <button type="button" onClick={onInstall}> {uiText("Install app")} </button>
         </div>
       )}
     </div>

@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import { useEffect, useMemo, useRef, useState } from "react";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { ImportProgress } from "./ImportProgress";
@@ -40,6 +41,8 @@ export function PdfImport({
   const [dateFormat, setDateFormat] = useState<"DMY" | "MDY">("DMY");
   const [pages, setPages] = useState<PdfLine[][] | null>(null);
   const [filename, setFilename] = useState("");
+  const [password,setPassword]=useState("");
+  const [chosenFile,setChosenFile]=useState<File|null>(null);
   const [reading, setReading] = useState(false);
   const [error, setError] = useState("");
   const [edits, setEdits] = useState<Record<number, Edit>>({});
@@ -190,7 +193,8 @@ export function PdfImport({
         throw new Error("Choose a PDF smaller than 25 MB.");
       }
       const buffer = await file.arrayBuffer();
-      const extracted = await extractPdfPages(buffer, pdfWorkerUrl);
+      setChosenFile(file);
+      const extracted = await extractPdfPages(buffer, pdfWorkerUrl, password);
       if (!extracted.some((p) => p.length > 0)) {
         throw new Error(
           "No selectable text found in this PDF. Scanned image-only PDFs are not supported yet.",
@@ -255,56 +259,49 @@ export function PdfImport({
     >
       <div className="modal-head">
         <div>
-          <span className="eyebrow">PRIVATE BROWSER PARSING</span>
-          <h2 id="pdf-title">Import PDF statement</h2>
+          <span className="eyebrow">{uiText("PRIVATE BROWSER PARSING")}</span>
+          <h2 id="pdf-title">{uiText("Import PDF statement")}</h2>
         </div>
         <button
           className="icon-button"
           disabled={busy}
           onClick={onClose}
-          aria-label="Close PDF import"
+          aria-label={uiText("Close PDF import")}
         >
           ×
         </button>
       </div>
       <div className="csv-body">
-        <p className="muted">
-          Choose a UAE bank PDF statement (ENBD, ADCB, FAB, Mashreq, Liv, ADIB,
-          or generic). Your PDF is parsed 100% in your browser and never
-          uploaded.
-        </p>
+        <p className="muted"> {uiText("Choose a UAE bank PDF statement (ENBD, ADCB, FAB, Mashreq, Liv, ADIB, or generic). Your PDF is parsed 100% in your browser and never uploaded.")} </p>
         <fieldset disabled={busy || reading}>
-          <label>
-            PDF statement file
-            <input
+          <label> {uiText("PDF statement file")} <input
               type="file"
               accept=".pdf,application/pdf"
               onChange={(e) => void handleFile(e.target.files?.[0])}
             />
           </label>
           {reading && (
-            <p className="muted small" role="status">
-              Reading PDF pages…
-            </p>
+            <p className="muted small" role="status"> {uiText("Reading PDF pages…")} </p>
           )}
+          <label>PDF password (optional)
+            <input type="password" autoComplete="off" value={password} onChange={e=>setPassword(e.target.value)} />
+          </label>
+          {chosenFile && !pages && <button type="button" className="secondary" disabled={reading} onClick={()=>void handleFile(chosenFile)}>Retry with password</button>}
           {filename && parsed && (
             <p className="small">
               {filename} · {parsed.pageCount}{" "}
-              {parsed.pageCount === 1 ? "page" : "pages"} · Bank:{" "}
-              <strong>{parsed.bank}</strong> · {rows.length} rows found
-            </p>
+              {parsed.pageCount === 1 ? "page" : "pages"} {uiText("· Bank:")}{" "}
+              <strong>{parsed.bank}</strong> · {rows.length} {uiText("rows found")} </p>
           )}
           <div className="csv-grid">
-            <label>
-              Import into account
-              <select
+            <label> {uiText("Import into account")} <select
                 value={account}
                 onChange={(e) => {
                   setAccount(e.target.value);
                   resetChoices();
                 }}
               >
-                <option value="">Choose account…</option>
+                <option value="">{uiText("Choose account…")}</option>
                 {ledger.accounts.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
@@ -312,16 +309,14 @@ export function PdfImport({
                 ))}
               </select>
             </label>
-            <label>
-              Bank format
-              <select
+            <label> {uiText("Bank format")} <select
                 value={bankOverride}
                 onChange={(e) => {
                   setBankOverride(e.target.value as PdfBank | "");
                   resetChoices();
                 }}
               >
-                <option value="">Detect automatically</option>
+                <option value="">{uiText("Detect automatically")}</option>
                 {PDF_BANKS.map((b) => (
                   <option key={b} value={b}>
                     {b}
@@ -329,9 +324,7 @@ export function PdfImport({
                 ))}
               </select>
             </label>
-            <label>
-              Date format
-              <select
+            <label> {uiText("Date format")} <select
                 value={dateFormat}
                 onChange={(e) => {
                   setDateFormat(e.target.value as "DMY" | "MDY");
@@ -354,19 +347,15 @@ export function PdfImport({
         {parsed && parsed.warnings.length > 0 && (
           <details className="notice">
             <summary>
-              {parsed.warnings.length} unparsed{" "}
-              {parsed.warnings.length === 1 ? "line" : "lines"} skipped
-            </summary>
+              {parsed.warnings.length} {uiText("unparsed")}{" "}
+              {parsed.warnings.length === 1 ? "line" : "lines"} {uiText("skipped")} </summary>
             <ul>
               {parsed.warnings.slice(0, 30).map((w, idx) => (
-                <li key={idx} className="small">
-                  Page {w.page}: {w.reason} — <code>{w.line.slice(0, 100)}</code>
+                <li key={idx} className="small"> {uiText("Page")} {w.page}: {w.reason} — <code>{w.line.slice(0, 100)}</code>
                 </li>
               ))}
               {parsed.warnings.length > 30 && (
-                <li className="small">
-                  …and {parsed.warnings.length - 30} more lines.
-                </li>
+                <li className="small"> {uiText("…and")} {parsed.warnings.length - 30} {uiText("more lines.")} </li>
               )}
             </ul>
           </details>
@@ -374,10 +363,9 @@ export function PdfImport({
 
         {parsed && (
           <>
-            <h3>Review transactions</h3>
+            <h3>{uiText("Review transactions")}</h3>
             <p>
-              {selected.length} selected · {duplicateCount} possible duplicates
-              {invalidCount > 0 ? ` · ${invalidCount} invalid` : ""}
+              {selected.length} {uiText("selected ·")} {duplicateCount} {uiText("possible duplicates")} {invalidCount > 0 ? ` · ${invalidCount} invalid` : ""}
             </p>
             <label className="csv-check">
               <input
@@ -385,21 +373,19 @@ export function PdfImport({
                 checked={includeDuplicates}
                 disabled={busy}
                 onChange={(e) => setIncludeDuplicates(e.target.checked)}
-              />
-              Include possible duplicates
-            </label>
+              /> {uiText("Include possible duplicates")} </label>
             {rows.length > 0 ? (
               <div className="csv-table">
                 <table>
                   <thead>
                     <tr>
-                      <th>Include</th>
-                      <th>Date</th>
-                      <th>Payee</th>
-                      <th>Type</th>
-                      <th>Amount</th>
-                      <th>Category</th>
-                      <th>Status</th>
+                      <th>{uiText("Include")}</th>
+                      <th>{uiText("Date")}</th>
+                      <th>{uiText("Payee")}</th>
+                      <th>{uiText("Type")}</th>
+                      <th>{uiText("Amount")}</th>
+                      <th>{uiText("Category")}</th>
+                      <th>{uiText("Status")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -501,8 +487,8 @@ export function PdfImport({
                                   }))
                                 }
                               >
-                                <option value="expense">Expense</option>
-                                <option value="income">Income</option>
+                                <option value="expense">{uiText("Expense")}</option>
+                                <option value="income">{uiText("Income")}</option>
                               </select>
                             ) : (
                               <span>{t?.type ?? "—"}</span>
@@ -531,7 +517,7 @@ export function PdfImport({
                                   }))
                                 }
                               >
-                                <option value="">Uncategorised</option>
+                                <option value="">{uiText("Uncategorised")}</option>
                                 {ledger.categories.map((c) => (
                                   <option key={c.id} value={c.id}>
                                     {c.emoji ? `${c.emoji} ` : ""}
@@ -565,7 +551,7 @@ export function PdfImport({
                                     })
                                   }
                                 >
-                                  {appliedMatch ? "Not a transfer" : "Mark transfer"}
+                                  {appliedMatch ? uiText("Not a transfer") : uiText("Mark transfer")}
                                 </button>
                               </div>
                             )}
@@ -577,9 +563,7 @@ export function PdfImport({
                 </table>
               </div>
             ) : (
-              <p className="muted">
-                No transactions could be extracted from this PDF.
-              </p>
+              <p className="muted"> {uiText("No transactions could be extracted from this PDF.")} </p>
             )}
           </>
         )}
@@ -592,15 +576,13 @@ export function PdfImport({
             total={total}
           />
         )}
-        <button className="secondary" disabled={busy} onClick={onClose}>
-          Cancel
-        </button>
+        <button className="secondary" disabled={busy} onClick={onClose}> {uiText("Cancel")} </button>
         <button
           className="primary"
           disabled={busy || !selected.length || !account}
           onClick={() => void submit()}
         >
-          {busy ? "Importing…" : `Import ${selected.length} transactions`}
+          {busy ? uiText("Importing…") : `Import ${selected.length} transactions`}
         </button>
       </div>
     </dialog>

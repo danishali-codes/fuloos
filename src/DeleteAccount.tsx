@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import React, { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { errorMessage } from "./domain";
@@ -52,27 +53,21 @@ export function DeleteAccountDialog({
     >
       <div className="modal-head">
         <div>
-          <span className="eyebrow">ACCOUNT</span>
-          <h2 id="delete-account-title">Delete my account</h2>
+          <span className="eyebrow">{uiText("ACCOUNT")}</span>
+          <h2 id="delete-account-title">{uiText("Delete my account")}</h2>
         </div>
         <button
           disabled={busy}
           className="icon-button"
-          aria-label="Close dialog"
+          aria-label={uiText("Close dialog")}
           onClick={close}
         >
           <X size={21} />
         </button>
       </div>
       <form onSubmit={submit}>
-        <div className="error">
-          This permanently deletes <b>{email}</b> and everything in it:
-          accounts, categories, transactions, recurring schedules, budgets, CSV
-          presets and AI suggestion data. It can't be undone.
-        </div>
-        <label>
-          Type {CONFIRM_WORD} to confirm
-          <input
+        <div className="error"> {uiText("This permanently deletes")} <b>{email}</b> {uiText("and everything in it: accounts, categories, transactions, recurring schedules, budgets, CSV presets and AI suggestion data. It can't be undone.")} </div>
+        <label> {uiText("Type")} {CONFIRM_WORD} {uiText("to confirm")} <input
             autoFocus
             autoComplete="off"
             value={typed}
@@ -92,14 +87,12 @@ export function DeleteAccountDialog({
             className="secondary"
             disabled={busy}
             onClick={close}
-          >
-            Cancel
-          </button>
+          > {uiText("Cancel")} </button>
           <button
             className="primary danger"
             disabled={busy || typed.trim() !== CONFIRM_WORD}
           >
-            {busy ? "Deleting…" : "Delete everything"}
+            {busy ? uiText("Deleting…") : uiText("Delete everything")}
           </button>
         </div>
       </form>

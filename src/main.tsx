@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -1325,7 +1326,7 @@ function App() {
           month,
         )
       : start.toISOString().slice(0, 7);
-  if (checking) return <div className="loading">Opening Fuloos…</div>;
+  if (checking) return <div className="loading">{uiText("Opening Fuloos…")}</div>;
   if (!session && !demo)
     return <Auth onDemo={startDemo} externalError={error} />;
   if (session && !demo && locked && lockConfig)
@@ -1465,7 +1466,7 @@ function App() {
             />
           )}
           {page === "Recurring" && (
-            <Suspense fallback={<div className="loading-inline">Loading…</div>}>
+            <Suspense fallback={<div className="loading-inline">{uiText("Loading…")}</div>}>
               <RecurringPage
                 ledger={ledger}
                 concealed={concealed}
@@ -1512,7 +1513,7 @@ function App() {
             </Suspense>
           )}
           {page === "Budgets" && (
-            <Suspense fallback={<div className="loading-inline">Loading…</div>}>
+            <Suspense fallback={<div className="loading-inline">{uiText("Loading…")}</div>}>
               <BudgetsPage
                 ledger={ledger}
                 month={month}
@@ -1533,7 +1534,7 @@ function App() {
             </Suspense>
           )}
           {page === "Goals" && (
-            <Suspense fallback={<div className="loading-inline">Loading…</div>}>
+            <Suspense fallback={<div className="loading-inline">{uiText("Loading…")}</div>}>
               <GoalsPage
                 ledger={ledger}
                 concealed={concealed}
@@ -1546,8 +1547,19 @@ function App() {
               />
             </Suspense>
           )}
+          {page === "Net Worth" && (
+            <Suspense fallback={<div className="loading-inline">{uiText("Loading…")}</div>}>
+              <NetWorthPage ledger={ledger} concealed={concealed} busy={busy}
+                onAddItem={()=>setNetWorthModal({open:true})}
+                onEditItem={(item)=>setNetWorthModal({open:true,item})}
+                onDeleteItem={(item)=>void deleteNetWorthItem(item)}
+                onUpdateValuation={setNetWorthValuationTarget}
+                onDeleteSnapshot={(snap)=>void deleteNetWorthSnapshot(snap)}
+                onNavigateAccounts={()=>setPage("Accounts")} />
+            </Suspense>
+          )}
           {page === "Reports" && (
-            <Suspense fallback={<div className="loading-inline">Loading…</div>}>
+            <Suspense fallback={<div className="loading-inline">{uiText("Loading…")}</div>}>
               <ReportsPage
                 ledger={ledger}
                 budgetRangeStart={budgetRangeStart}

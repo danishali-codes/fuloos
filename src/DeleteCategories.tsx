@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import React, { useEffect, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { errorMessage, plural, type Category } from "./domain";
@@ -85,14 +86,14 @@ export function DeleteCategoriesDialog({
       <form onSubmit={submit}>
         <div id="delete-categories-message">
           {!single && (
-            <ul className="delete-categories-names" aria-label="Categories">
+            <ul className="delete-categories-names" aria-label={uiText("Categories")}>
               {names.map((c) => (
                 <li key={c.id}>
                   <span aria-hidden="true">{c.emoji || "•"}</span> {c.name}
                 </li>
               ))}
               {count > names.length && (
-                <li className="more">+{count - names.length} more</li>
+                <li className="more">+{count - names.length} {uiText("more")}</li>
               )}
             </ul>
           )}
@@ -104,7 +105,7 @@ export function DeleteCategoriesDialog({
             </li>
             {recurringCount > 0 && (
               <li>
-                {plural(recurringCount, "recurring schedule")} will also move to{" "}
+                {plural(recurringCount, "recurring schedule")} {uiText("will also move to")}{" "}
                 {targetName}.
               </li>
             )}
@@ -116,13 +117,13 @@ export function DeleteCategoriesDialog({
           </ul>
           {(txCount > 0 || recurringCount > 0) && (
             <label>
-              <span>Move transactions and schedules to</span>
+              <span>{uiText("Move transactions and schedules to")}</span>
               <select
                 value={target}
                 disabled={busy}
                 onChange={(e) => setTarget(e.target.value)}
               >
-                <option value={UNCATEGORISED}>Uncategorized</option>
+                <option value={UNCATEGORISED}>{uiText("Uncategorized")}</option>
                 {remaining.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.emoji ? `${c.emoji} ` : ""}
@@ -132,7 +133,7 @@ export function DeleteCategoriesDialog({
               </select>
             </label>
           )}
-          <p className="delete-categories-final">This can't be undone.</p>
+          <p className="delete-categories-final">{uiText("This can't be undone.")}</p>
         </div>
         {error && (
           <div className="error" role="alert">
@@ -145,14 +146,12 @@ export function DeleteCategoriesDialog({
             className="secondary"
             disabled={busy}
             onClick={close}
-          >
-            Cancel
-          </button>
+          > {uiText("Cancel")} </button>
           <button className="primary danger" disabled={busy || !count}>
             {busy
-              ? "Deleting…"
+              ? uiText("Deleting…")
               : single
-                ? "Delete category"
+                ? uiText("Delete category")
                 : `Delete ${count} categories`}
           </button>
         </div>

@@ -12,6 +12,10 @@ function create(app, collection, uid, values, fields) {
   const rec = new Record(app.findCollectionByNameOrId(collection));
   rec.set("user_id", uid);
   for (const field of fields) if (values[field] !== undefined) rec.set(field, values[field] === null ? "" : values[field]);
+  if (collection === "fuloos_net_worth_snapshots") {
+    const previous=app.findRecordsByFilter(collection,"item_id = {:id}","-revision",1,0,{id:values.item_id});
+    rec.set("revision", previous.length ? previous[0].getInt("revision")+1 : 1);
+  }
   app.save(rec);
   return rec;
 }
@@ -80,7 +84,7 @@ function importAlert(e) {
   }, "alert-import:" + id);
 }
 function snapshots(app, id) {
-  return app.findRecordsByFilter("fuloos_net_worth_snapshots", "item_id = {:id}", "-date,-id", 0, 0, {id});
+  return app.findRecordsByFilter("fuloos_net_worth_snapshots", "item_id = {:id}", "-date,-revision,-id", 0, 0, {id});
 }
 function syncItem(app, item) {
   const rows = snapshots(app, item.id);

@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownLeft,
@@ -122,11 +123,9 @@ function NetWorthTrendChart({
             <strong>{formatMonthShort(active.point.month)}:</strong>{" "}
             {concealed(active.point.netWorth)}
           </span>
-          <span className="nw-chart-legend-item">
-            Assets: <b>{concealed(active.point.totalAssets)}</b>
+          <span className="nw-chart-legend-item"> {uiText("Assets:")} <b>{concealed(active.point.totalAssets)}</b>
           </span>
-          <span className="nw-chart-legend-item">
-            Liabilities: <b>{concealed(active.point.totalLiabilities)}</b>
+          <span className="nw-chart-legend-item"> {uiText("Liabilities:")} <b>{concealed(active.point.totalLiabilities)}</b>
           </span>
         </div>
       )}
@@ -135,7 +134,7 @@ function NetWorthTrendChart({
           className="nw-svg"
           viewBox={`0 0 ${width} ${height}`}
           role="img"
-          aria-label="Net worth trend over time"
+          aria-label={uiText("Net worth trend over time")}
           onMouseLeave={() => setHoverIdx(null)}
         >
           <defs>
@@ -292,44 +291,34 @@ export function NetWorthPage({
     <div className="nw-page">
       <section className="stats nw-stats">
         <article className="stat net">
-          <div className="stat-label">
-            Net Worth
-            <span className="round-icon green">
+          <div className="stat-label"> {uiText("Net Worth")} <span className="round-icon green">
               <TrendingUp size={18} />
             </span>
           </div>
           <h2>{concealed(summary.netWorth)}</h2>
-          <small>
-            Assets minus liabilities{" "}
+          <small> {uiText("Assets minus liabilities")}{" "}
             <span>
-              {ledger.accounts.length} accounts · {items.length} tracked items
-            </span>
+              {ledger.accounts.length} {uiText("accounts ·")} {items.length} {uiText("tracked items")} </span>
           </small>
           <div className="stat-decoration" />
         </article>
         <article className="stat">
-          <div className="stat-label">
-            Total Assets
-            <span className="round-icon green">
+          <div className="stat-label"> {uiText("Total Assets")} <span className="round-icon green">
               <ArrowDownLeft size={18} />
             </span>
           </div>
           <h2>{concealed(summary.totalAssets)}</h2>
-          <small>
-            Cash {concealed(summary.cashAssets)} · Tracked{" "}
+          <small> {uiText("Cash")} {concealed(summary.cashAssets)} {uiText("· Tracked")}{" "}
             {concealed(summary.trackedAssets)}
           </small>
         </article>
         <article className="stat">
-          <div className="stat-label">
-            Total Liabilities
-            <span className="round-icon terracotta">
+          <div className="stat-label"> {uiText("Total Liabilities")} <span className="round-icon terracotta">
               <ArrowUpRight size={18} />
             </span>
           </div>
           <h2>{concealed(summary.totalLiabilities)}</h2>
-          <small>
-            Cards {concealed(summary.accountLiabilities)} · Loans{" "}
+          <small> {uiText("Cards")} {concealed(summary.accountLiabilities)} {uiText("· Loans")}{" "}
             {concealed(summary.trackedLiabilities)}
           </small>
         </article>
@@ -338,12 +327,10 @@ export function NetWorthPage({
       <section className="panel">
         <div className="nw-chart-head">
           <div>
-            <h2>Net Worth trend</h2>
-            <p className="muted">
-              Monthly snapshot combining account balances and valuation history
-            </p>
+            <h2>{uiText("Net Worth trend")}</h2>
+            <p className="muted"> {uiText("Monthly snapshot combining account balances and valuation history")} </p>
           </div>
-          <div className="nw-range-pills" role="group" aria-label="Trend range">
+          <div className="nw-range-pills" role="group" aria-label={uiText("Trend range")}>
             {([6, 12, 24] as const).map((m) => (
               <button
                 key={m}
@@ -360,27 +347,24 @@ export function NetWorthPage({
       </section>
 
       <div className="nw-toolbar">
-        <div className="nw-filter-pills" role="group" aria-label="Filter items">
+        <div className="nw-filter-pills" role="group" aria-label={uiText("Filter items")}>
           <button
             type="button"
             className={kindFilter === "all" ? "active" : ""}
             onClick={() => setKindFilter("all")}
-          >
-            All ({items.length})
+          > {uiText("All (")}{items.length})
           </button>
           <button
             type="button"
             className={kindFilter === "asset" ? "active" : ""}
             onClick={() => setKindFilter("asset")}
-          >
-            Assets ({items.filter((i) => i.kind === "asset").length})
+          > {uiText("Assets (")}{items.filter((i) => i.kind === "asset").length})
           </button>
           <button
             type="button"
             className={kindFilter === "liability" ? "active" : ""}
             onClick={() => setKindFilter("liability")}
-          >
-            Liabilities ({items.filter((i) => i.kind === "liability").length})
+          > {uiText("Liabilities (")}{items.filter((i) => i.kind === "liability").length})
           </button>
         </div>
         <button
@@ -389,27 +373,22 @@ export function NetWorthPage({
           disabled={busy}
           onClick={onAddItem}
         >
-          <Plus size={16} /> Add asset or liability
-        </button>
+          <Plus size={16} /> {uiText("Add asset or liability")} </button>
       </div>
 
       {filteredItems.length === 0 ? (
         <section className="panel">
           <div className="empty">
             <Landmark size={26} />
-            <h3>No tracked assets or liabilities yet</h3>
-            <p>
-              Add investments, gold, property, crypto, or loans to track your
-              full Net Worth beyond everyday cash accounts.
-            </p>
+            <h3>{uiText("No tracked assets or liabilities yet")}</h3>
+            <p> {uiText("Add investments, gold, property, crypto, or loans to track your full Net Worth beyond everyday cash accounts.")} </p>
             <button
               type="button"
               className="primary"
               disabled={busy}
               onClick={onAddItem}
             >
-              <Plus size={16} /> Add asset or liability
-            </button>
+              <Plus size={16} /> {uiText("Add asset or liability")} </button>
           </div>
         </section>
       ) : (
@@ -434,7 +413,7 @@ export function NetWorthPage({
                     <div>
                       <div className="nw-badges">
                         <span className={`nw-kind-pill ${item.kind}`}>
-                          {item.kind === "asset" ? "Asset" : "Liability"}
+                          {item.kind === "asset" ? uiText("Asset") : uiText("Liability")}
                         </span>
                         <span className="nw-kind-pill">
                           {cat?.label ?? item.category}
@@ -479,8 +458,7 @@ export function NetWorthPage({
                     {item.kind === "liability" ? "-" : ""}
                     {concealed(item.current_value)}
                   </span>
-                  <small className="muted">
-                    As of {formatDateShort(item.as_of_date)}
+                  <small className="muted"> {uiText("As of")} {formatDateShort(item.as_of_date)}
                   </small>
                 </div>
 
@@ -493,8 +471,7 @@ export function NetWorthPage({
                     disabled={busy}
                     onClick={() => onUpdateValuation(item)}
                   >
-                    <RefreshCw size={14} /> Update valuation
-                  </button>
+                    <RefreshCw size={14} /> {uiText("Update valuation")} </button>
                   <button
                     type="button"
                     className="text-button"
@@ -503,14 +480,14 @@ export function NetWorthPage({
                     }
                   >
                     <History size={14} />
-                    {history.length} snapshot{history.length === 1 ? "" : "s"}
+                    {history.length} {uiText("snapshot")}{history.length === 1 ? "" : "s"}
                   </button>
                 </div>
 
                 {isExpanded && (
                   <div className="nw-history-list">
                     {history.length === 0 ? (
-                      <small className="muted">No valuation snapshots yet.</small>
+                      <small className="muted">{uiText("No valuation snapshots yet.")}</small>
                     ) : (
                       history.map((snap) => (
                         <div key={snap.id} className="nw-history-row">
@@ -525,7 +502,7 @@ export function NetWorthPage({
                             <button
                               type="button"
                               className="icon-button"
-                              aria-label="Delete snapshot"
+                              aria-label={uiText("Delete snapshot")}
                               disabled={busy}
                               onClick={() => onDeleteSnapshot(snap)}
                             >
@@ -547,17 +524,14 @@ export function NetWorthPage({
         <section className="panel nw-accounts-strip">
           <div className="panel-heading">
             <div>
-              <h2>Included cash &amp; credit accounts</h2>
-              <p className="muted">
-                Automatically included in your Net Worth total
-              </p>
+              <h2>{uiText("Included cash & credit accounts")}</h2>
+              <p className="muted"> {uiText("Automatically included in your Net Worth total")} </p>
             </div>
             <button
               type="button"
               className="text-button"
               onClick={onNavigateAccounts}
-            >
-              Manage accounts <ArrowRight size={15} />
+            > {uiText("Manage accounts")} <ArrowRight size={15} />
             </button>
           </div>
           <div className="nw-accounts-list">
@@ -606,28 +580,24 @@ export function DashboardNetWorth({
   return (
     <section className="panel nw-overview-card">
       <div>
-        <div className="eyebrow">NET WORTH SNAPSHOT</div>
+        <div className="eyebrow">{uiText("NET WORTH SNAPSHOT")}</div>
         <h3>{concealed(summary.netWorth)}</h3>
-        <small className="muted">
-          Includes {ledger.accounts.length} accounts &amp; {items.length}{" "}
-          tracked assets/liabilities
-        </small>
+        <small className="muted"> {uiText("Includes")} {ledger.accounts.length} {uiText("accounts &")} {items.length}{" "} {uiText("tracked assets/liabilities")} </small>
       </div>
       <div className="nw-overview-metrics">
         <div className="nw-overview-metric">
-          <small>Total Assets</small>
+          <small>{uiText("Total Assets")}</small>
           <strong>{concealed(summary.totalAssets)}</strong>
         </div>
         <div className="nw-overview-metric">
-          <small>Total Liabilities</small>
+          <small>{uiText("Total Liabilities")}</small>
           <strong>{concealed(summary.totalLiabilities)}</strong>
         </div>
         <button
           type="button"
           className="text-button"
           onClick={onOpenNetWorth}
-        >
-          Open Net Worth <ArrowRight size={15} />
+        > {uiText("Open Net Worth")} <ArrowRight size={15} />
         </button>
       </div>
     </section>
@@ -717,15 +687,15 @@ export function NetWorthItemEditorModal({
         className="modal"
         role="dialog"
         aria-modal="true"
-        aria-label={item ? "Edit net worth item" : "Add asset or liability"}
+        aria-label={item ? uiText("Edit net worth item") : uiText("Add asset or liability")}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-head">
-          <h2>{item ? "Edit item" : "Add asset or liability"}</h2>
+          <h2>{item ? uiText("Edit item") : uiText("Add asset or liability")}</h2>
           <button
             type="button"
             className="icon-button"
-            aria-label="Close"
+            aria-label={uiText("Close")}
             onClick={onClose}
           >
             <X size={18} />
@@ -737,19 +707,15 @@ export function NetWorthItemEditorModal({
               {err}
             </div>
           )}
-          <label>
-            Type
-            <select
+          <label> {uiText("Type")} <select
               value={kind}
               onChange={(e) => handleKindChange(e.target.value as NetWorthKind)}
             >
-              <option value="asset">Asset (you own)</option>
-              <option value="liability">Liability (you owe)</option>
+              <option value="asset">{uiText("Asset (you own)")}</option>
+              <option value="liability">{uiText("Liability (you owe)")}</option>
             </select>
           </label>
-          <label>
-            Category
-            <select
+          <label> {uiText("Category")} <select
               value={category}
               onChange={(e) =>
                 handleCategoryChange(e.target.value as NetWorthCategory)
@@ -763,9 +729,7 @@ export function NetWorthItemEditorModal({
               ))}
             </select>
           </label>
-          <label>
-            Name
-            <input
+          <label> {uiText("Name")} <input
               ref={nameRef}
               required
               maxLength={80}
@@ -778,9 +742,7 @@ export function NetWorthItemEditorModal({
               onChange={(e) => setName(e.target.value)}
             />
           </label>
-          <label>
-            Current value (AED)
-            <input
+          <label> {uiText("Current value (AED)")} <input
               required
               inputMode="decimal"
               placeholder="0.00"
@@ -788,9 +750,7 @@ export function NetWorthItemEditorModal({
               onChange={(e) => setValueInput(e.target.value)}
             />
           </label>
-          <label>
-            As of date
-            <input
+          <label> {uiText("As of date")} <input
               type="date"
               required
               value={asOfDate}
@@ -798,39 +758,31 @@ export function NetWorthItemEditorModal({
             />
           </label>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <label>
-              Emoji
-              <input
+            <label> {uiText("Emoji")} <input
                 maxLength={16}
                 value={emoji}
                 onChange={(e) => setEmoji(e.target.value)}
               />
             </label>
-            <label>
-              Color
-              <input
+            <label> {uiText("Color")} <input
                 type="color"
                 value={color}
                 onChange={(e) => setColor(e.target.value)}
               />
             </label>
           </div>
-          <label>
-            Notes
-            <textarea
+          <label> {uiText("Notes")} <textarea
               rows={2}
               maxLength={500}
-              placeholder="Optional details (institution, weight, rate...)"
+              placeholder={uiText("Optional details (institution, weight, rate...)")}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
           </label>
           <div className="modal-actions">
-            <button type="button" className="secondary" onClick={onClose}>
-              Cancel
-            </button>
+            <button type="button" className="secondary" onClick={onClose}> {uiText("Cancel")} </button>
             <button type="submit" className="primary" disabled={busy}>
-              {busy ? "Saving…" : item ? "Save changes" : "Add item"}
+              {busy ? uiText("Saving…") : item ? uiText("Save changes") : uiText("Add item")}
             </button>
           </div>
         </form>
@@ -895,11 +847,11 @@ export function NetWorthValuationModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-head">
-          <h2>Update valuation · {item.name}</h2>
+          <h2>{uiText("Update valuation ·")} {item.name}</h2>
           <button
             type="button"
             className="icon-button"
-            aria-label="Close"
+            aria-label={uiText("Close")}
             onClick={onClose}
           >
             <X size={18} />
@@ -911,9 +863,7 @@ export function NetWorthValuationModal({
               {err}
             </div>
           )}
-          <label>
-            New value (AED)
-            <input
+          <label> {uiText("New value (AED)")} <input
               ref={valRef}
               required
               inputMode="decimal"
@@ -921,30 +871,24 @@ export function NetWorthValuationModal({
               onChange={(e) => setValueInput(e.target.value)}
             />
           </label>
-          <label>
-            Valuation date
-            <input
+          <label> {uiText("Valuation date")} <input
               type="date"
               required
               value={date}
               onChange={(e) => setDate(e.target.value)}
             />
           </label>
-          <label>
-            Notes
-            <input
+          <label> {uiText("Notes")} <input
               maxLength={500}
-              placeholder="e.g. Monthly statement update"
+              placeholder={uiText("e.g. Monthly statement update")}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
           </label>
           <div className="modal-actions">
-            <button type="button" className="secondary" onClick={onClose}>
-              Cancel
-            </button>
+            <button type="button" className="secondary" onClick={onClose}> {uiText("Cancel")} </button>
             <button type="submit" className="primary" disabled={busy}>
-              {busy ? "Recording…" : "Save valuation"}
+              {busy ? uiText("Recording…") : uiText("Save valuation")}
             </button>
           </div>
         </form>

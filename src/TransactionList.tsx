@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import { useMemo } from "react";
 import {
   ArrowDownLeft,
@@ -130,8 +131,8 @@ export function TransactionList({
                 <b>
                   {t.payee ||
                     (t.type === "transfer"
-                      ? "Account transfer"
-                      : "Transaction")}
+                      ? uiText("Account transfer")
+                      : uiText("Transaction"))}
                 </b>
                 <small>
                   {t.type === "transfer"
@@ -141,14 +142,11 @@ export function TransactionList({
               </span>
               <span className="transaction-value">
                 <small>
-                  {account?.name}: {concealed(balances.get(t.id)?.source ?? 0)}{" "}
-                  balance
-                </small>
+                  {account?.name}: {concealed(balances.get(t.id)?.source ?? 0)}{" "} {uiText("balance")} </small>
                 {t.to_account_id && (
                   <small>
                     {toAccount?.name}:{" "}
-                    {concealed(balances.get(t.id)?.destination ?? 0)} balance
-                  </small>
+                    {concealed(balances.get(t.id)?.destination ?? 0)} {uiText("balance")} </small>
                 )}
                 <b className={t.type === "income" ? "green-text" : ""}>
                   {t.type === "income" ? "+" : t.type === "expense" ? "−" : ""}
@@ -179,7 +177,7 @@ export function TransactionList({
     </div>
   ) : (
     <Empty
-      title="A fresh start"
+      title={uiText("A fresh start")}
       text="Add your first transaction, or try a different month or filter."
     />
   );

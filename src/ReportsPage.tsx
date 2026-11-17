@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import { useMemo, useState } from "react";
 import { Download, Printer, Tags } from "lucide-react";
 import { budgetReport } from "./budgets";
@@ -103,7 +104,7 @@ export function ReportsPage({
   return (
     <>
       <div className="print-report-header">
-        <h1>Fuloos Financial Report</h1>
+        <h1>{uiText("Fuloos Financial Report")}</h1>
         <span>{rangeLabel}</span>
       </div>
 
@@ -122,7 +123,7 @@ export function ReportsPage({
 
       <section className="panel">
         <div className="panel-heading">
-          <h2>Where it went</h2>
+          <h2>{uiText("Where it went")}</h2>
           <div className="reports-actions">
             <span>{rangeLabel}</span>
             <button
@@ -143,29 +144,27 @@ export function ReportsPage({
                 );
               }}
             >
-              <Download size={14} /> Export CSV
-            </button>
+              <Download size={14} /> {uiText("Export CSV")} </button>
             <button
               type="button"
               className="secondary no-print"
               onClick={() => window.print()}
             >
-              <Printer size={14} /> Print / Save PDF
-            </button>
+              <Printer size={14} /> {uiText("Print / Save PDF")} </button>
           </div>
         </div>
 
         <div className="reports-kpis">
           <div className="reports-kpi">
-            <span className="reports-kpi-label">Income</span>
+            <span className="reports-kpi-label">{uiText("Income")}</span>
             <span className="reports-kpi-value">{concealed(summary.income)}</span>
           </div>
           <div className="reports-kpi">
-            <span className="reports-kpi-label">Expenses</span>
+            <span className="reports-kpi-label">{uiText("Expenses")}</span>
             <span className="reports-kpi-value">{concealed(summary.expense)}</span>
           </div>
           <div className="reports-kpi">
-            <span className="reports-kpi-label">Net cash flow</span>
+            <span className="reports-kpi-label">{uiText("Net cash flow")}</span>
             <span
               className={`reports-kpi-value ${netCashFlow > 0 ? "is-positive" : netCashFlow < 0 ? "is-negative" : ""}`}
             >
@@ -173,7 +172,7 @@ export function ReportsPage({
             </span>
           </div>
           <div className="reports-kpi">
-            <span className="reports-kpi-label">Savings rate</span>
+            <span className="reports-kpi-label">{uiText("Savings rate")}</span>
             <span
               className={`reports-kpi-value ${savingsRatePct !== null && savingsRatePct > 0 ? "is-positive" : savingsRatePct !== null && savingsRatePct < 0 ? "is-negative" : ""}`}
             >
@@ -189,7 +188,7 @@ export function ReportsPage({
             </span>
             <div>
               <b>{c.name}</b>
-              <p>{((c.total / summary.expense) * 100).toFixed(1)}% of spending</p>
+              <p>{((c.total / summary.expense) * 100).toFixed(1)}{uiText("% of spending")}</p>
               <progress
                 aria-label={`${c.name} share of spending`}
                 value={c.total}
@@ -201,7 +200,7 @@ export function ReportsPage({
         ))}
         {!spending.length && (
           <Empty
-            title="No spending in this period"
+            title={uiText("No spending in this period")}
             text="Choose another date range to explore your spending."
           />
         )}
@@ -209,7 +208,7 @@ export function ReportsPage({
 
       <section className="panel">
         <div className="panel-heading">
-          <h2>Year-over-year comparison</h2>
+          <h2>{uiText("Year-over-year comparison")}</h2>
           <span>
             {yoy.available && yoy.priorRange
               ? `${rangeLabel} vs ${formatRangeShort(yoy.priorRange)}`
@@ -217,31 +216,26 @@ export function ReportsPage({
           </span>
         </div>
         {!yoy.available || !yoy.prior || !yoy.delta ? (
-          <p className="reports-note">
-            Year-over-year comparison is available for specific periods (Month,
-            YTD, 12M, or Custom).
-          </p>
+          <p className="reports-note"> {uiText("Year-over-year comparison is available for specific periods (Month, YTD, 12M, or Custom).")} </p>
         ) : (
           <>
             {!yoy.hasPriorData && (
-              <p className="reports-note">
-                No transactions recorded in the prior-year period (
-                {formatRangeShort(yoy.priorRange!)}).
+              <p className="reports-note"> {uiText("No transactions recorded in the prior-year period (")} {formatRangeShort(yoy.priorRange!)}).
               </p>
             )}
             <div className="reports-table-wrap">
               <table className="reports-table">
                 <thead>
                   <tr>
-                    <th>Metric</th>
-                    <th className="num">Current</th>
-                    <th className="num">Prior year</th>
-                    <th className="num">Change</th>
+                    <th>{uiText("Metric")}</th>
+                    <th className="num">{uiText("Current")}</th>
+                    <th className="num">{uiText("Prior year")}</th>
+                    <th className="num">{uiText("Change")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td>Income</td>
+                    <td>{uiText("Income")}</td>
                     <td className="num">{concealed(yoy.current.income)}</td>
                     <td className="num">{concealed(yoy.prior.income)}</td>
                     <td className="num">
@@ -258,7 +252,7 @@ export function ReportsPage({
                     </td>
                   </tr>
                   <tr>
-                    <td>Expenses</td>
+                    <td>{uiText("Expenses")}</td>
                     <td className="num">{concealed(yoy.current.expenses)}</td>
                     <td className="num">{concealed(yoy.prior.expenses)}</td>
                     <td className="num">
@@ -275,7 +269,7 @@ export function ReportsPage({
                     </td>
                   </tr>
                   <tr>
-                    <td>Net</td>
+                    <td>{uiText("Net")}</td>
                     <td className="num">{concealed(yoy.current.net)}</td>
                     <td className="num">{concealed(yoy.prior.net)}</td>
                     <td className="num">
@@ -292,7 +286,7 @@ export function ReportsPage({
                     </td>
                   </tr>
                   <tr>
-                    <td>Savings rate</td>
+                    <td>{uiText("Savings rate")}</td>
                     <td className="num">
                       {yoy.current.savingsRatePct !== null
                         ? `${yoy.current.savingsRatePct.toFixed(1)}%`
@@ -320,27 +314,23 @@ export function ReportsPage({
 
       <section className="panel">
         <div className="panel-heading">
-          <h2>Top merchants & payees</h2>
+          <h2>{uiText("Top merchants & payees")}</h2>
           <div className="reports-actions">
             <div
               className="reports-toggle no-print"
               role="group"
-              aria-label="Payee breakdown type"
+              aria-label={uiText("Payee breakdown type")}
             >
               <button
                 type="button"
                 className={payeeKind === "expense" ? "is-active" : ""}
                 onClick={() => setPayeeKind("expense")}
-              >
-                Expenses
-              </button>
+              > {uiText("Expenses")} </button>
               <button
                 type="button"
                 className={payeeKind === "income" ? "is-active" : ""}
                 onClick={() => setPayeeKind("income")}
-              >
-                Income
-              </button>
+              > {uiText("Income")} </button>
             </div>
           </div>
         </div>
@@ -349,11 +339,11 @@ export function ReportsPage({
             <table className="reports-table">
               <thead>
                 <tr>
-                  <th>Payee</th>
-                  <th className="num">Txns</th>
-                  <th className="num">Average</th>
-                  <th className="num">Total</th>
-                  <th className="num">Share</th>
+                  <th>{uiText("Payee")}</th>
+                  <th className="num">{uiText("Txns")}</th>
+                  <th className="num">{uiText("Average")}</th>
+                  <th className="num">{uiText("Total")}</th>
+                  <th className="num">{uiText("Share")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -393,7 +383,7 @@ export function ReportsPage({
 
       <section className="panel">
         <div className="panel-heading">
-          <h2>Category trends</h2>
+          <h2>{uiText("Category trends")}</h2>
           <span>
             {formatShortMonth(trends.months[0])} –{" "}
             {formatShortMonth(trends.months[trends.months.length - 1])}
@@ -404,13 +394,13 @@ export function ReportsPage({
             <table className="reports-table">
               <thead>
                 <tr>
-                  <th>Category</th>
+                  <th>{uiText("Category")}</th>
                   {trends.months.map((m) => (
                     <th className="num" key={m}>
                       {formatShortMonth(m)}
                     </th>
                   ))}
-                  <th className="num">6M Total</th>
+                  <th className="num">{uiText("6M Total")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -454,7 +444,7 @@ export function ReportsPage({
               </tbody>
               <tfoot>
                 <tr>
-                  <td>All expenses</td>
+                  <td>{uiText("All expenses")}</td>
                   {trends.monthTotals.map((total, idx) => (
                     <td className="num" key={trends.months[idx]}>
                       {total > 0 ? concealed(total) : "—"}
@@ -471,7 +461,7 @@ export function ReportsPage({
           </div>
         ) : (
           <Empty
-            title="No expense trends yet"
+            title={uiText("No expense trends yet")}
             text="Record expenses over time to see monthly category trends."
           />
         )}

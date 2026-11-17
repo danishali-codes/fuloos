@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import React, { useState } from "react";
 import { KeyRound, Lock, LogOut, Mail, ShieldCheck } from "lucide-react";
 import { backend, type Session } from "./client";
@@ -278,7 +279,7 @@ export function SecuritySettings({
 
   return (
     <fieldset className="security-field">
-      <legend>Account &amp; Security</legend>
+      <legend>{uiText("Account & Security")}</legend>
 
       {error && (
         <div className="error" role="alert">
@@ -294,13 +295,13 @@ export function SecuritySettings({
       <div className="security-block">
         <div className="security-row">
           <div>
-            <b>Signed in as {session.user.email}</b>
+            <b>{uiText("Signed in as")} {session.user.email}</b>
             <p className="muted small">
               {session.user.verified === true
-                ? "Email verified"
+                ? uiText("Email verified")
                 : session.user.verified === false
-                  ? "Email not verified yet"
-                  : "Active session"}
+                  ? uiText("Email not verified yet")
+                  : uiText("Active session")}
             </p>
           </div>
           <div className="security-actions">
@@ -311,8 +312,7 @@ export function SecuritySettings({
                 disabled={busy}
                 onClick={sendVerification}
               >
-                <Mail size={14} /> Verify email
-              </button>
+                <Mail size={14} /> {uiText("Verify email")} </button>
             )}
             <button
               type="button"
@@ -323,16 +323,13 @@ export function SecuritySettings({
                 onCloseSettings();
               }}
             >
-              <LogOut size={14} /> Sign out
-            </button>
+              <LogOut size={14} /> {uiText("Sign out")} </button>
             <button
               type="button"
               className="secondary danger-outline"
               disabled={busy}
               onClick={handleSignOutEverywhere}
-            >
-              Sign out everywhere
-            </button>
+            > {uiText("Sign out everywhere")} </button>
           </div>
         </div>
 
@@ -343,7 +340,7 @@ export function SecuritySettings({
               className="text-button"
               onClick={() => setVerifyOpen((v) => !v)}
             >
-              {verifyOpen ? "Hide token entry" : "Have a verification token?"}
+              {verifyOpen ? uiText("Hide token entry") : uiText("Have a verification token?")}
             </button>
             {verifyOpen && (
               <form onSubmit={submitVerifyToken} className="security-inline-form">
@@ -351,27 +348,25 @@ export function SecuritySettings({
                   required
                   value={verifyToken}
                   onChange={(e) => setVerifyToken(e.target.value)}
-                  placeholder="Paste verification token"
+                  placeholder={uiText("Paste verification token")}
                 />
-                <button type="submit" className="primary" disabled={busy}>
-                  Confirm
-                </button>
+                <button type="submit" className="primary" disabled={busy}> {uiText("Confirm")} </button>
               </form>
             )}
           </div>
         )}
 
         <label className="security-select-row">
-          <span>Auto sign out after inactivity</span>
+          <span>{uiText("Auto sign out after inactivity")}</span>
           <select
             value={idleSignOutMinutes}
             onChange={(e) => handleIdleSignOutChange(Number(e.target.value))}
           >
-            <option value={0}>Off</option>
-            <option value={15}>15 minutes</option>
-            <option value={30}>30 minutes</option>
-            <option value={60}>1 hour</option>
-            <option value={240}>4 hours</option>
+            <option value={0}>{uiText("Off")}</option>
+            <option value={15}>{uiText("15 minutes")}</option>
+            <option value={30}>{uiText("30 minutes")}</option>
+            <option value={60}>{uiText("1 hour")}</option>
+            <option value={240}>{uiText("4 hours")}</option>
           </select>
         </label>
       </div>
@@ -379,11 +374,11 @@ export function SecuritySettings({
       <div className="security-block">
         <div className="security-row">
           <div>
-            <b>Two-factor authentication (Email OTP)</b>
+            <b>{uiText("Two-factor authentication (Email OTP)")}</b>
             <p className="muted small">
               {session.user.mfaEnabled
-                ? "Enabled — password sign-in requires a one-time email code."
-                : "Optional — require a one-time email code on sign-in (requires server SMTP)."}
+                ? uiText("Enabled — password sign-in requires a one-time email code.")
+                : uiText("Optional — require a one-time email code on sign-in (requires server SMTP).")}
             </p>
           </div>
           <button
@@ -393,7 +388,7 @@ export function SecuritySettings({
             onClick={toggleMfa}
           >
             <ShieldCheck size={14} />{" "}
-            {session.user.mfaEnabled ? "Disable 2FA" : "Enable 2FA"}
+            {session.user.mfaEnabled ? uiText("Disable 2FA") : uiText("Enable 2FA")}
           </button>
         </div>
       </div>
@@ -401,11 +396,8 @@ export function SecuritySettings({
       <div className="security-block">
         <div className="security-row">
           <div>
-            <b>App lock (PIN privacy screen)</b>
-            <p className="muted small">
-              Client-side privacy screen only — hides balances and transactions
-              in the DOM when idle or reopened. Does not encrypt data.
-            </p>
+            <b>{uiText("App lock (PIN privacy screen)")}</b>
+            <p className="muted small"> {uiText("Client-side privacy screen only — hides balances and transactions in the DOM when idle or reopened. Does not encrypt data.")} </p>
           </div>
           <div className="security-actions">
             {lockConfig && (
@@ -418,8 +410,7 @@ export function SecuritySettings({
                   onLockNow();
                 }}
               >
-                <Lock size={14} /> Lock now
-              </button>
+                <Lock size={14} /> {uiText("Lock now")} </button>
             )}
             <button
               type="button"
@@ -430,7 +421,7 @@ export function SecuritySettings({
                 setPinFormOpen((v) => !v);
               }}
             >
-              {lockConfig ? "Change PIN" : "Set up PIN"}
+              {lockConfig ? uiText("Change PIN") : uiText("Set up PIN")}
             </button>
             {lockConfig && (
               <button
@@ -438,9 +429,7 @@ export function SecuritySettings({
                 className="secondary danger-outline"
                 disabled={busy}
                 onClick={removePin}
-              >
-                Remove PIN
-              </button>
+              > {uiText("Remove PIN")} </button>
             )}
           </div>
         </div>
@@ -448,18 +437,18 @@ export function SecuritySettings({
         {lockConfig && (
           <div className="security-lock-prefs">
             <label className="security-select-row">
-              <span>Lock after idle</span>
+              <span>{uiText("Lock after idle")}</span>
               <select
                 value={lockIdleMinutes}
                 onChange={(e) =>
                   updateLockPreferences(Number(e.target.value), lockOnReopen)
                 }
               >
-                <option value={0}>Manual / reopen only</option>
-                <option value={1}>1 minute</option>
-                <option value={5}>5 minutes</option>
-                <option value={15}>15 minutes</option>
-                <option value={30}>30 minutes</option>
+                <option value={0}>{uiText("Manual / reopen only")}</option>
+                <option value={1}>{uiText("1 minute")}</option>
+                <option value={5}>{uiText("5 minutes")}</option>
+                <option value={15}>{uiText("15 minutes")}</option>
+                <option value={30}>{uiText("30 minutes")}</option>
               </select>
             </label>
             <label className="security-checkbox">
@@ -470,7 +459,7 @@ export function SecuritySettings({
                   updateLockPreferences(lockIdleMinutes, e.target.checked)
                 }
               />
-              <span>Lock when reopening the app</span>
+              <span>{uiText("Lock when reopening the app")}</span>
             </label>
           </div>
         )}
@@ -478,9 +467,7 @@ export function SecuritySettings({
         {pinFormOpen && (
           <form onSubmit={savePin} className="security-sub-form">
             <div className="security-grid">
-              <label>
-                New PIN (4–8 digits)
-                <input
+              <label> {uiText("New PIN (4–8 digits)")} <input
                   required
                   type="password"
                   inputMode="numeric"
@@ -490,12 +477,10 @@ export function SecuritySettings({
                   autoComplete="off"
                   value={pin}
                   onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-                  placeholder="4–8 digits"
+                  placeholder={uiText("4–8 digits")}
                 />
               </label>
-              <label>
-                Confirm PIN
-                <input
+              <label> {uiText("Confirm PIN")} <input
                   required
                   type="password"
                   inputMode="numeric"
@@ -507,21 +492,17 @@ export function SecuritySettings({
                   onChange={(e) =>
                     setPinConfirm(e.target.value.replace(/\D/g, ""))
                   }
-                  placeholder="Repeat PIN"
+                  placeholder={uiText("Repeat PIN")}
                 />
               </label>
             </div>
             <div className="security-actions">
-              <button type="submit" className="primary" disabled={busy}>
-                Save PIN
-              </button>
+              <button type="submit" className="primary" disabled={busy}> {uiText("Save PIN")} </button>
               <button
                 type="button"
                 className="secondary"
                 onClick={() => setPinFormOpen(false)}
-              >
-                Cancel
-              </button>
+              > {uiText("Cancel")} </button>
             </div>
           </form>
         )}
@@ -530,10 +511,8 @@ export function SecuritySettings({
       <div className="security-block">
         <div className="security-row">
           <div>
-            <b>Password &amp; email</b>
-            <p className="muted small">
-              Update your sign-in password or change your account email.
-            </p>
+            <b>{uiText("Password & email")}</b>
+            <p className="muted small"> {uiText("Update your sign-in password or change your account email.")} </p>
           </div>
           <div className="security-actions">
             <button
@@ -546,8 +525,7 @@ export function SecuritySettings({
                 setEmailOpen(false);
               }}
             >
-              <KeyRound size={14} /> Change password
-            </button>
+              <KeyRound size={14} /> {uiText("Change password")} </button>
             <button
               type="button"
               className="secondary"
@@ -558,16 +536,13 @@ export function SecuritySettings({
                 setPwOpen(false);
               }}
             >
-              <Mail size={14} /> Change email
-            </button>
+              <Mail size={14} /> {uiText("Change email")} </button>
           </div>
         </div>
 
         {pwOpen && (
           <form onSubmit={submitPasswordChange} className="security-sub-form">
-            <label>
-              Current password
-              <input
+            <label> {uiText("Current password")} <input
                 required
                 type="password"
                 autoComplete="current-password"
@@ -576,21 +551,17 @@ export function SecuritySettings({
               />
             </label>
             <div className="security-grid">
-              <label>
-                New password
-                <input
+              <label> {uiText("New password")} <input
                   required
                   type="password"
                   minLength={8}
                   autoComplete="new-password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="At least 8 characters"
+                  placeholder={uiText("At least 8 characters")}
                 />
               </label>
-              <label>
-                Confirm new password
-                <input
+              <label> {uiText("Confirm new password")} <input
                   required
                   type="password"
                   minLength={8}
@@ -601,16 +572,12 @@ export function SecuritySettings({
               </label>
             </div>
             <div className="security-actions">
-              <button type="submit" className="primary" disabled={busy}>
-                Update password
-              </button>
+              <button type="submit" className="primary" disabled={busy}> {uiText("Update password")} </button>
               <button
                 type="button"
                 className="secondary"
                 onClick={() => setPwOpen(false)}
-              >
-                Cancel
-              </button>
+              > {uiText("Cancel")} </button>
             </div>
           </form>
         )}
@@ -623,30 +590,21 @@ export function SecuritySettings({
                 type="email"
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
-                placeholder="New email address"
+                placeholder={uiText("New email address")}
               />
-              <button type="submit" className="primary" disabled={busy}>
-                Send change link
-              </button>
+              <button type="submit" className="primary" disabled={busy}> {uiText("Send change link")} </button>
             </form>
             <form onSubmit={submitEmailConfirm} className="security-sub-form">
-              <p className="muted small">
-                Already have an email change token? Confirm it below (you will
-                need to sign in again):
-              </p>
+              <p className="muted small"> {uiText("Already have an email change token? Confirm it below (you will need to sign in again):")} </p>
               <div className="security-grid">
-                <label>
-                  Email change token
-                  <input
+                <label> {uiText("Email change token")} <input
                     required
                     value={emailToken}
                     onChange={(e) => setEmailToken(e.target.value)}
-                    placeholder="Token from email"
+                    placeholder={uiText("Token from email")}
                   />
                 </label>
-                <label>
-                  Current password
-                  <input
+                <label> {uiText("Current password")} <input
                     required
                     type="password"
                     autoComplete="current-password"
@@ -655,9 +613,7 @@ export function SecuritySettings({
                   />
                 </label>
               </div>
-              <button type="submit" className="secondary" disabled={busy}>
-                Confirm email change
-              </button>
+              <button type="submit" className="secondary" disabled={busy}> {uiText("Confirm email change")} </button>
             </form>
           </div>
         )}

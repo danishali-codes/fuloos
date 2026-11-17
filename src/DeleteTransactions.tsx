@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import React, { useEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowRight } from "lucide-react";
 import {
@@ -97,12 +98,12 @@ export function DeleteTransactionsDialog({
       </span>
       <h2 id="delete-transactions-title">
         {single
-          ? "Delete this transaction?"
+          ? uiText("Delete this transaction?")
           : `Delete ${count.toLocaleString()} transactions?`}
       </h2>
       <form onSubmit={submit}>
         <div id="delete-transactions-message">
-          <ul className="delete-transactions-rows" aria-label="Transactions">
+          <ul className="delete-transactions-rows" aria-label={uiText("Transactions")}>
             {rows.map((t) => (
               <li key={t.id}>
                 <span className="when">{t.date}</span>
@@ -112,7 +113,7 @@ export function DeleteTransactionsDialog({
                     {t.type === "transfer" ? (
                       <>
                         {accountName(t.account_id)}{" "}
-                        <ArrowRight size={11} aria-label="to" />{" "}
+                        <ArrowRight size={11} aria-label={uiText("to")} />{" "}
                         {accountName(t.to_account_id)}
                       </>
                     ) : (
@@ -128,21 +129,20 @@ export function DeleteTransactionsDialog({
             ))}
             {count > rows.length && (
               <li className="more">
-                +{(count - rows.length).toLocaleString()} more
-              </li>
+                +{(count - rows.length).toLocaleString()} {uiText("more")} </li>
             )}
           </ul>
           <ul className="typed-confirm-list">
             {moneyParts.length > 0 && (
               <li>
-                {single ? "It covers " : "Together they cover "}
+                {single ? uiText("It covers") : uiText("Together they cover")}
                 {moneyParts.join(", ")}.
               </li>
             )}
             {transferCount > 0 && (
               <li>
                 {single
-                  ? "This is a transfer. It shows in both accounts but is one record, so both sides go."
+                  ? uiText("This is a transfer. It shows in both accounts but is one record, so both sides go.")
                   : transferCount === 1
                     ? "1 is a transfer. It shows in both of its accounts but is one record, so both sides go together."
                     : `${transferCount.toLocaleString()} are transfers. Each shows in both of its accounts but is one record, so both sides go together.`}
@@ -154,18 +154,14 @@ export function DeleteTransactionsDialog({
                   occurrenceCount,
                   "was recorded for a recurring schedule",
                   "were recorded for recurring schedules",
-                )}
-                . Those payments will show as not recorded yet; the schedules
-                stay.
-              </li>
+                )} {uiText(". Those payments will show as not recorded yet; the schedules stay.")} </li>
             )}
             {affectedAccounts.length > 0 && (
-              <li className="danger-text">
-                Balances will change for {affectedAccounts.join(", ")}.
+              <li className="danger-text"> {uiText("Balances will change for")} {affectedAccounts.join(", ")}.
               </li>
             )}
           </ul>
-          <p className="delete-categories-final">This can't be undone.</p>
+          <p className="delete-categories-final">{uiText("This can't be undone.")}</p>
         </div>
         {error && (
           <div className="error" role="alert">
@@ -178,14 +174,12 @@ export function DeleteTransactionsDialog({
             className="secondary"
             disabled={busy}
             onClick={close}
-          >
-            Cancel
-          </button>
+          > {uiText("Cancel")} </button>
           <button className="primary danger" disabled={busy || !count}>
             {busy
-              ? "Deleting…"
+              ? uiText("Deleting…")
               : single
-                ? "Delete transaction"
+                ? uiText("Delete transaction")
                 : `Delete ${count.toLocaleString()} transactions`}
           </button>
         </div>

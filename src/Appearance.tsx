@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import { useMemo, useState } from "react";
 import { Search, Smile } from "lucide-react";
 import { emojiGroups, searchEmojis } from "./emojiData";
@@ -25,7 +26,7 @@ export function ColorPicker({
   const [choices, setChoices] = useState(palette);
   return (
     <div className="appearance-picker">
-      <span>Color</span>
+      <span>{uiText("Color")}</span>
       <input type="hidden" name="color" value={color} />
       <div className="color-swatches">
         {choices.map((c) => (
@@ -53,13 +54,10 @@ export function ColorPicker({
             ),
           )
         }
-      >
-        Shuffle colors
-      </button>
-      <label className="custom-color">
-        Full color picker{" "}
+      > {uiText("Shuffle colors")} </button>
+      <label className="custom-color"> {uiText("Full color picker")}{" "}
         <input
-          aria-label="Custom color"
+          aria-label={uiText("Custom color")}
           type="color"
           value={color}
           onChange={(e) => setColor(e.target.value)}
@@ -90,8 +88,7 @@ export function EmojiField({ defaultValue = "" }: { defaultValue?: string }) {
   };
   return (
     <div className="emoji-picker">
-      <span className="emoji-label">
-        Emoji <span className="muted">Optional</span>
+      <span className="emoji-label"> {uiText("Emoji")} <span className="muted">{uiText("Optional")}</span>
       </span>
       <input type="hidden" name="emoji" value={emoji} />
       <div className="emoji-current">
@@ -99,7 +96,7 @@ export function EmojiField({ defaultValue = "" }: { defaultValue?: string }) {
           type="button"
           className="emoji-preview"
           aria-expanded={open}
-          aria-label={emoji ? `Change emoji ${emoji}` : "Pick an emoji"}
+          aria-label={emoji ? `Change emoji ${emoji}` : uiText("Pick an emoji")}
           onClick={() => setOpen((o) => !o)}
         >
           {emoji || <Smile size={20} />}
@@ -110,16 +107,14 @@ export function EmojiField({ defaultValue = "" }: { defaultValue?: string }) {
           aria-expanded={open}
           onClick={() => setOpen((o) => !o)}
         >
-          {open ? "Close" : emoji ? "Change" : "Pick an emoji"}
+          {open ? uiText("Close") : emoji ? uiText("Change") : uiText("Pick an emoji")}
         </button>
         {emoji && (
           <button
             type="button"
             className="text-button"
             onClick={() => pick("")}
-          >
-            Remove
-          </button>
+          > {uiText("Remove")} </button>
         )}
       </div>
       {open && (
@@ -129,8 +124,8 @@ export function EmojiField({ defaultValue = "" }: { defaultValue?: string }) {
             <input
               type="search"
               autoFocus
-              aria-label="Search emojis"
-              placeholder="Search, e.g. bank, food, car"
+              aria-label={uiText("Search emojis")}
+              placeholder={uiText("Search, e.g. bank, food, car")}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -146,7 +141,7 @@ export function EmojiField({ defaultValue = "" }: { defaultValue?: string }) {
             <div
               className="emoji-tabs"
               role="tablist"
-              aria-label="Emoji groups"
+              aria-label={uiText("Emoji groups")}
             >
               {emojiGroups.map((g) => (
                 <button
@@ -183,12 +178,10 @@ export function EmojiField({ defaultValue = "" }: { defaultValue?: string }) {
               </button>
             ))}
           </div>
-          <label className="emoji-custom">
-            Or type or paste any emoji
-            <input
+          <label className="emoji-custom"> {uiText("Or type or paste any emoji")} <input
               maxLength={32}
               value={emoji}
-              placeholder="e.g. 🏦"
+              placeholder={uiText("e.g. 🏦")}
               onChange={(e) => setEmoji(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {

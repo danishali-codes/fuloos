@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import React, { useEffect, useRef, useState } from "react";
 import { Check, Pencil, Plus, Power, Trash2, Wand2, X } from "lucide-react";
 import {
@@ -157,13 +158,13 @@ export function RulesManagerModal({
     >
       <div className="modal-head">
         <div>
-          <span className="eyebrow">AUTOMATION</span>
-          <h2 id="rules-modal-title">Transaction rules</h2>
+          <span className="eyebrow">{uiText("AUTOMATION")}</span>
+          <h2 id="rules-modal-title">{uiText("Transaction rules")}</h2>
         </div>
         <button
           type="button"
           className="icon-button"
-          aria-label="Close"
+          aria-label={uiText("Close")}
           disabled={busy}
           onClick={onClose}
         >
@@ -171,28 +172,21 @@ export function RulesManagerModal({
         </button>
       </div>
 
-      <p className="muted small">
-        Rules run deterministically in priority order (lowest number first) on
-        imports and when you click Apply Rules in the editor.
-      </p>
+      <p className="muted small"> {uiText("Rules run deterministically in priority order (lowest number first) on imports and when you click Apply Rules in the editor.")} </p>
 
       {editingId ? (
         <form className="rules-form" onSubmit={handleSave}>
           <div className="form-row">
-            <label>
-              Rule name
-              <input
+            <label> {uiText("Rule name")} <input
                 required
                 autoFocus
                 maxLength={80}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Carrefour groceries"
+                placeholder={uiText("e.g. Carrefour groceries")}
               />
             </label>
-            <label>
-              Priority
-              <input
+            <label> {uiText("Priority")} <input
                 type="number"
                 min={0}
                 max={10000}
@@ -203,36 +197,30 @@ export function RulesManagerModal({
           </div>
 
           <div className="form-row">
-            <label>
-              Match field
-              <select
+            <label> {uiText("Match field")} <select
                 value={matchField}
                 onChange={(e) =>
                   setMatchField(e.target.value as RuleMatchField)
                 }
               >
-                <option value="either">Payee or notes</option>
-                <option value="payee">Payee only</option>
-                <option value="notes">Notes only</option>
+                <option value="either">{uiText("Payee or notes")}</option>
+                <option value="payee">{uiText("Payee only")}</option>
+                <option value="notes">{uiText("Notes only")}</option>
               </select>
             </label>
-            <label>
-              Match type
-              <select
+            <label> {uiText("Match type")} <select
                 value={matchType}
                 onChange={(e) => setMatchType(e.target.value as RuleMatchType)}
               >
-                <option value="contains">Contains</option>
-                <option value="starts_with">Starts with</option>
-                <option value="exact">Exact match</option>
-                <option value="regex">Regex (case-insensitive)</option>
+                <option value="contains">{uiText("Contains")}</option>
+                <option value="starts_with">{uiText("Starts with")}</option>
+                <option value="exact">{uiText("Exact match")}</option>
+                <option value="regex">{uiText("Regex (case-insensitive)")}</option>
               </select>
             </label>
           </div>
 
-          <label>
-            Pattern
-            <input
+          <label> {uiText("Pattern")} <input
               required
               maxLength={200}
               value={pattern}
@@ -246,8 +234,7 @@ export function RulesManagerModal({
           </label>
 
           <div className="form-row">
-            <label>
-              Min amount (AED) <span className="muted">Optional</span>
+            <label> {uiText("Min amount (AED)")} <span className="muted">{uiText("Optional")}</span>
               <input
                 inputMode="decimal"
                 value={minAmount}
@@ -255,25 +242,23 @@ export function RulesManagerModal({
                 placeholder="0.00"
               />
             </label>
-            <label>
-              Max amount (AED) <span className="muted">Optional</span>
+            <label> {uiText("Max amount (AED)")} <span className="muted">{uiText("Optional")}</span>
               <input
                 inputMode="decimal"
                 value={maxAmount}
                 onChange={(e) => setMaxAmount(e.target.value)}
-                placeholder="No limit"
+                placeholder={uiText("No limit")}
               />
             </label>
           </div>
 
           <div className="form-row">
-            <label>
-              Set category <span className="muted">Optional</span>
+            <label> {uiText("Set category")} <span className="muted">{uiText("Optional")}</span>
               <select
                 value={setCategoryId}
                 onChange={(e) => setSetCategoryId(e.target.value)}
               >
-                <option value="">Don't change</option>
+                <option value="">{uiText("Don't change")}</option>
                 {ledger.categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -281,20 +266,18 @@ export function RulesManagerModal({
                 ))}
               </select>
             </label>
-            <label>
-              Set payee <span className="muted">Optional</span>
+            <label> {uiText("Set payee")} <span className="muted">{uiText("Optional")}</span>
               <input
                 maxLength={160}
                 value={setPayee}
                 onChange={(e) => setSetPayee(e.target.value)}
-                placeholder="Clean merchant name"
+                placeholder={uiText("Clean merchant name")}
               />
             </label>
           </div>
 
           <div className="field-block">
-            <span className="field-label">
-              Add tags <span className="muted">Optional</span>
+            <span className="field-label"> {uiText("Add tags")} <span className="muted">{uiText("Optional")}</span>
             </span>
             <TagInput
               tags={addTags}
@@ -309,9 +292,7 @@ export function RulesManagerModal({
               type="checkbox"
               checked={enabled}
               onChange={(e) => setEnabled(e.target.checked)}
-            />
-            Rule enabled
-          </label>
+            /> {uiText("Rule enabled")} </label>
 
           {error && (
             <div className="error" role="alert">
@@ -328,11 +309,9 @@ export function RulesManagerModal({
                 setEditingId(null);
                 setError("");
               }}
-            >
-              Back
-            </button>
+            > {uiText("Back")} </button>
             <button type="submit" className="primary" disabled={busy}>
-              <Check size={15} /> {editingId === "new" ? "Create rule" : "Save rule"}
+              <Check size={15} /> {editingId === "new" ? uiText("Create rule") : uiText("Save rule")}
             </button>
           </div>
         </form>
@@ -348,8 +327,7 @@ export function RulesManagerModal({
               disabled={busy}
               onClick={() => startEdit()}
             >
-              <Plus size={14} /> New rule
-            </button>
+              <Plus size={14} /> {uiText("New rule")} </button>
           </div>
 
           {error && (
@@ -360,9 +338,7 @@ export function RulesManagerModal({
 
           {rules.length === 0 ? (
             <div className="notice">
-              <Wand2 size={16} /> No rules yet. Create one to auto-categorize
-              and tag transactions.
-            </div>
+              <Wand2 size={16} /> {uiText("No rules yet. Create one to auto-categorize and tag transactions.")} </div>
           ) : (
             <ul className="rules-list">
               {rules.map((r) => {
@@ -379,7 +355,7 @@ export function RulesManagerModal({
                         <b>{r.name}</b>
                         <span className="rule-badge">P{r.priority}</span>
                         {!r.enabled && (
-                          <span className="rule-badge muted">Paused</span>
+                          <span className="rule-badge muted">{uiText("Paused")}</span>
                         )}
                       </div>
                       <small className="muted">
@@ -393,7 +369,7 @@ export function RulesManagerModal({
                           <span className="tag-badge">→ {cat.name}</span>
                         )}
                         {r.set_payee && (
-                          <span className="tag-badge">Payee: {r.set_payee}</span>
+                          <span className="tag-badge">{uiText("Payee:")} {r.set_payee}</span>
                         )}
                         {(r.add_tags ?? []).map((t) => (
                           <span className="tag-badge" key={t}>
@@ -407,7 +383,7 @@ export function RulesManagerModal({
                         type="button"
                         className="icon-button"
                         disabled={busy}
-                        title={r.enabled ? "Pause rule" : "Enable rule"}
+                        title={r.enabled ? uiText("Pause rule") : uiText("Enable rule")}
                         aria-label={r.enabled ? `Pause ${r.name}` : `Enable ${r.name}`}
                         onClick={() => void handleToggle(r)}
                       >
@@ -439,9 +415,7 @@ export function RulesManagerModal({
           )}
 
           <div className="modal-actions">
-            <button type="button" className="primary" onClick={onClose}>
-              Done
-            </button>
+            <button type="button" className="primary" onClick={onClose}> {uiText("Done")} </button>
           </div>
         </>
       )}

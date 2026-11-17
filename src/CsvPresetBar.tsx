@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   presetKey,
@@ -115,36 +116,29 @@ export function CsvPresetBar({
       <fieldset disabled={presetBusy || !presetsReady}>
         {suggestedPreset && (
           <div role="status" className="notice csv-preset-banner">
-            <span>
-              Matching preset found: <b>{suggestedPreset.name}</b>
+            <span> {uiText("Matching preset found:")} <b>{suggestedPreset.name}</b>
             </span>
             <div className="csv-category-actions">
               <button
                 type="button"
                 className="primary"
                 onClick={() => onApplySuggested(suggestedPreset)}
-              >
-                Apply
-              </button>
+              > {uiText("Apply")} </button>
               <button
                 type="button"
                 className="secondary"
                 onClick={onDismissSuggested}
-              >
-                Dismiss
-              </button>
+              > {uiText("Dismiss")} </button>
             </div>
           </div>
         )}
         <div className="csv-preset-row">
-          <label>
-            Mapping preset
-            <select
+          <label> {uiText("Mapping preset")} <select
               value={activePreset?.name ?? ""}
               onChange={(e) => onSelectPreset(e.target.value)}
             >
               <option value="">
-                {presetsState === "loading" ? "Loading presets…" : "No preset"}
+                {presetsState === "loading" ? uiText("Loading presets…") : uiText("No preset")}
               </option>
               {presets.map((p) => (
                 <option key={p.name} value={p.name}>
@@ -159,16 +153,12 @@ export function CsvPresetBar({
                 type="button"
                 className="secondary"
                 onClick={onStartRename}
-              >
-                Rename
-              </button>
+              > {uiText("Rename")} </button>
               <button
                 type="button"
                 className="secondary"
                 onClick={onDeletePreset}
-              >
-                Delete
-              </button>
+              > {uiText("Delete")} </button>
             </>
           )}
         </div>
@@ -187,16 +177,14 @@ export function CsvPresetBar({
               type="button"
               className="secondary"
               onClick={onCancelRename}
-            >
-              Cancel
-            </button>
+            > {uiText("Cancel")} </button>
           </PresetNameRow>
         )}
         {canSavePreset && (
           <PresetNameRow
             label="Preset name"
             initial={activePresetName}
-            placeholder="e.g. Emirates NBD"
+            placeholder={uiText("e.g. Emirates NBD")}
             submitLabel={(name) => {
               const match = name.trim()
                 ? presets.find((p) => presetKey(p.name) === presetKey(name))
@@ -214,8 +202,8 @@ export function CsvPresetBar({
       {presetsReady && (
         <p className="muted small csv-preset-scope">
           {presetScope === "account"
-            ? "Presets are saved to your account and available on every device."
-            : "Presets are saved in this browser only."}
+            ? uiText("Presets are saved to your account and available on every device.")
+            : uiText("Presets are saved in this browser only.")}
         </p>
       )}
       {presetError && (
@@ -224,9 +212,7 @@ export function CsvPresetBar({
         </p>
       )}
       {presetsState === "failed" && (
-        <button type="button" className="secondary" onClick={onRetryLoad}>
-          Retry loading presets
-        </button>
+        <button type="button" className="secondary" onClick={onRetryLoad}> {uiText("Retry loading presets")} </button>
       )}
       {presetStatus && (
         <p role="status" className="muted small">
@@ -234,13 +220,8 @@ export function CsvPresetBar({
         </p>
       )}
       {activeMissing.length > 0 && missingNotice && (
-        <p role="alert" className="notice">
-          Preset &ldquo;{missingNotice.presetName}&rdquo; could not match{" "}
-          {activeMissing.map((m) => `"${m.savedName}" (${m.label})`).join(", ")}
-          . Choose {activeMissing.length === 1 ? "a column" : "columns"} below;
-          required columns must be mapped to import, and optional ones stay
-          blank if left unmapped.
-        </p>
+        <p role="alert" className="notice"> {uiText("Preset \"")}{missingNotice.presetName}{uiText("\" could not match")}{" "}
+          {activeMissing.map((m) => `"${m.savedName}" (${m.label})`).join(", ")} {uiText(". Choose")} {activeMissing.length === 1 ? "a column" : "columns"} {uiText("below; required columns must be mapped to import, and optional ones stay blank if left unmapped.")} </p>
       )}
     </div>
   );

@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import { ImportProgress } from "./ImportProgress";
 import { confirmDialog } from "./dialogStore";
 import type { Category } from "./domain";
@@ -558,7 +559,7 @@ export function CsvImport({
           value={options[key]}
           onChange={(e) => change(key, Number(e.target.value))}
         >
-          <option value={-1}>Choose column…</option>
+          <option value={-1}>{uiText("Choose column…")}</option>
           {columns.map((c, i) => (
             <option key={i} value={i}>
               {c}
@@ -651,25 +652,20 @@ export function CsvImport({
     >
       <div className="modal-head">
         <div>
-          <span className="eyebrow">BRING YOUR MONEY INTO VIEW</span>
-          <h2 id="csv-title">Import CSV</h2>
+          <span className="eyebrow">{uiText("BRING YOUR MONEY INTO VIEW")}</span>
+          <h2 id="csv-title">{uiText("Import CSV")}</h2>
         </div>
         <button
           className="icon-button"
           disabled={busy}
           onClick={onClose}
-          aria-label="Close import"
+          aria-label={uiText("Close import")}
         >
           ×
         </button>
       </div>
       <div className="csv-body">
-        <p className="muted">
-          Choose a bank CSV, match its columns, then review before importing.
-          Amounts are in AED. Mark transfers below and choose the other account.
-          Positive amounts arrive in the import account; negative amounts leave
-          it.
-        </p>
+        <p className="muted"> {uiText("Choose a bank CSV, match its columns, then review before importing. Amounts are in AED. Mark transfers below and choose the other account. Positive amounts arrive in the import account; negative amounts leave it.")} </p>
         <fieldset disabled={busy || done || reading}>
           <CsvPresetBar
             presets={presets}
@@ -706,9 +702,7 @@ export function CsvImport({
             onClearPresetError={() => setPresetError("")}
             onRetryLoad={loadPresetList}
           />
-          <label>
-            CSV file
-            <input
+          <label> {uiText("CSV file")} <input
               type="file"
               accept=".csv,text/csv,text/plain"
               onChange={(e) => void upload(e.target.files?.[0])}
@@ -716,17 +710,14 @@ export function CsvImport({
           </label>
           {filename && (
             <p>
-              {filename} · {data.length} rows
-            </p>
+              {filename} · {data.length} {uiText("rows")} </p>
           )}
           <div className="csv-grid">
-            <label>
-              Import into account
-              <select
+            <label> {uiText("Import into account")} <select
                 value={options.account}
                 onChange={(e) => change("account", e.target.value)}
               >
-                <option value="">Choose account…</option>
+                <option value="">{uiText("Choose account…")}</option>
                 {ledger.accounts.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
@@ -734,9 +725,7 @@ export function CsvImport({
                 ))}
               </select>
             </label>
-            <label>
-              Delimiter
-              <select
+            <label> {uiText("Delimiter")} <select
                 value={delimiter}
                 onChange={(e) => {
                   setDelimiter(e.target.value);
@@ -744,15 +733,13 @@ export function CsvImport({
                   resetRowChoices();
                 }}
               >
-                <option value=",">Comma</option>
-                <option value=";">Semicolon</option>
-                <option value={"\t"}>Tab</option>
-                <option value="|">Pipe</option>
+                <option value=",">{uiText("Comma")}</option>
+                <option value=";">{uiText("Semicolon")}</option>
+                <option value={"\t"}>{uiText("Tab")}</option>
+                <option value="|">{uiText("Pipe")}</option>
               </select>
             </label>
-            <label>
-              Skip leading rows
-              <input
+            <label> {uiText("Skip leading rows")} <input
                 type="number"
                 min="0"
                 max="10000"
@@ -764,9 +751,7 @@ export function CsvImport({
                 }}
               />
             </label>
-            <label>
-              Date format
-              <select
+            <label> {uiText("Date format")} <select
                 value={options.dateFormat}
                 onChange={(e) =>
                   change(
@@ -780,14 +765,12 @@ export function CsvImport({
                 <option value="YMD">YYYY-MM-DD</option>
               </select>
             </label>
-            <label>
-              Decimal separator
-              <select
+            <label> {uiText("Decimal separator")} <select
                 value={options.decimal}
                 onChange={(e) => change("decimal", e.target.value as "." | ",")}
               >
-                <option value=".">Dot · 1,234.56</option>
-                <option value=",">Comma · 1.234,56</option>
+                <option value=".">{uiText("Dot · 1,234.56")}</option>
+                <option value=",">{uiText("Comma · 1.234,56")}</option>
               </select>
             </label>
           </div>
@@ -800,25 +783,19 @@ export function CsvImport({
                 setOptions((o) => ({ ...o, transfers: {} }));
                 resetRowChoices();
               }}
-            />
-            First row contains column names
-          </label>
+            /> {uiText("First row contains column names")} </label>
           <label className="csv-check">
             <input
               type="checkbox"
               checked={options.split}
               onChange={(e) => change("split", e.target.checked)}
-            />
-            Separate debit / credit columns
-          </label>
+            /> {uiText("Separate debit / credit columns")} </label>
           <label className="csv-check">
             <input
               type="checkbox"
               checked={options.flip}
               onChange={(e) => change("flip", e.target.checked)}
-            />
-            Flip amount signs
-          </label>
+            /> {uiText("Flip amount signs")} </label>
           {!!columns.length && (
             <div className="csv-grid">
               {mapping("date", "Date *")}
@@ -835,11 +812,7 @@ export function CsvImport({
               {mapping("category", "Category")}
             </div>
           )}
-          <p className="muted small">
-            Signed amounts: negative = expense, positive = income. Debit/credit
-            amounts must be zero or positive. Unmapped categories stay
-            uncategorized.
-          </p>
+          <p className="muted small"> {uiText("Signed amounts: negative = expense, positive = income. Debit/credit amounts must be zero or positive. Unmapped categories stay uncategorized.")} </p>
         </fieldset>
         {!done && (
           <CsvMissingCategories
@@ -909,7 +882,7 @@ export function CsvImport({
           onChangeTransfers={(next) => change("transfers", next)}
         />
         {done && (
-          <p role="status">Imported {progress} transactions successfully.</p>
+          <p role="status">{uiText("Imported")} {progress} {uiText("transactions successfully.")}</p>
         )}
       </div>
       <div className="modal-actions">
@@ -929,13 +902,13 @@ export function CsvImport({
         )}
         {reading && (
           <div className="import-progress">
-            <p role="status">Reading CSV file…</p>
-            <progress aria-label="Reading CSV file" />
+            <p role="status">{uiText("Reading CSV file…")}</p>
+            <progress aria-label={uiText("Reading CSV file")} />
           </div>
         )}
 
         <button className="secondary" disabled={busy} onClick={onClose}>
-          {done ? "Done" : "Cancel"}
+          {done ? uiText("Done") : uiText("Cancel")}
         </button>
         {!done && (
           <button
@@ -945,8 +918,8 @@ export function CsvImport({
           >
             {busy
               ? creatingAll || creating
-                ? "Creating categories…"
-                : "Importing…"
+                ? uiText("Creating categories…")
+                : uiText("Importing…")
               : `Import ${selected.length} transactions`}
           </button>
         )}

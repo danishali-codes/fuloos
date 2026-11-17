@@ -33,3 +33,20 @@ test("v2 backup restores new features, receipts and credit-card metadata with re
  const invalid=JSON.parse(serializeBackup(backup)); invalid.data.goal_contributions[0].goal_id="missing";
  assert.throws(()=>parseAndValidateBackup(JSON.stringify(invalid)));
 });
+
+import {createRequire} from "node:module";
+import {setGlobalLocale,translateText,formatLocalizedAed} from "../src/i18n.ts";
+test("Arabic text and money localization preserve the English default",()=>{
+ setGlobalLocale("ar");
+ assert.equal(translateText("Shared categories"),"الفئات المشتركة");
+ assert.equal(translateText("Save valuation"),"حفظ التقييم");
+ assert.match(formatLocalizedAed(12345),/[٠-٩]/);
+ setGlobalLocale("en");
+ assert.equal(translateText("Save valuation"),"Save valuation");
+});
+test("server budget alerts allocate split categories just like reports",()=>{
+ const lib=createRequire(import.meta.url)("../pocketbase/pb_hooks/notifications_lib.js");
+ const result=lib.computeBudgetAlerts({categories:[{id:"a",name:"A"},{id:"b",name:"B"}],budgets:[{category_id:"a",amount:100,start_month:"2026-01",end_month:null},{category_id:"b",amount:100,start_month:"2026-01",end_month:null}],transactions:[{type:"expense",category_id:"a",amount:200,date:"2026-01-03",splits:[{category_id:"a",amount:50},{category_id:"b",amount:150}]}]},"2026-01");
+ assert.equal(result.find((r:{category:{id:string}})=>r.category.id==="a").actual,50);
+ assert.equal(result.find((r:{category:{id:string}})=>r.category.id==="b").actual,150);
+});

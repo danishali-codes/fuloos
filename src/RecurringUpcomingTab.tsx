@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import { useMemo, useState } from "react";
 import {
   ArrowDownLeft,
@@ -103,11 +104,11 @@ export function RecurringUpcomingTab({
     <section className="panel section">
       <div className="panel-heading recurring-panel-head">
         <div>
-          <h2>Intelligent upcoming forecast</h2>
+          <h2>{uiText("Intelligent upcoming forecast")}</h2>
           <p>
             {upcomingView === "timeline"
               ? `Chronological schedule and predicted clearing dates for the next ${horizonDays} days`
-              : "Monthly calendar view of recurring occurrences"}
+              : uiText("Monthly calendar view of recurring occurrences")}
           </p>
         </div>
         <div className="recurring-head-actions">
@@ -115,7 +116,7 @@ export function RecurringUpcomingTab({
             <div
               className="status-tabs"
               role="tablist"
-              aria-label="Forecast horizon"
+              aria-label={uiText("Forecast horizon")}
             >
               {([30, 60, 90] as const).map((h) => (
                 <button
@@ -126,15 +127,14 @@ export function RecurringUpcomingTab({
                   className={horizonDays === h ? "active" : ""}
                   onClick={() => setHorizonDays(h)}
                 >
-                  {h} days
-                </button>
+                  {h} {uiText("days")} </button>
               ))}
             </div>
           )}
           <div
             className="status-tabs"
             role="tablist"
-            aria-label="Upcoming view mode"
+            aria-label={uiText("Upcoming view mode")}
           >
             <button
               type="button"
@@ -143,8 +143,7 @@ export function RecurringUpcomingTab({
               className={upcomingView === "timeline" ? "active" : ""}
               onClick={() => setUpcomingView("timeline")}
             >
-              <List size={15} /> Chronological
-            </button>
+              <List size={15} /> {uiText("Chronological")} </button>
             <button
               type="button"
               role="tab"
@@ -152,8 +151,7 @@ export function RecurringUpcomingTab({
               className={upcomingView === "calendar" ? "active" : ""}
               onClick={() => setUpcomingView("calendar")}
             >
-              <Calendar size={15} /> Calendar
-            </button>
+              <Calendar size={15} /> {uiText("Calendar")} </button>
           </div>
         </div>
       </div>
@@ -186,15 +184,13 @@ export function RecurringUpcomingTab({
                         </span>
                         {item.schedule.amount_type === "variable" &&
                           !item.isConfirmed && (
-                            <span className="mini-tag variable">Variable</span>
+                            <span className="mini-tag variable">{uiText("Variable")}</span>
                           )}
                       </b>
-                      <small>
-                        Scheduled {formatFullDate(item.scheduledDate)}
+                      <small> {uiText("Scheduled")} {formatFullDate(item.scheduledDate)}
                         {item.offsetDays !== 0 && !item.isConfirmed && (
                           <span className="predicted-hint">
-                            {" "}
-                            · Predicted {formatShortDate(item.predictedDate)} (
+                            {" "} {uiText("· Predicted")} {formatShortDate(item.predictedDate)} (
                             {item.offsetDays > 0
                               ? `+${item.offsetDays}d`
                               : `${item.offsetDays}d`}
@@ -218,8 +214,8 @@ export function RecurringUpcomingTab({
                         {item.hasRange
                           ? `Range ${concealed(item.lowAmount)} – ${concealed(item.highAmount)}`
                           : item.isConfirmed
-                            ? "Recorded"
-                            : "Expected"}
+                            ? uiText("Recorded")
+                            : uiText("Expected")}
                       </small>
                     </span>
                   </div>
@@ -229,7 +225,7 @@ export function RecurringUpcomingTab({
                         type="button"
                         className="icon-button"
                         disabled={busy}
-                        title="Unlink confirmation"
+                        title={uiText("Unlink confirmation")}
                         aria-label={`Unlink ${item.schedule.name} on ${item.scheduledDate}`}
                         onClick={() =>
                           onUnlinkOccurrence(item.confirmation!.id)
@@ -245,9 +241,7 @@ export function RecurringUpcomingTab({
                         onClick={() =>
                           onConfirmOccurrence(item.schedule, item.scheduledDate)
                         }
-                      >
-                        Mark paid
-                      </button>
+                      > {uiText("Mark paid")} </button>
                     )}
                   </div>
                 </div>
@@ -257,11 +251,8 @@ export function RecurringUpcomingTab({
         ) : (
           <div className="empty">
             <Calendar size={28} />
-            <h3>No payments in the next {horizonDays} days</h3>
-            <p>
-              Active schedules with upcoming payments in this window will appear
-              here.
-            </p>
+            <h3>{uiText("No payments in the next")} {horizonDays} {uiText("days")}</h3>
+            <p> {uiText("Active schedules with upcoming payments in this window will appear here.")} </p>
           </div>
         )
       ) : (
@@ -274,8 +265,7 @@ export function RecurringUpcomingTab({
               onChange={(next) => setCalMonth(next.month)}
             />
             <span className="muted small">
-              {calendarData.items.length} scheduled in month
-            </span>
+              {calendarData.items.length} {uiText("scheduled in month")} </span>
           </div>
           <div className="calendar-grid">
             {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (

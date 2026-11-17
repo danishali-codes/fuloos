@@ -126,6 +126,7 @@ export function groupTextItemsIntoLines(
 export async function extractPdfPages(
   buffer: ArrayBuffer,
   workerSrc?: string,
+  password?: string,
 ): Promise<PdfLine[][]> {
   const pdfjs = await import("pdfjs-dist");
   if (workerSrc) {
@@ -136,6 +137,7 @@ export async function extractPdfPages(
   try {
     loadingTask = pdfjs.getDocument({
       data: new Uint8Array(buffer),
+      ...(password ? {password} : {}),
     });
     const doc = await loadingTask.promise;
     const pages: PdfLine[][] = [];

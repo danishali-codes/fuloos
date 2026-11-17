@@ -1,3 +1,4 @@
+import { ARABIC_UI } from "./arabicUi.ts";
 import {
   createContext,
   createElement,
@@ -646,4 +647,9 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
 
 export function useLocale(): LocaleContextValue {
   return useContext(LocaleContext);
+}
+
+const PHRASES: Record<string,string> = {...Object.fromEntries(Object.entries(MESSAGES.en).map(([key,english])=>[english,MESSAGES.ar[key as TranslationKey]])),...ARABIC_UI};
+export function translateText(english: string): string {
+  return currentLocale === "ar" ? (PHRASES[english] ?? english) : english;
 }

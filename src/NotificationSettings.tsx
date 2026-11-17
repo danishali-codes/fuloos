@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import { useEffect, useState } from "react";
 import { Bell, Mail, Smartphone } from "lucide-react";
 import type { PushSubscriptionRecord } from "./backend";
@@ -271,26 +272,21 @@ export function NotificationSettings({
       aria-labelledby="notifications-heading"
     >
       <div className="notifications-head">
-        <h3 id="notifications-heading">Notifications</h3>
+        <h3 id="notifications-heading">{uiText("Notifications")}</h3>
         <p className="muted small">
           {demo
-            ? "Demo mode: preferences are kept in memory only and no emails or push alerts are sent."
+            ? uiText("Demo mode: preferences are kept in memory only and no emails or push alerts are sent.")
             : `Opt-in email${userEmail ? ` (${userEmail})` : ""} and Web Push alerts. All alerts start off until you enable them.`}
         </p>
       </div>
 
       {!supported && !demo && (
-        <p className="muted small" role="status">
-          Notifications are not installed on the server yet. Apply the
-          notifications migration and hooks to enable alerts.
-        </p>
+        <p className="muted small" role="status"> {uiText("Notifications are not installed on the server yet. Apply the notifications migration and hooks to enable alerts.")} </p>
       )}
 
       <label className="notifications-master">
         <span>
-          <Bell size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />
-          Email notifications
-        </span>
+          <Bell size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} /> {uiText("Email notifications")} </span>
         <input
           type="checkbox"
           checked={prefs.email_enabled}
@@ -312,9 +308,7 @@ export function NotificationSettings({
           <Smartphone
             size={14}
             style={{ verticalAlign: "-2px", marginRight: 6 }}
-          />
-          Push notifications (account preference)
-        </span>
+          /> {uiText("Push notifications (account preference)")} </span>
         <input
           type="checkbox"
           checked={pushChannelEnabled}
@@ -335,9 +329,7 @@ export function NotificationSettings({
           <Smartphone
             size={14}
             style={{ verticalAlign: "-2px", marginRight: 6 }}
-          />
-          Push notifications (this browser)
-        </span>
+          /> {uiText("Push notifications (this browser)")} </span>
         <span className="notifications-master-meta">
           <span
             className={`notifications-badge${
@@ -349,14 +341,14 @@ export function NotificationSettings({
             }`}
           >
             {demo
-              ? "Demo"
+              ? uiText("Demo")
               : pushStatus === "subscribed"
-                ? "Subscribed"
+                ? uiText("Subscribed")
                 : pushStatus === "denied"
-                  ? "Permission denied"
+                  ? uiText("Permission denied")
                   : pushStatus === "not_configured"
-                    ? "Not configured"
-                    : "Not subscribed"}
+                    ? uiText("Not configured")
+                    : uiText("Not subscribed")}
           </span>
           <input
             type="checkbox"
@@ -376,10 +368,10 @@ export function NotificationSettings({
       {!demo && pushStatus === "not_configured" && (
         <p className="muted small">
           {!browserSupported
-            ? "This browser does not support Web Push notifications."
+            ? uiText("This browser does not support Web Push notifications.")
             : !pushServerSupported
-              ? "Web Push migration is not installed on the PocketBase server yet."
-              : "Web Push is not configured in this build (VITE_VAPID_PUBLIC_KEY is missing)."}
+              ? uiText("Web Push migration is not installed on the PocketBase server yet.")
+              : uiText("Web Push is not configured in this build (VITE_VAPID_PUBLIC_KEY is missing).")}
         </p>
       )}
 
@@ -394,14 +386,14 @@ export function NotificationSettings({
                 update({ upcoming_bill_enabled: e.target.checked })
               }
             />
-            <span>Upcoming bill due</span>
+            <span>{uiText("Upcoming bill due")}</span>
           </label>
           <span className="notifications-inline-input">
             <input
               type="number"
               min={1}
               max={30}
-              aria-label="Days before bill due"
+              aria-label={uiText("Days before bill due")}
               value={prefs.upcoming_bill_days}
               disabled={
                 disabled || !anyChannelEnabled || !prefs.upcoming_bill_enabled
@@ -414,7 +406,7 @@ export function NotificationSettings({
                 update({ upcoming_bill_days: val });
               }}
             />
-            <span>days before</span>
+            <span>{uiText("days before")}</span>
           </span>
         </div>
 
@@ -426,7 +418,7 @@ export function NotificationSettings({
               disabled={disabled || !anyChannelEnabled}
               onChange={(e) => update({ overdue_enabled: e.target.checked })}
             />
-            <span>Overdue recurring occurrence</span>
+            <span>{uiText("Overdue recurring occurrence")}</span>
           </label>
         </div>
 
@@ -438,7 +430,7 @@ export function NotificationSettings({
               disabled={disabled || !anyChannelEnabled}
               onChange={(e) => update({ budget_80_enabled: e.target.checked })}
             />
-            <span>Monthly budget reaches 80%</span>
+            <span>{uiText("Monthly budget reaches 80%")}</span>
           </label>
         </div>
 
@@ -450,7 +442,7 @@ export function NotificationSettings({
               disabled={disabled || !anyChannelEnabled}
               onChange={(e) => update({ budget_100_enabled: e.target.checked })}
             />
-            <span>Monthly budget exceeds 100%</span>
+            <span>{uiText("Monthly budget exceeds 100%")}</span>
           </label>
         </div>
 
@@ -464,11 +456,11 @@ export function NotificationSettings({
                 update({ weekly_digest_enabled: e.target.checked })
               }
             />
-            <span>Weekly summary digest</span>
+            <span>{uiText("Weekly summary digest")}</span>
           </label>
           <span className="notifications-inline-input">
             <select
-              aria-label="Weekly digest day"
+              aria-label={uiText("Weekly digest day")}
               value={prefs.digest_day}
               disabled={
                 disabled || !anyChannelEnabled || !prefs.weekly_digest_enabled
@@ -487,10 +479,10 @@ export function NotificationSettings({
         </div>
 
         <div className="notifications-row">
-          <span className="muted small">Timezone</span>
+          <span className="muted small">{uiText("Timezone")}</span>
           <span className="notifications-inline-input">
             <select
-              aria-label="Notification timezone"
+              aria-label={uiText("Notification timezone")}
               value={
                 TIMEZONES.includes(prefs.timezone)
                   ? prefs.timezone
@@ -516,7 +508,7 @@ export function NotificationSettings({
           disabled={disabled || !dirty}
           onClick={() => void handleSave()}
         >
-          {saving ? "Saving…" : "Save preferences"}
+          {saving ? uiText("Saving…") : uiText("Save preferences")}
         </button>
         <button
           type="button"
@@ -525,7 +517,7 @@ export function NotificationSettings({
           onClick={() => void handleTestEmail()}
         >
           <Mail size={14} />
-          {testing ? "Sending…" : "Send test email"}
+          {testing ? uiText("Sending…") : uiText("Send test email")}
         </button>
         <button
           type="button"
@@ -536,7 +528,7 @@ export function NotificationSettings({
           onClick={() => void handleTestPush()}
         >
           <Smartphone size={14} />
-          {testingPush ? "Sending…" : "Send test push"}
+          {testingPush ? uiText("Sending…") : uiText("Send test push")}
         </button>
       </div>
 

@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
@@ -228,11 +229,10 @@ export function TransactionsPanel({
     );
   };
   const categoryCell = (e: RegisterEntry) => {
-    if (e.direction) return <span className="tx-transfer">Transfer</span>;
+    if (e.direction) return <span className="tx-transfer">{uiText("Transfer")}</span>;
     if (e.tx.splits && e.tx.splits.length > 0) {
       return (
-        <span className="tx-category split-badge" title={entryCategory(e, ledger)}>
-          Split ({e.tx.splits.length})
+        <span className="tx-category split-badge" title={entryCategory(e, ledger)}> {uiText("Split (")}{e.tx.splits.length})
         </span>
       );
     }
@@ -263,9 +263,7 @@ export function TransactionsPanel({
             setCategorizing(null);
           }}
         >
-          <option value="" disabled>
-            Choose a category…
-          </option>
+          <option value="" disabled> {uiText("Choose a category…")} </option>
           {ledger.categories.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
@@ -283,22 +281,19 @@ export function TransactionsPanel({
           if (ledger.categories.length) setCategorizing(e.key);
           else onEdit(e.tx);
         }}
-      >
-        Categorize
-      </button>
+      > {uiText("Categorize")} </button>
     );
   };
 
   const endIdx = Math.min(startIdx + pageSize, rows.length);
   const more = rows.length > 0 && (
     <div className="tx-more tx-pagination">
-      <span className="muted small">
-        Showing {startIdx + 1}–{endIdx} of {rows.length}
+      <span className="muted small"> {uiText("Showing")} {startIdx + 1}–{endIdx} {uiText("of")} {rows.length}
       </span>
       <label className="tx-page-size">
-        <span className="muted small">Rows</span>
+        <span className="muted small">{uiText("Rows")}</span>
         <select
-          aria-label="Rows per page"
+          aria-label={uiText("Rows per page")}
           value={pageSize}
           onChange={(e) => setPageSize(Number(e.target.value))}
         >
@@ -314,23 +309,20 @@ export function TransactionsPanel({
           <button
             type="button"
             className="secondary"
-            aria-label="Previous page"
+            aria-label={uiText("Previous page")}
             disabled={currentPage <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
           >
-            <ChevronLeft size={15} /> Prev
-          </button>
-          <span className="muted small">
-            Page {currentPage} of {totalPages}
+            <ChevronLeft size={15} /> {uiText("Prev")} </button>
+          <span className="muted small"> {uiText("Page")} {currentPage} {uiText("of")} {totalPages}
           </span>
           <button
             type="button"
             className="secondary"
-            aria-label="Next page"
+            aria-label={uiText("Next page")}
             disabled={currentPage >= totalPages}
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-          >
-            Next <ChevronRight size={15} />
+          > {uiText("Next")} <ChevronRight size={15} />
           </button>
         </div>
       )}
@@ -405,9 +397,8 @@ export function TransactionsPanel({
                 </span>
               ))}
               {t.receipt && (
-                <span className="tag-badge receipt-badge" title="Receipt attached">
-                  <Paperclip size={11} /> Receipt
-                </span>
+                <span className="tag-badge receipt-badge" title={uiText("Receipt attached")}>
+                  <Paperclip size={11} /> {uiText("Receipt")} </span>
               )}
             </span>
           )}
@@ -428,7 +419,7 @@ export function TransactionsPanel({
               </span>
             )}
           <small className={e.balance < 0 ? "is-negative" : ""}>
-            {account ? "Balance" : "Total"} {fmt(e.balance)}
+            {account ? uiText("Balance") : uiText("Total")} {fmt(e.balance)}
           </small>
         </span>
         <span
@@ -459,9 +450,9 @@ export function TransactionsPanel({
     <div className="tx-relaxed">
       <div className="tx-relaxed-sort">
         <label>
-          <span className="muted small">Sort by</span>
+          <span className="muted small">{uiText("Sort by")}</span>
           <select
-            aria-label="Sort transactions by"
+            aria-label={uiText("Sort transactions by")}
             value={sort.key}
             onChange={(ev) => toggleSort(ev.target.value as SortKey)}
           >
@@ -470,7 +461,7 @@ export function TransactionsPanel({
               .map((k) => (
                 <option key={k} value={k}>
                   {k === "balance" && !account
-                    ? "Total balance"
+                    ? uiText("Total balance")
                     : sortLabels[k]}
                 </option>
               ))}
@@ -480,9 +471,9 @@ export function TransactionsPanel({
           type="button"
           className="icon-button"
           aria-label={
-            sort.dir === "asc" ? "Sorted ascending" : "Sorted descending"
+            sort.dir === "asc" ? uiText("Sorted ascending") : uiText("Sorted descending")
           }
-          title={sort.dir === "asc" ? "Ascending" : "Descending"}
+          title={sort.dir === "asc" ? uiText("Ascending") : uiText("Descending")}
           onClick={() => toggleSort(sort.key)}
         >
           {sort.dir === "asc" ? <ArrowUp size={16} /> : <ArrowDown size={16} />}
@@ -512,9 +503,7 @@ export function TransactionsPanel({
           className="secondary"
           disabled={busy || loading || !ledger.accounts.length}
           onClick={onImport}
-        >
-          Import CSV
-        </button>
+        > {uiText("Import CSV")} </button>
         <button
           className="secondary"
           disabled={busy || loading || !ledger.accounts.length}
@@ -562,14 +551,14 @@ export function TransactionsPanel({
         <label className="search">
           <Search size={17} />
           <input
-            aria-label="Search transactions"
+            aria-label={uiText("Search transactions")}
             placeholder={tr("tx.searchPlaceholder")}
             value={search}
             onChange={(e) => onSearch(e.target.value)}
           />
         </label>
         <select
-          aria-label="Filter account"
+          aria-label={uiText("Filter account")}
           value={accountFilter}
           onChange={(e) => onAccountFilter(e.target.value)}
         >
@@ -581,7 +570,7 @@ export function TransactionsPanel({
           ))}
         </select>
         <select
-          aria-label="Filter type"
+          aria-label={uiText("Filter type")}
           value={kindFilter}
           onChange={(e) => onKindFilter(e.target.value)}
         >
@@ -591,12 +580,12 @@ export function TransactionsPanel({
           <option value="transfer">{tr("tx.transfer")}</option>
         </select>
         <select
-          aria-label="Filter category"
+          aria-label={uiText("Filter category")}
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
         >
           <option value="">{tr("tx.allCategories")}</option>
-          <option value="uncategorized">Uncategorized</option>
+          <option value="uncategorized">{uiText("Uncategorized")}</option>
           {ledger.categories.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
@@ -605,11 +594,11 @@ export function TransactionsPanel({
         </select>
         {ledgerTags.length > 0 && (
           <select
-            aria-label="Filter tag"
+            aria-label={uiText("Filter tag")}
             value={tagFilter}
             onChange={(e) => setTagFilter(e.target.value)}
           >
-            <option value="">All tags</option>
+            <option value="">{uiText("All tags")}</option>
             {ledgerTags.map((tag) => (
               <option key={tag} value={tag}>
                 #{tag}
@@ -618,7 +607,7 @@ export function TransactionsPanel({
           </select>
         )}
         <span className="muted small">
-          {visibleIds.length} transaction{visibleIds.length === 1 ? "" : "s"}
+          {visibleIds.length} {uiText("transaction")}{visibleIds.length === 1 ? "" : "s"}
         </span>
       </div>
       <div className="bulk-toolbar">
@@ -643,8 +632,7 @@ export function TransactionsPanel({
             : `Select all ${pageIds.length} results`}
         </label>
         <span>
-          {selected.size} selected · {selectedOnPage} on this page
-        </span>
+          {selected.size} {uiText("selected ·")} {selectedOnPage} {uiText("on this page")} </span>
         <button
           className="secondary"
           disabled={busy || loading || !selected.size}
@@ -653,9 +641,7 @@ export function TransactionsPanel({
               ledger.transactions.filter((t) => selected.has(t.id)),
             )
           }
-        >
-          Edit selected
-        </button>
+        > {uiText("Edit selected")} </button>
         <button
           className="secondary danger-outline"
           disabled={busy || loading || !selected.size}
@@ -665,15 +651,12 @@ export function TransactionsPanel({
             )
           }
         >
-          <Trash2 size={15} /> Delete selected
-        </button>
+          <Trash2 size={15} /> {uiText("Delete selected")} </button>
         <button
           className="text-button"
           disabled={busy || !selected.size}
           onClick={() => onSelectionChange(new Set())}
-        >
-          Clear selection
-        </button>
+        > {uiText("Clear selection")} </button>
       </div>
       {rows.length && density === "relaxed" ? (
         relaxedView
@@ -683,7 +666,7 @@ export function TransactionsPanel({
             <thead>
               <tr>
                 <th className="tx-check">
-                  <span className="sr-only">Select</span>
+                  <span className="sr-only">{uiText("Select")}</span>
                 </th>
                 {header("date", tr("tx.col.date"))}
                 {showAccount && header("account", tr("tx.col.account"))}
@@ -694,11 +677,11 @@ export function TransactionsPanel({
                 {header("deposit", tr("tx.col.deposit"), "num")}
                 {header(
                   "balance",
-                  account ? tr("tx.col.balance") : "Total balance",
+                  account ? tr("tx.col.balance") : uiText("Total balance"),
                   "num",
                 )}
                 <th className="tx-actions">
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">{uiText("Actions")}</span>
                 </th>
               </tr>
             </thead>
@@ -821,7 +804,7 @@ export function TransactionsPanel({
                           type="button"
                           className="icon-button"
                           disabled={busy}
-                          title="View receipt"
+                          title={uiText("View receipt")}
                           aria-label={`View receipt for ${label}`}
                           onClick={() => onEdit(t)}
                         >
@@ -855,8 +838,8 @@ export function TransactionsPanel({
       ) : (
         <div className="empty">
           <ReceiptText size={28} />
-          <h3>Nothing here yet</h3>
-          <p>Add a transaction, or try a different period, search or filter.</p>
+          <h3>{uiText("Nothing here yet")}</h3>
+          <p>{uiText("Add a transaction, or try a different period, search or filter.")}</p>
         </div>
       )}
     </section>

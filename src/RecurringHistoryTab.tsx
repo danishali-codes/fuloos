@@ -1,3 +1,4 @@
+import { translateText as uiText } from "./i18n";
 import { useMemo } from "react";
 import { Check, ReceiptText, Sparkles, Unlink } from "lucide-react";
 import type {
@@ -42,14 +43,10 @@ export function RecurringHistoryTab({
     <section className="panel section">
       <div className="panel-heading recurring-panel-head">
         <div>
-          <h2>
-            Occurrence history{" "}
+          <h2> {uiText("Occurrence history")}{" "}
             <span className="count">{historyItems.length}</span>
           </h2>
-          <p>
-            Confirmed occurrences linked to actual ledger transactions.
-            Unlinking or re-linking never deletes or alters transaction amounts.
-          </p>
+          <p> {uiText("Confirmed occurrences linked to actual ledger transactions. Unlinking or re-linking never deletes or alters transaction amounts.")} </p>
         </div>
       </div>
 
@@ -77,21 +74,17 @@ export function RecurringHistoryTab({
                       >
                         {isAutoMatched ? (
                           <>
-                            <Sparkles size={12} /> Auto-matched
-                          </>
+                            <Sparkles size={12} /> {uiText("Auto-matched")} </>
                         ) : (
                           <>
-                            <Check size={12} /> Manual
-                          </>
+                            <Check size={12} /> {uiText("Manual")} </>
                         )}
                       </span>
                     </b>
-                    <small>
-                      Scheduled {formatFullDate(occ.occurrence_date)}
+                    <small> {uiText("Scheduled")} {formatFullDate(occ.occurrence_date)}
                       {tx ? (
                         <>
-                          {" "}
-                          · Linked to <b>"{tx.payee || "Transaction"}"</b> on{" "}
+                          {" "} {uiText("· Linked to")} <b>"{tx.payee || "Transaction"}"</b> {uiText("on")}{" "}
                           {formatShortDate(tx.date)}
                         </>
                       ) : (
@@ -114,7 +107,7 @@ export function RecurringHistoryTab({
                       {schedule?.type === "income" ? "+" : "−"}
                       {concealed(tx?.amount ?? schedule?.amount ?? 0)}
                     </b>
-                    <small>Recorded in ledger</small>
+                    <small>{uiText("Recorded in ledger")}</small>
                   </span>
                 </div>
 
@@ -124,19 +117,17 @@ export function RecurringHistoryTab({
                       type="button"
                       className="secondary compact-btn"
                       disabled={busy}
-                      title="Change linked transaction"
+                      title={uiText("Change linked transaction")}
                       onClick={() =>
                         onRelinkOccurrence?.(occ, schedule, occ.occurrence_date)
                       }
-                    >
-                      Change
-                    </button>
+                    > {uiText("Change")} </button>
                   )}
                   <button
                     type="button"
                     className="icon-button"
                     disabled={busy}
-                    title="Unlink confirmation"
+                    title={uiText("Unlink confirmation")}
                     aria-label={`Unlink ${schedule?.name ?? "payment"} on ${occ.occurrence_date}`}
                     onClick={() => onUnlinkOccurrence(occ.id)}
                   >
@@ -150,11 +141,8 @@ export function RecurringHistoryTab({
       ) : (
         <div className="empty">
           <ReceiptText size={28} />
-          <h3>No confirmed occurrences yet</h3>
-          <p>
-            When you mark recurring payments as paid or auto-reconciliation
-            matches bank transactions, they will be listed here.
-          </p>
+          <h3>{uiText("No confirmed occurrences yet")}</h3>
+          <p> {uiText("When you mark recurring payments as paid or auto-reconciliation matches bank transactions, they will be listed here.")} </p>
         </div>
       )}
     </section>
