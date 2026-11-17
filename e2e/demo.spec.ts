@@ -345,13 +345,11 @@ test.describe("Review regression browser flows", () => {
       "attachments",
     ])
       expect(Array.isArray(data.data[key])).toBeTruthy();
-    await dialog
-      .locator('input[type="file"]')
-      .setInputFiles({
-        name: "backup.json",
-        mimeType: "application/json",
-        buffer: Buffer.from(JSON.stringify(data)),
-      });
+    await dialog.locator('input[type="file"]').setInputFiles({
+      name: "backup.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(data)),
+    });
     await expect(dialog.locator(".data-backup-preview")).toBeVisible();
     await expect(dialog.locator(".data-backup-preview-head")).toContainText(
       "backup.json",
@@ -427,14 +425,14 @@ test("PDF statements are extracted locally into a reviewable preview", async ({
     .map((n) => String(n).padStart(10, "0") + " 00000 n \n")
     .join("")}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   const dialog = page.getByRole("dialog");
-  await dialog
-    .locator('input[type="file"]')
-    .setInputFiles({
-      name: "statement.pdf",
-      mimeType: "application/pdf",
-      buffer: Buffer.from(pdf),
-    });
-  await expect(dialog.locator("tbody")).toContainText("COFFEE REVIEW");
+  await dialog.locator('input[type="file"]').setInputFiles({
+    name: "statement.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from(pdf),
+  });
+  await expect(
+    dialog.getByLabel("Payee for row 1", { exact: true }),
+  ).toHaveValue(/coffee review/i);
   await expect(
     dialog.getByRole("button", { name: "Import 1 transactions", exact: true }),
   ).toBeEnabled();
@@ -451,16 +449,14 @@ test("receipt files survive editing a transaction in demo", async ({
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Amount", { exact: false }).first().fill("1.00");
   await dialog.getByLabel("Payee", { exact: false }).fill("Receipt regression");
-  await dialog
-    .locator('input[type="file"]')
-    .setInputFiles({
-      name: "receipt.png",
-      mimeType: "image/png",
-      buffer: Buffer.from(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jOioAAAAASUVORK5CYII=",
-        "base64",
-      ),
-    });
+  await dialog.locator('input[type="file"]').setInputFiles({
+    name: "receipt.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jOioAAAAASUVORK5CYII=",
+      "base64",
+    ),
+  });
   await dialog
     .getByRole("button", { name: "Add transaction", exact: true })
     .click();
@@ -478,9 +474,7 @@ test("captured alerts require confirmation and leave the pending queue after imp
 }) => {
   await enterDemo(page);
   await navTo(page, "Transactions");
-  await page
-    .getByRole("button", { name: "Captured alerts", exact: true })
-    .click();
+  await page.getByRole("button", { name: /^Captured alerts/ }).click();
   const dialog = page.getByRole("dialog");
   await dialog
     .locator("textarea")
@@ -491,14 +485,15 @@ test("captured alerts require confirmation and leave the pending queue after imp
   await dialog
     .getByRole("button", { name: "Parse & add to queue", exact: true })
     .click();
-  await expect(
-    dialog.getByRole("button", { name: "Confirm & import", exact: true }),
-  ).toBeVisible();
-  await dialog
-    .getByRole("button", { name: "Confirm & import", exact: true })
-    .click();
-  await expect(
-    dialog.getByRole("button", { name: "Confirm & import", exact: true }),
-  ).toHaveCount(0);
+  const confirmations = dialog.getByRole("button", {
+    name: "Confirm & import",
+    exact: true,
+  });
+  await expect(confirmations).toHaveCount(2);
+  await expect(dialog.getByLabel("Payee", { exact: true }).first()).toHaveValue(
+    /coffee review/i,
+  );
+  await confirmations.first().click();
+  await expect(confirmations).toHaveCount(1);
   await expect(dialog.getByRole("status")).toContainText("Imported");
 });
