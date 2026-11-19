@@ -1,0 +1,659 @@
+/* Mobile-first native shell & SMS Auto-Capture styles (consistent with Fuloos design tokens). */
+
+.mobile-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 780px) {
+  .sidebar {
+    display: none !important;
+  }
+
+  main {
+    margin-left: 0 !important;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: calc(74px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .mobile-bottom-nav {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 40;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    align-items: center;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -6px 24px rgba(18, 37, 24, 0.06);
+  }
+
+  .mobile-nav-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    padding: 6px 2px;
+    border-radius: 10px;
+    font-size: 10.5px;
+    font-weight: 550;
+    min-width: 0;
+  }
+
+  .mobile-nav-btn > span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+    letter-spacing: -0.01em;
+  }
+
+  .mobile-nav-btn.is-active {
+    color: var(--brand);
+    background: var(--active-surface);
+    font-weight: 700;
+  }
+
+  .mobile-nav-icon-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+  }
+
+  .mobile-nav-badge {
+    position: absolute;
+    top: -6px;
+    right: -10px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: #b94a3c;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mobile-nav-dot {
+    position: absolute;
+    top: -2px;
+    right: -3px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #b94a3c;
+  }
+
+  .quick-add-fab {
+    bottom: calc(82px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+.mobile-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(20, 43, 34, 0.44);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.mobile-sheet {
+  width: 100%;
+  max-width: 540px;
+  max-height: 82vh;
+  overflow-y: auto;
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 20px 20px 0 0;
+  padding: 10px 18px calc(22px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -16px 48px rgba(18, 37, 24, 0.22);
+}
+
+.mobile-sheet-handle {
+  width: 38px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line);
+  margin: 0 auto 12px;
+}
+
+.mobile-sheet-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.mobile-sheet-head h3 {
+  font-size: 20px;
+}
+
+.mobile-sheet-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.mobile-sheet-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 13px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--soft-surface);
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mobile-sheet-tile.is-active {
+  background: var(--active-surface);
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+.mobile-sheet-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.mobile-sheet-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 550;
+  text-align: left;
+}
+
+.mobile-sheet-row:last-child {
+  border-bottom: 0;
+}
+
+.mobile-sheet-row small,
+.mobile-sheet-pill {
+  margin-left: auto;
+}
+
+.mobile-sheet-pill {
+  background: var(--brand);
+  color: #fff;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+}
+
+.mobile-sheet-row.is-danger {
+  color: #a9473b;
+}
+
+/* SMS Auto-Capture Modal & Quick-Pick Chips */
+.sms-auto-modal {
+  width: min(680px, calc(100vw - 20px));
+  max-width: calc(100vw - 20px);
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+.accounts-summary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 780px) {
+  .sms-auto-modal {
+    width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+    max-height: 90dvh;
+    padding: 16px !important;
+    border-radius: 16px;
+  }
+
+  .sms-auto-modal .sms-privacy-banner,
+  .sms-auto-modal .sms-info-card,
+  .sms-auto-modal .sms-permission-card {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .sms-auto-modal p,
+  .sms-auto-modal small {
+    overflow-wrap: anywhere;
+  }
+
+  .accounts-summary-actions {
+    width: 100%;
+  }
+
+  .accounts-summary-actions button {
+    flex: 1 1 auto;
+    justify-content: center;
+    font-size: 13px;
+    padding: 9px 12px;
+  }
+
+  .compact-row.accounts {
+    gap: 8px;
+  }
+
+  .compact-row.accounts .compact-name {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .compact-row.accounts .compact-name > span:last-child {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .compact-row.accounts .compact-name b {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .compact-row.accounts .num {
+    white-space: nowrap;
+    font-size: 13.5px;
+  }
+
+  .compact-row.accounts .compact-actions {
+    gap: 2px;
+  }
+}
+
+.sms-privacy-banner,
+.sms-info-card,
+.sms-permission-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--soft-surface);
+  margin-bottom: 14px;
+}
+
+.sms-privacy-banner svg,
+.sms-info-card svg,
+.sms-permission-card svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.sms-auto-modal input[type="range"] {
+  accent-color: var(--brand);
+}
+
+.sms-sender-option,
+.sms-sender-row {
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.sms-sender-option small,
+.sms-sender-row small {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sms-permission-card {
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  background: var(--active-surface);
+}
+
+.sms-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+
+.sms-section-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sms-empty-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 28px 18px;
+  border-radius: 10px;
+  border: 1px dashed var(--line);
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+
+.sms-link-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.sms-link-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 13px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.sms-link-card.is-paused {
+  opacity: 0.65;
+}
+
+.sms-link-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.sms-link-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sms-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--active-surface);
+  color: var(--brand);
+}
+
+.sms-pill.is-soft {
+  background: var(--soft-surface);
+  color: var(--text-soft);
+  border: 1px solid var(--line);
+}
+
+.sms-android-settings {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  margin-top: 6px;
+}
+
+.sms-android-settings h4 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.sms-settings-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sms-discovered-list {
+  display: grid;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+}
+
+.sms-sender-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.sms-sender-option.is-selected {
+  border-color: var(--brand);
+  background: var(--active-surface);
+}
+
+.sms-sender-option-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.sms-sample-line {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sms-card-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.sms-custom-sender-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.sms-custom-sender-row input {
+  flex: 1;
+}
+
+.sms-quick-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.sms-chip {
+  border: 1px solid var(--line);
+  background: var(--soft-surface);
+  color: var(--text-soft);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.sms-chip.is-active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #ffffff;
+}
+
+.sms-backfill-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+@media (max-width: 600px) {
+  .sms-backfill-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.sms-stat-tile {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--soft-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sms-stat-tile span {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.sms-stat-tile strong {
+  font-size: 18px;
+}
+
+.sms-stat-tile.is-good strong {
+  color: var(--green);
+}
+
+.sms-stat-tile.is-warn strong {
+  color: #a86a19;
+}
+
+.sms-opening-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 11px 13px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--soft-surface);
+  margin-bottom: 14px;
+}
+
+.sms-checkbox-row {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px;
+  margin: 0 !important;
+  font-weight: 500 !important;
+}
+
+.sms-merchant-review h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.sms-merchant-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  margin-bottom: 14px;
+}
+
+.sms-merchant-card {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sms-merchant-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sms-merchant-head > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sms-merchant-head select {
+  min-width: 170px;
+}
+
+.sms-account-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--active-surface);
+  color: var(--brand);
+  border: 0;
+}
+
+.sms-spin {
+  animation: sms-rotate 1.1s linear infinite;
+}
+
+@keyframes sms-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* RTL adjustments */
+[dir="rtl"] .mobile-sheet-row {
+  text-align: right;
+}
+
+[dir="rtl"] .mobile-sheet-row small,
+[dir="rtl"] .mobile-sheet-pill {
+  margin-left: 0;
+  margin-right: auto;
+}

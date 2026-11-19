@@ -1,6 +1,6 @@
 import { translateText as uiText } from "./i18n";
-import React, { useState } from "react";
-import { Leaf, Lock, LogOut } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Fingerprint, Leaf, Lock, LogOut } from "lucide-react";
 import {
   MAX_PIN_ATTEMPTS,
   getFailedAttempts,
@@ -10,6 +10,7 @@ import {
   type AppLockConfig,
   type StorageLike,
 } from "./appLock";
+import { platformBridge } from "./mobile/platformBridge";
 
 export function AppLockScreen({
   email,
@@ -28,10 +29,39 @@ export function AppLockScreen({
 }) {
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [attempts, setAttempts] = useState(() =>
     getFailedAttempts(storage, config.userId),
   );
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    let live = true;
+    void platformBridge.isBiometricAvailable().then((ok) => {
+      if (live) setBiometricAvailable(ok);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  async function unlockBiometric() {
+    if (busy) return;
+    setError("");
+    setBusy(true);
+    try {
+      const ok = await platformBridge.authenticateBiometric(
+        "Unlock Fuloos",
+        `Verify your identity for ${email}`,
+      );
+      if (ok) {
+        resetFailedAttempts(storage, config.userId);
+        onUnlock();
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -111,6 +141,16 @@ export function AppLockScreen({
           >
             {busy ? uiText("Checking…") : uiText("Unlock")}
           </button>
+          {biometricAvailable && (
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy}
+              onClick={() => void unlockBiometric()}
+            >
+              <Fingerprint size={16} /> {uiText("Unlock with biometrics")}
+            </button>
+          )}
         </form>
         <div className="applock-footer">
           <button

@@ -209,8 +209,14 @@ export function alertToImportTransaction(
   const type =
     overrides.type ??
     (alert.parsed_type === "income" ? "income" : "expense");
+  const linkedAccountId =
+    alert.account_id &&
+    ledger.accounts.some((a) => a.id === alert.account_id)
+      ? alert.account_id
+      : "";
   const account_id =
     overrides.account_id ||
+    linkedAccountId ||
     matchAccountHint(alert.account_hint, ledger.accounts);
   const amount =
     overrides.amount !== undefined ? overrides.amount : alert.parsed_amount;

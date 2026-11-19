@@ -1159,9 +1159,31 @@ export class PocketBaseBackend {
     }
     if (table === "captured_alerts") {
       const a = record as Partial<CapturedAlert>;
+      const source =
+        a.source === "sms_native"
+          ? "sms_native"
+          : a.source === "shortcut"
+            ? "shortcut"
+            : "email";
+      let topSuggestions: CapturedAlert["top_suggestions"] = undefined;
+      if (Array.isArray(a.top_suggestions)) {
+        topSuggestions = a.top_suggestions
+          .filter(
+            (s): s is NonNullable<CapturedAlert["top_suggestions"]>[number] =>
+              !!s &&
+              typeof s === "object" &&
+              typeof s.category_id === "string" &&
+              typeof s.name === "string",
+          )
+          .map((s) => ({
+            category_id: s.category_id,
+            name: s.name,
+            confidence: Number(s.confidence ?? 0),
+          }));
+      }
       return {
         id: String(a.id ?? ""),
-        source: a.source === "shortcut" ? "shortcut" : "email",
+        source,
         subject: String(a.subject ?? ""),
         raw_text: String(a.raw_text ?? ""),
         parsed_type:
@@ -1178,6 +1200,16 @@ export class PocketBaseBackend {
             ? a.status
             : "pending",
         created_at_iso: String(a.created_at_iso ?? ""),
+        ...(a.account_id ? { account_id: String(a.account_id) } : {}),
+        ...(a.suggested_category_id
+          ? { suggested_category_id: String(a.suggested_category_id) }
+          : {}),
+        ...(typeof a.confidence === "number" && Number.isFinite(a.confidence)
+          ? { confidence: a.confidence }
+          : {}),
+        ...(topSuggestions?.length ? { top_suggestions: topSuggestions } : {}),
+        ...(a.sms_sender ? { sms_sender: String(a.sms_sender) } : {}),
+        ...(a.card_last4 ? { card_last4: String(a.card_last4) } : {}),
       } as RecordTypes[K];
     }
     if (table === "net_worth_items") {
