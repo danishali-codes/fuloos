@@ -1,0 +1,354 @@
+name: Android APK Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  release:
+    types:
+      - published
+  pull_request:
+    paths:
+      - "android/**"
+      - "src/mobile/**"
+      - "src/SmsAutoCaptureModal.tsx"
+      - "src/MobileNav.tsx"
+      - "src/styles/mobile.css"
+      - "capacitor.config.ts"
+      - "scripts/build-sms-engine.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/android-release.yml"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to create or update (leave empty for rolling android-latest pre-release)"
+        required: false
+        default: "android-latest"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-apk-${{ github.event_name }}-${{ github.event.release.tag_name || inputs.release_tag || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+      version_name: ${{ steps.meta.outputs.version_name }}
+      version_code: ${{ steps.meta.outputs.version_code }}
+      is_prerelease: ${{ steps.meta.outputs.is_prerelease }}
+      is_rolling: ${{ steps.meta.outputs.is_rolling }}
+      signing_mode: ${{ steps.signing.outputs.mode }}
+      asset_name: ${{ steps.package.outputs.asset_name }}
+      sha_name: ${{ steps.package.outputs.sha_name }}
+      pb_configured: ${{ steps.meta.outputs.pb_configured }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Resolve release metadata
+        id: meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          RUN_NUMBER: ${{ github.run_number }}
+          SHA_SHORT: ${{ github.sha }}
+          RELEASE_EVENT_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_EVENT_PRERELEASE: ${{ github.event.release.prerelease }}
+          DISPATCH_TAG: ${{ inputs.release_tag }}
+          PB_URL_VAR: ${{ vars.VITE_POCKETBASE_URL }}
+          PB_URL_SECRET: ${{ secrets.VITE_POCKETBASE_URL }}
+        run: |
+          SHORT_SHA="${SHA_SHORT:0:7}"
+          IS_ROLLING="false"
+          IS_PRERELEASE="false"
+
+          if [ "$EVENT_NAME" = "release" ]; then
+            RELEASE_TAG="$RELEASE_EVENT_TAG"
+            VERSION_NAME="${RELEASE_TAG#v}"
+            if [ "$RELEASE_EVENT_PRERELEASE" = "true" ] || [[ "$RELEASE_TAG" == *-* ]]; then
+              IS_PRERELEASE="true"
+            fi
+          elif [ "$EVENT_NAME" = "push" ] && [ "$REF_TYPE" = "tag" ]; then
+            RELEASE_TAG="$REF_NAME"
+            VERSION_NAME="${RELEASE_TAG#v}"
+            if [[ "$RELEASE_TAG" == *-* ]]; then
+              IS_PRERELEASE="true"
+            fi
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            RAW_TAG="${DISPATCH_TAG:-android-latest}"
+            if ! [[ "$RAW_TAG" =~ ^[A-Za-z0-9._-]+$ ]]; then
+              echo "Invalid release_tag: $RAW_TAG" >&2
+              exit 1
+            fi
+            RELEASE_TAG="$RAW_TAG"
+            if [ "$RELEASE_TAG" = "android-latest" ]; then
+              IS_ROLLING="true"
+              IS_PRERELEASE="true"
+              VERSION_NAME="0.0.${RUN_NUMBER}-${SHORT_SHA}"
+            else
+              VERSION_NAME="${RELEASE_TAG#v}"
+              if [[ "$RELEASE_TAG" == *-* ]]; then
+                IS_PRERELEASE="true"
+              fi
+            fi
+          elif [ "$EVENT_NAME" = "pull_request" ]; then
+            RELEASE_TAG="pr-preview"
+            IS_PRERELEASE="true"
+            VERSION_NAME="0.0.${RUN_NUMBER}-pr-${SHORT_SHA}"
+          else
+            # Push to main -> rolling pre-release
+            RELEASE_TAG="android-latest"
+            IS_ROLLING="true"
+            IS_PRERELEASE="true"
+            VERSION_NAME="0.0.${RUN_NUMBER}-${SHORT_SHA}"
+          fi
+
+          if [ -n "$PB_URL_VAR" ] || [ -n "$PB_URL_SECRET" ]; then
+            PB_CONFIGURED="true"
+          else
+            PB_CONFIGURED="false"
+          fi
+
+          echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
+          echo "version_code=${RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=${IS_PRERELEASE}" >> "$GITHUB_OUTPUT"
+          echo "is_rolling=${IS_ROLLING}" >> "$GITHUB_OUTPUT"
+          echo "pb_configured=${PB_CONFIGURED}" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web app, SMS engine, and sync Capacitor Android
+        env:
+          VITE_POCKETBASE_URL: ${{ vars.VITE_POCKETBASE_URL || secrets.VITE_POCKETBASE_URL }}
+          VITE_LEDGER_MODEL_URL: ${{ vars.VITE_LEDGER_MODEL_URL || secrets.VITE_LEDGER_MODEL_URL }}
+          VITE_VAPID_PUBLIC_KEY: ${{ vars.VITE_VAPID_PUBLIC_KEY || secrets.VITE_VAPID_PUBLIC_KEY }}
+        run: npm run mobile:android
+
+      - name: Configure Android signing
+        id: signing
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ] && [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            KEYSTORE_FILE="${RUNNER_TEMP}/fuloos-release.keystore"
+            printf '%s' "$KEYSTORE_B64" | base64 --decode > "$KEYSTORE_FILE"
+            chmod 600 "$KEYSTORE_FILE"
+            echo "mode=release" >> "$GITHUB_OUTPUT"
+            echo "keystore_path=${KEYSTORE_FILE}" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=debug" >> "$GITHUB_OUTPUT"
+            echo "keystore_path=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build Android APK (direct) and verify play flavor
+        working-directory: android
+        env:
+          SIGNING_MODE: ${{ steps.signing.outputs.mode }}
+          FULOOS_VERSION_CODE: ${{ steps.meta.outputs.version_code }}
+          FULOOS_VERSION_NAME: ${{ steps.meta.outputs.version_name }}
+          ANDROID_KEYSTORE_PATH: ${{ steps.signing.outputs.keystore_path }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          if [ "$SIGNING_MODE" = "release" ]; then
+            ./gradlew --no-daemon assembleDirectRelease compilePlayReleaseKotlin
+          else
+            ./gradlew --no-daemon assembleDirectDebug compilePlayDebugKotlin
+          fi
+
+      - name: Package APK and SHA-256 checksum
+        id: package
+        env:
+          SIGNING_MODE: ${{ steps.signing.outputs.mode }}
+          RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
+          IS_ROLLING: ${{ steps.meta.outputs.is_rolling }}
+        run: |
+          mkdir -p release-dist
+          if [ "$SIGNING_MODE" = "release" ]; then
+            SRC_APK="android/app/build/outputs/apk/direct/release/app-direct-release.apk"
+            SUFFIX=""
+          else
+            SRC_APK="android/app/build/outputs/apk/direct/debug/app-direct-debug.apk"
+            SUFFIX="-debug"
+          fi
+
+          if [ ! -f "$SRC_APK" ]; then
+            echo "Expected APK not found at $SRC_APK" >&2
+            find android/app/build/outputs/apk -maxdepth 4 -type f || true
+            exit 1
+          fi
+
+          if [ "$IS_ROLLING" = "true" ]; then
+            ASSET_NAME="fuloos-android-direct${SUFFIX}-latest.apk"
+          else
+            ASSET_NAME="fuloos-android-direct${SUFFIX}-${RELEASE_TAG}.apk"
+          fi
+          SHA_NAME="${ASSET_NAME}.sha256"
+
+          cp "$SRC_APK" "release-dist/${ASSET_NAME}"
+          (cd release-dist && sha256sum "${ASSET_NAME}" > "${SHA_NAME}")
+
+          echo "asset_name=${ASSET_NAME}" >> "$GITHUB_OUTPUT"
+          echo "sha_name=${SHA_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Clean up temporary keystore
+        if: always() && steps.signing.outputs.keystore_path != ''
+        env:
+          KEYSTORE_FILE: ${{ steps.signing.outputs.keystore_path }}
+        run: rm -f "$KEYSTORE_FILE"
+
+      - name: Upload APK build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuloos-android-apk
+          path: release-dist/*
+          retention-days: 14
+
+  publish-release:
+    name: Publish APK to GitHub Release
+    needs: build-android
+    if: github.event_name != 'pull_request' && !(github.event_name == 'release' && github.event.release.tag_name == 'android-latest')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Download APK artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: fuloos-android-apk
+          path: release-dist
+
+      - name: Publish APK to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ needs.build-android.outputs.release_tag }}
+          VERSION_NAME: ${{ needs.build-android.outputs.version_name }}
+          VERSION_CODE: ${{ needs.build-android.outputs.version_code }}
+          IS_PRERELEASE: ${{ needs.build-android.outputs.is_prerelease }}
+          IS_ROLLING: ${{ needs.build-android.outputs.is_rolling }}
+          SIGNING_MODE: ${{ needs.build-android.outputs.signing_mode }}
+          ASSET_NAME: ${{ needs.build-android.outputs.asset_name }}
+          SHA_NAME: ${{ needs.build-android.outputs.sha_name }}
+          PB_CONFIGURED: ${{ needs.build-android.outputs.pb_configured }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          APK_PATH="release-dist/${ASSET_NAME}"
+          SHA_PATH="release-dist/${SHA_NAME}"
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+          SHA_SUM="$(awk '{print $1}' "$SHA_PATH")"
+
+          NOTES_FILE="${RUNNER_TEMP}/release-notes.md"
+          {
+            if [ "$IS_ROLLING" = "true" ]; then
+              echo "Rolling Android sideload build from \`main\` (\`${SHORT_SHA}\`)."
+            else
+              echo "Android sideload build for **${RELEASE_TAG}** (\`${SHORT_SHA}\`)."
+            fi
+            echo ""
+            echo "### Android APK (\`direct\` flavor — native SMS auto-capture)"
+            echo "- **File:** \`${ASSET_NAME}\`"
+            echo "- **Version:** \`${VERSION_NAME}\` (versionCode \`${VERSION_CODE}\`)"
+            echo "- **Signing:** \`${SIGNING_MODE}\`"
+            echo "- **SHA-256:** \`${SHA_SUM}\`"
+            if [ "$SIGNING_MODE" != "release" ]; then
+              echo ""
+              echo "> **Note:** Signed with an ephemeral debug key because release keystore secrets (\`ANDROID_KEYSTORE_BASE64\`, \`ANDROID_KEYSTORE_PASSWORD\`, \`ANDROID_KEY_ALIAS\`, \`ANDROID_KEY_PASSWORD\`) are not yet configured. Add them in repository Settings to enable in-place upgrades across releases (see \`docs/mobile-setup.md\`)."
+            fi
+            if [ "$PB_CONFIGURED" != "true" ]; then
+              echo ""
+              echo "> **Note:** \`VITE_POCKETBASE_URL\` was not configured in GitHub Actions variables/secrets for this build, so this APK runs in local demo mode. Set \`VITE_POCKETBASE_URL\` under repository Actions variables to connect release APKs to your PocketBase server."
+            fi
+          } > "$NOTES_FILE"
+
+          if [ "$IS_ROLLING" = "true" ]; then
+            git tag -f "$RELEASE_TAG" "$COMMIT_SHA"
+            git push -f origin "refs/tags/${RELEASE_TAG}"
+          fi
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            # On rolling builds, remove stale APK/SHA assets if signing mode changed
+            if [ "$IS_ROLLING" = "true" ]; then
+              EXISTING_ASSETS="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
+              for OLD_ASSET in $EXISTING_ASSETS; do
+                if [[ "$OLD_ASSET" == fuloos-android-direct*.apk || "$OLD_ASSET" == fuloos-android-direct*.apk.sha256 ]]; then
+                  if [ "$OLD_ASSET" != "$ASSET_NAME" ] && [ "$OLD_ASSET" != "$SHA_NAME" ]; then
+                    gh release delete-asset "$RELEASE_TAG" "$OLD_ASSET" --yes || true
+                  fi
+                fi
+              done
+            fi
+
+            gh release upload "$RELEASE_TAG" "$APK_PATH" "$SHA_PATH" --clobber
+
+            if [ "$IS_ROLLING" = "true" ]; then
+              gh release edit "$RELEASE_TAG" \
+                --title "Android Latest (main @ ${SHORT_SHA})" \
+                --notes-file "$NOTES_FILE" \
+                --prerelease
+            fi
+          else
+            CREATE_ARGS=(
+              "$RELEASE_TAG"
+              "$APK_PATH"
+              "$SHA_PATH"
+              --target "$COMMIT_SHA"
+              --notes-file "$NOTES_FILE"
+            )
+            if [ "$IS_ROLLING" = "true" ]; then
+              CREATE_ARGS+=(--title "Android Latest (main @ ${SHORT_SHA})" --prerelease)
+            else
+              CREATE_ARGS+=(--title "Fuloos ${RELEASE_TAG}")
+              if [ "$IS_PRERELEASE" = "true" ]; then
+                CREATE_ARGS+=(--prerelease)
+              fi
+            fi
+            gh release create "${CREATE_ARGS[@]}"
+          fi

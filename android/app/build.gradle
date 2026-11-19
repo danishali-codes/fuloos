@@ -1,6 +1,16 @@
 apply plugin: 'com.android.application'
 apply plugin: 'org.jetbrains.kotlin.android'
 
+def envVersionCode = System.getenv("FULOOS_VERSION_CODE") ?: (project.findProperty("versionCode") ?: "1")
+def resolvedVersionCode = envVersionCode.toString().isInteger() ? Math.max(1, envVersionCode.toString().toInteger()) : 1
+def resolvedVersionName = (System.getenv("FULOOS_VERSION_NAME") ?: (project.findProperty("versionName") ?: "1.0.0")).toString()
+
+def keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+def keystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+def keyAliasName = System.getenv("ANDROID_KEY_ALIAS")
+def keyPasswordValue = System.getenv("ANDROID_KEY_PASSWORD")
+def hasReleaseSigning = keystorePath && file(keystorePath).exists() && keystorePassword && keyAliasName && keyPasswordValue
+
 android {
     namespace = "dev.danishali.fuloos"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -13,8 +23,8 @@ android {
         applicationId "dev.danishali.fuloos"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0.0"
+        versionCode resolvedVersionCode
+        versionName resolvedVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
@@ -36,18 +46,32 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
     }
 
     kotlinOptions {
-        jvmTarget = "17"
+        jvmTarget = "21"
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(keystorePath)
+                storePassword keystorePassword
+                keyAlias keyAliasName
+                keyPassword keyPasswordValue
+            }
+        }
     }
 
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }
