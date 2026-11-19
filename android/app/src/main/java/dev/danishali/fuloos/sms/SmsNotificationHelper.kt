@@ -83,49 +83,57 @@ object SmsNotificationHelper {
         categoryName: String?,
         accountName: String?,
         cardLast4: String?,
+        queuedWriteId: Long = -1L,
+        smsHash: String = "",
     ) {
         if (!canPostNotifications(context)) return
         ensureChannels(context)
 
-        val notifId = stableNotificationId("auto:$transactionId")
+        val notifKey = transactionId.ifBlank { smsHash.take(16) }
+        val notifId = stableNotificationId("auto:$notifKey")
         val amountStr = formatAed(amountFils)
         val title = "Added $amountStr · ${payee.ifBlank { "Transaction" }}"
         val subtitleParts = buildList {
             if (!categoryName.isNullOrBlank()) add(categoryName)
             if (!accountName.isNullOrBlank()) add(accountName)
             if (!cardLast4.isNullOrBlank()) add("Card ••$cardLast4")
+            if (queuedWriteId > 0L) add("Queued for sync")
         }
         val body = subtitleParts.joinToString(" · ").ifEmpty { "Synced to Fuloos" }
 
+        val deepLinkUri = if (transactionId.isNotBlank()) "fuloos://tx/$transactionId" else "fuloos://overview"
         val openIntent = buildDeepLinkPendingIntent(
             context = context,
-            uri = "fuloos://tx/$transactionId",
+            uri = deepLinkUri,
             requestCode = notifId,
         )
 
-        val undoIntent = Intent(context, NotificationActionReceiver::class.java).apply {
-            action = NotificationActionReceiver.ACTION_UNDO_TX
-            putExtra(NotificationActionReceiver.EXTRA_NOTIFICATION_ID, notifId)
-            putExtra(NotificationActionReceiver.EXTRA_TRANSACTION_ID, transactionId)
-        }
-        val undoPending = PendingIntent.getBroadcast(
-            context,
-            notifId + 1,
-            undoIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-
-        val notification = NotificationCompat.Builder(context, CHANNEL_TX_AUTO)
+        val builder = NotificationCompat.Builder(context, CHANNEL_TX_AUTO)
             .setSmallIcon(R.drawable.ic_stat_fuloos)
             .setColor(BRAND_COLOR)
             .setContentTitle(title)
             .setContentText(body)
             .setAutoCancel(true)
             .setContentIntent(openIntent)
-            .addAction(0, "Undo", undoPending)
-            .build()
 
-        NotificationManagerCompat.from(context).notify(notifId, notification)
+        if (transactionId.isNotBlank() || queuedWriteId > 0L) {
+            val undoIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+                action = NotificationActionReceiver.ACTION_UNDO_TX
+                putExtra(NotificationActionReceiver.EXTRA_NOTIFICATION_ID, notifId)
+                putExtra(NotificationActionReceiver.EXTRA_TRANSACTION_ID, transactionId)
+                putExtra(NotificationActionReceiver.EXTRA_QUEUED_WRITE_ID, queuedWriteId)
+                putExtra(NotificationActionReceiver.EXTRA_SMS_HASH, smsHash)
+            }
+            val undoPending = PendingIntent.getBroadcast(
+                context,
+                notifId + 1,
+                undoIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            builder.addAction(0, "Undo", undoPending)
+        }
+
+        NotificationManagerCompat.from(context).notify(notifId, builder.build())
     }
 
     fun postNeedsReviewNotification(

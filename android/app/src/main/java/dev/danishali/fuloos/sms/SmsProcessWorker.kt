@@ -8,6 +8,8 @@ import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import dev.danishali.fuloos.BuildConfig
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -30,12 +32,14 @@ class SmsProcessWorker(
     override suspend fun doWork(): Result {
         val mode = inputData.getString(KEY_MODE) ?: MODE_CATCH_UP
         return try {
-            pb.flushOfflineQueue()
-            when (mode) {
-                MODE_SINGLE_SMS -> handleSingleSms()
-                MODE_CATCH_UP -> handleCatchUp()
-                MODE_FLUSH_QUEUE -> Result.success()
-                else -> Result.success()
+            processMutex.withLock {
+                pb.flushOfflineQueue()
+                when (mode) {
+                    MODE_SINGLE_SMS -> handleSingleSms()
+                    MODE_CATCH_UP -> handleCatchUp()
+                    MODE_FLUSH_QUEUE -> Result.success()
+                    else -> Result.success()
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "SmsProcessWorker ($mode) failed", e)
@@ -62,7 +66,11 @@ class SmsProcessWorker(
         }
 
         val decision = engine.processSingleSms(rawSms.toString(), ctxJson) ?: return Result.retry()
-        return if (applyDecision(decision, ctxJson)) Result.retry() else Result.success()
+        return if (applyDecision(decision, ctxJson) == DecisionOutcome.FAILED_RETRYABLE) {
+            Result.retry()
+        } else {
+            Result.success()
+        }
     }
 
     private suspend fun handleCatchUp(): Result {
@@ -89,26 +97,70 @@ class SmsProcessWorker(
 
         val decisions = engine.processBatch(messages.toString(), ctxJson) ?: return Result.success()
         var needsRetry = false
+        val firstFailedTsByLink = mutableMapOf<String, Long>()
+        val coveredTimestampsByLink = mutableMapOf<String, MutableList<Long>>()
+
+        // Decisions are in chronological (DATE ASC) order matching SmsInboxReader.readMessages.
+        // Only advance a link's catch-up watermark across timestamps strictly covered without
+        // leaving an earlier failed/unprocessed message behind.
         for (i in 0 until decisions.length()) {
             val decision = decisions.optJSONObject(i) ?: continue
-            if (applyDecision(decision, ctxJson)) needsRetry = true
+            val linkId = decision.optNonNullString("linkId")
+            val ts = decision.optLong("timestampMs", 0L)
+            val outcome = applyDecision(decision, ctxJson)
+            when (outcome) {
+                DecisionOutcome.COVERED -> {
+                    if (linkId.isNotEmpty() && ts > 0L && linkId !in firstFailedTsByLink) {
+                        coveredTimestampsByLink.getOrPut(linkId) { mutableListOf() }.add(ts)
+                    }
+                }
+                DecisionOutcome.FAILED_RETRYABLE -> {
+                    needsRetry = true
+                    if (linkId.isNotEmpty() && linkId !in firstFailedTsByLink) {
+                        firstFailedTsByLink[linkId] = ts
+                    }
+                }
+                DecisionOutcome.FAILED_HOLD -> {
+                    if (linkId.isNotEmpty() && linkId !in firstFailedTsByLink) {
+                        firstFailedTsByLink[linkId] = ts
+                    }
+                }
+            }
         }
+
+        for ((linkId, timestamps) in coveredTimestampsByLink) {
+            val failedTs = firstFailedTsByLink[linkId]
+            val safeMax = if (failedTs != null) {
+                // Exclude messages sharing the exact same millisecond as the first failed SMS
+                timestamps.filter { it < failedTs }.maxOrNull()
+            } else {
+                timestamps.maxOrNull()
+            }
+            if (safeMax != null && safeMax > 0L) {
+                db.updateLinkWatermark(linkId, safeMax)
+            }
+        }
+
         return if (needsRetry && runAttemptCount < 3) Result.retry() else Result.success()
     }
 
+    private enum class DecisionOutcome {
+        COVERED,
+        FAILED_RETRYABLE,
+        FAILED_HOLD,
+    }
+
     /**
-     * Applies one SMS decision. Returns `true` if a retryable failure occurred and
-     * the worker should retry without marking the SMS hash processed.
+     * Applies one SMS decision without advancing catch-up watermarks (watermarks are
+     * advanced exclusively by [handleCatchUp] after scanning earlier inbox messages).
      */
-    private fun applyDecision(decision: JSONObject, ctxJson: String): Boolean {
+    private fun applyDecision(decision: JSONObject, ctxJson: String): DecisionOutcome {
         val smsHash = decision.optNonNullString("smsHash")
-        if (smsHash.isBlank() || db.isProcessed(smsHash)) return false
+        if (smsHash.isBlank() || db.isProcessed(smsHash)) return DecisionOutcome.COVERED
 
         val action = decision.optNonNullString("action", "skip")
-        val linkId = decision.optNonNullString("linkId")
         val accountId = decision.optNonNullString("accountId")
         val androidSmsId = decision.optNonNullString("androidSmsId").ifBlank { null }
-        val timestampMs = decision.optLong("timestampMs", System.currentTimeMillis())
 
         if (action == "skip") {
             db.markProcessed(
@@ -122,27 +174,38 @@ class SmsProcessWorker(
                     ),
                 ),
             )
-            if (linkId.isNotEmpty()) db.updateLinkWatermark(linkId, timestampMs)
-            return false
+            return DecisionOutcome.COVERED
         }
 
-        val txJson = decision.optJSONObject("transaction") ?: return false
+        val txJson = decision.optJSONObject("transaction") ?: return DecisionOutcome.COVERED
         val lookups = parseLookups(ctxJson)
         val accountName = lookups.accounts[accountId]
         val cardLast4 = decision.optNonNullString("cardLast4").ifBlank { null }
 
         if (action == "auto_add") {
             val apiResult = pb.createTransaction(txJson, queueOnNetworkFailure = true)
-            val txId = when (apiResult) {
-                is PocketBaseBackgroundClient.ApiResult.Success -> apiResult.data
-                is PocketBaseBackgroundClient.ApiResult.QueuedOffline -> null
+            val txId: String
+            val queuedWriteId: Long
+            when (apiResult) {
+                is PocketBaseBackgroundClient.ApiResult.Success -> {
+                    txId = apiResult.data
+                    queuedWriteId = -1L
+                }
+                is PocketBaseBackgroundClient.ApiResult.QueuedOffline -> {
+                    txId = apiResult.recordId.orEmpty()
+                    queuedWriteId = apiResult.queueId
+                }
                 is PocketBaseBackgroundClient.ApiResult.AuthExpired -> {
                     Log.w(TAG, "PocketBase auth expired; leaving SMS hash unprocessed for later catch-up")
-                    return false
+                    return DecisionOutcome.FAILED_HOLD
                 }
                 is PocketBaseBackgroundClient.ApiResult.Failure -> {
                     Log.w(TAG, "PocketBase auto_add write failed (${apiResult.status}): ${apiResult.message}")
-                    return isRetryableStatus(apiResult.status)
+                    return if (isRetryableStatus(apiResult.status)) {
+                        DecisionOutcome.FAILED_RETRYABLE
+                    } else {
+                        DecisionOutcome.FAILED_HOLD
+                    }
                 }
             }
 
@@ -152,30 +215,31 @@ class SmsProcessWorker(
                         smsHash = smsHash,
                         androidSmsId = androidSmsId,
                         accountId = accountId.ifBlank { null },
-                        transactionId = txId,
+                        transactionId = txId.ifBlank { null },
                         status = "auto_added",
                     ),
                 ),
             )
-            if (linkId.isNotEmpty()) db.updateLinkWatermark(linkId, timestampMs)
 
             val catId = txJson.optNonNullString("category_id")
             SmsNotificationHelper.postAutoAddedNotification(
                 context = applicationContext,
-                transactionId = txId ?: smsHash.take(12),
+                transactionId = txId,
                 payee = txJson.optNonNullString("payee"),
                 amountFils = txJson.optLong("amount", 0L),
                 categoryName = lookups.categories[catId],
                 accountName = accountName,
                 cardLast4 = cardLast4,
+                queuedWriteId = queuedWriteId,
+                smsHash = smsHash,
             )
             FuloosSmsPlugin.notifySmsProcessed(
                 action = "auto_add",
-                transactionId = txId,
+                transactionId = txId.ifBlank { null },
                 alertId = null,
                 accountId = accountId.ifBlank { null },
             )
-            return false
+            return DecisionOutcome.COVERED
         }
 
         if (action == "needs_review") {
@@ -183,15 +247,23 @@ class SmsProcessWorker(
             var alertId: String? = null
             if (draft != null) {
                 when (val alertRes = pb.createCapturedAlert(draft, queueOnNetworkFailure = true)) {
-                    is PocketBaseBackgroundClient.ApiResult.Success -> alertId = alertRes.data
-                    is PocketBaseBackgroundClient.ApiResult.QueuedOffline -> alertId = null
+                    is PocketBaseBackgroundClient.ApiResult.Success -> {
+                        alertId = alertRes.data.ifBlank { null }
+                    }
+                    is PocketBaseBackgroundClient.ApiResult.QueuedOffline -> {
+                        alertId = alertRes.recordId?.ifBlank { null }
+                    }
                     is PocketBaseBackgroundClient.ApiResult.AuthExpired -> {
                         Log.w(TAG, "PocketBase auth expired while syncing captured alert draft")
-                        return false
+                        return DecisionOutcome.FAILED_HOLD
                     }
                     is PocketBaseBackgroundClient.ApiResult.Failure -> {
                         Log.w(TAG, "PocketBase captured alert sync failed (${alertRes.status}): ${alertRes.message}")
-                        return isRetryableStatus(alertRes.status)
+                        return if (isRetryableStatus(alertRes.status)) {
+                            DecisionOutcome.FAILED_RETRYABLE
+                        } else {
+                            DecisionOutcome.FAILED_HOLD
+                        }
                     }
                 }
             }
@@ -207,7 +279,6 @@ class SmsProcessWorker(
                     ),
                 ),
             )
-            if (linkId.isNotEmpty()) db.updateLinkWatermark(linkId, timestampMs)
 
             val topSuggestions = decision.optJSONArray("topSuggestions") ?: JSONArray()
             SmsNotificationHelper.postNeedsReviewNotification(
@@ -226,8 +297,9 @@ class SmsProcessWorker(
                 alertId = alertId,
                 accountId = accountId.ifBlank { null },
             )
+            return DecisionOutcome.COVERED
         }
-        return false
+        return DecisionOutcome.COVERED
     }
 
     private fun isRetryableStatus(status: Int): Boolean {
@@ -274,6 +346,7 @@ class SmsProcessWorker(
 
     companion object {
         private const val TAG = "SmsProcessWorker"
+        private val processMutex = Mutex()
 
         const val KEY_MODE = "mode"
         const val KEY_SENDER = "sender"

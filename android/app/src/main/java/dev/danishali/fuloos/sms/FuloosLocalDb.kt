@@ -234,6 +234,21 @@ class FuloosLocalDb private constructor(context: Context) :
     }
 
     @Synchronized
+    fun updateProcessedStatusByHash(smsHash: String, status: String) {
+        if (smsHash.isBlank()) return
+        val cv = ContentValues().apply {
+            put("status", status)
+            put("processed_at", System.currentTimeMillis())
+        }
+        writableDatabase.update(
+            "processed_sms",
+            cv,
+            "sms_hash = ?",
+            arrayOf(smsHash),
+        )
+    }
+
+    @Synchronized
     fun enqueueOfflineWrite(method: String, path: String, bodyJson: String): Long {
         val cv = ContentValues().apply {
             put("method", method)
@@ -274,8 +289,8 @@ class FuloosLocalDb private constructor(context: Context) :
     }
 
     @Synchronized
-    fun removeOfflineWrite(id: Long) {
-        writableDatabase.delete("offline_queue", "id = ?", arrayOf(id.toString()))
+    fun removeOfflineWrite(id: Long): Boolean {
+        return writableDatabase.delete("offline_queue", "id = ?", arrayOf(id.toString())) > 0
     }
 
     @Synchronized

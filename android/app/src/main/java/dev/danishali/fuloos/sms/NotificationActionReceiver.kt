@@ -118,15 +118,18 @@ class NotificationActionReceiver : BroadcastReceiver() {
     private fun handleUndoTransaction(context: Context, intent: Intent) {
         val notifId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, 0)
         val txId = intent.getStringExtra(EXTRA_TRANSACTION_ID).orEmpty()
+        val queuedWriteId = intent.getLongExtra(EXTRA_QUEUED_WRITE_ID, -1L)
+        val smsHash = intent.getStringExtra(EXTRA_SMS_HASH).orEmpty()
         var acceptedDelete = false
-        if (txId.isNotBlank()) {
+        if (txId.isNotBlank() || queuedWriteId > 0L) {
             val pb = PocketBaseBackgroundClient(context)
             val db = FuloosLocalDb.getInstance(context)
-            val res = pb.deleteTransaction(txId)
+            val res = pb.cancelOrDeleteTransaction(txId, queuedWriteId)
             acceptedDelete = res is PocketBaseBackgroundClient.ApiResult.Success ||
                 res is PocketBaseBackgroundClient.ApiResult.QueuedOffline
             if (acceptedDelete) {
-                db.updateProcessedStatusByTransaction(txId, "dismissed")
+                if (txId.isNotBlank()) db.updateProcessedStatusByTransaction(txId, "dismissed")
+                if (smsHash.isNotBlank()) db.updateProcessedStatusByHash(smsHash, "dismissed")
             }
         }
         SmsNotificationHelper.cancel(context, notifId)
@@ -154,5 +157,6 @@ class NotificationActionReceiver : BroadcastReceiver() {
         const val EXTRA_MERCHANT_CLEAN = "merchant_clean"
         const val EXTRA_TX_JSON = "tx_json"
         const val EXTRA_TRANSACTION_ID = "transaction_id"
+        const val EXTRA_QUEUED_WRITE_ID = "queued_write_id"
     }
 }

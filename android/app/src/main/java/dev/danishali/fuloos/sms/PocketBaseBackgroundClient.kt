@@ -10,6 +10,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 import java.net.URLEncoder
+import java.security.SecureRandom
 import java.util.concurrent.TimeUnit
 
 /**
@@ -26,7 +27,7 @@ class PocketBaseBackgroundClient(
 
     sealed class ApiResult<out T> {
         data class Success<T>(val data: T) : ApiResult<T>()
-        data class QueuedOffline(val queueId: Long) : ApiResult<Nothing>()
+        data class QueuedOffline(val queueId: Long, val recordId: String? = null) : ApiResult<Nothing>()
         data class AuthExpired(val status: Int) : ApiResult<Nothing>()
         data class Failure(val status: Int, val message: String) : ApiResult<Nothing>()
     }
@@ -42,7 +43,10 @@ class PocketBaseBackgroundClient(
         queueOnNetworkFailure: Boolean = true,
     ): ApiResult<String> {
         val session = authStore.load() ?: return ApiResult.AuthExpired(401)
-        val payload = buildTransactionPayload(txJson, session.userId)
+        val recordId = generatePocketBaseId()
+        val payload = buildTransactionPayload(txJson, session.userId).apply {
+            put("id", recordId)
+        }
         val path = "/api/collections/fuloos_transactions/records"
         return executeWrite(
             session = session,
@@ -50,6 +54,7 @@ class PocketBaseBackgroundClient(
             path = path,
             bodyJson = payload.toString(),
             queueOnNetworkFailure = queueOnNetworkFailure,
+            queuedRecordId = recordId,
         )
     }
 
@@ -69,12 +74,48 @@ class PocketBaseBackgroundClient(
         )
     }
 
+    /**
+     * Cancels a still-queued offline transaction creation before it is sent, or deletes
+     * the transaction in PocketBase if it was already created (online or via queue replay).
+     */
+    fun cancelOrDeleteTransaction(
+        transactionId: String,
+        queuedWriteId: Long = -1L,
+    ): ApiResult<String> {
+        synchronized(queueLock) {
+            if (queuedWriteId > 0L && db.removeOfflineWrite(queuedWriteId)) {
+                return ApiResult.Success(transactionId)
+            }
+            if (transactionId.isBlank()) {
+                return ApiResult.Failure(400, "Missing transaction id")
+            }
+            val session = authStore.load() ?: return ApiResult.AuthExpired(401)
+            flushOfflineQueueLocked(session)
+            val encoded = URLEncoder.encode(transactionId, "UTF-8")
+            val path = "/api/collections/fuloos_transactions/records/$encoded"
+            if (db.getOfflineQueue(1).isNotEmpty()) {
+                val qId = db.enqueueOfflineWrite("DELETE", path, "")
+                return ApiResult.QueuedOffline(qId, transactionId)
+            }
+            return executeWrite(
+                session = session,
+                method = "DELETE",
+                path = path,
+                bodyJson = "",
+                queueOnNetworkFailure = true,
+                queuedRecordId = transactionId,
+            )
+        }
+    }
+
     fun createCapturedAlert(
         draftJson: JSONObject,
         queueOnNetworkFailure: Boolean = true,
     ): ApiResult<String> {
         val session = authStore.load() ?: return ApiResult.AuthExpired(401)
+        val recordId = generatePocketBaseId()
         val payload = JSONObject(draftJson.toString()).apply {
+            put("id", recordId)
             put("user_id", session.userId)
             put("source", "sms_native")
             if (isNull("account_id")) put("account_id", "")
@@ -87,6 +128,7 @@ class PocketBaseBackgroundClient(
             path = path,
             bodyJson = payload.toString(),
             queueOnNetworkFailure = queueOnNetworkFailure,
+            queuedRecordId = recordId,
         )
     }
 
@@ -98,17 +140,25 @@ class PocketBaseBackgroundClient(
         val txPayload = buildTransactionPayload(txJson, session.userId)
 
         if (!alertId.isNullOrBlank()) {
-            // Always retain the atomic endpoint's pending-status and idempotency guard
-            // so stale notifications (already imported/dismissed on web) never create duplicates.
-            val encoded = URLEncoder.encode(alertId, "UTF-8")
-            val atomicBody = JSONObject().put("transaction", txPayload).toString()
-            return executeWrite(
-                session = session,
-                method = "POST",
-                path = "/api/fuloos/captured-alerts/$encoded/import",
-                bodyJson = atomicBody,
-                queueOnNetworkFailure = true,
-            )
+            // Serialize with queue draining so any queued alert creation runs before its import,
+            // and retain the atomic endpoint's pending-status & idempotency guard.
+            synchronized(queueLock) {
+                flushOfflineQueueLocked(session)
+                val encoded = URLEncoder.encode(alertId, "UTF-8")
+                val path = "/api/fuloos/captured-alerts/$encoded/import"
+                val atomicBody = JSONObject().put("transaction", txPayload).toString()
+                if (db.getOfflineQueue(1).isNotEmpty()) {
+                    val qId = db.enqueueOfflineWrite("POST", path, atomicBody)
+                    return ApiResult.QueuedOffline(qId)
+                }
+                return executeWrite(
+                    session = session,
+                    method = "POST",
+                    path = path,
+                    bodyJson = atomicBody,
+                    queueOnNetworkFailure = true,
+                )
+            }
         }
 
         return createTransaction(txJson, queueOnNetworkFailure = true)
@@ -158,13 +208,19 @@ class PocketBaseBackgroundClient(
     }
 
     /**
-     * Flushes any queued offline writes in FIFO order. Stops immediately if
-     * connectivity is still down or auth has expired.
+     * Flushes any queued offline writes in FIFO order under a process-wide lock so
+     * concurrent workers never replay the same queued row twice.
      */
     fun flushOfflineQueue(): Int {
         val session = authStore.load() ?: return 0
-        val items = db.getOfflineQueue(50)
+        synchronized(queueLock) {
+            return flushOfflineQueueLocked(session)
+        }
+    }
+
+    private fun flushOfflineQueueLocked(session: SecureAuthStore.AuthSession): Int {
         var flushed = 0
+        val items = db.getOfflineQueue(50)
         for (item in items) {
             if (item.retryCount >= MAX_RETRIES) {
                 db.removeOfflineWrite(item.id)
@@ -236,6 +292,7 @@ class PocketBaseBackgroundClient(
         path: String,
         bodyJson: String,
         queueOnNetworkFailure: Boolean,
+        queuedRecordId: String? = null,
     ): ApiResult<String> {
         val url = "${session.pbUrl}$path"
         val builder = Request.Builder()
@@ -260,12 +317,12 @@ class PocketBaseBackgroundClient(
                         } catch (_: Exception) {
                             ""
                         }
-                        ApiResult.Success(id)
+                        ApiResult.Success(id.ifBlank { queuedRecordId.orEmpty() })
                     }
                     resp.code == 401 || resp.code == 403 -> ApiResult.AuthExpired(resp.code)
                     (resp.code == 408 || resp.code == 429 || resp.code >= 500) && queueOnNetworkFailure -> {
                         val qId = db.enqueueOfflineWrite(method, path, bodyJson)
-                        ApiResult.QueuedOffline(qId)
+                        ApiResult.QueuedOffline(qId, queuedRecordId)
                     }
                     else -> {
                         Log.w(TAG, "PocketBase $method $path failed (${resp.code}): ${rawBody.take(200)}")
@@ -276,7 +333,7 @@ class PocketBaseBackgroundClient(
         } catch (e: IOException) {
             if (queueOnNetworkFailure) {
                 val qId = db.enqueueOfflineWrite(method, path, bodyJson)
-                ApiResult.QueuedOffline(qId)
+                ApiResult.QueuedOffline(qId, queuedRecordId)
             } else {
                 ApiResult.Failure(0, e.message ?: "Network error")
             }
@@ -286,6 +343,17 @@ class PocketBaseBackgroundClient(
     companion object {
         private const val TAG = "PocketBaseBgClient"
         private const val MAX_RETRIES = 8
+        private const val PB_ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+        private val queueLock = Any()
+        private val secureRandom = SecureRandom()
+
+        fun generatePocketBaseId(): String {
+            return buildString(15) {
+                repeat(15) {
+                    append(PB_ID_CHARS[secureRandom.nextInt(PB_ID_CHARS.length)])
+                }
+            }
+        }
     }
 }
