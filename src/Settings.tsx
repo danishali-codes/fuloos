@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from "react";
-import { Inbox, Trash2, Wand2, X } from "lucide-react";
+import { Inbox, MessageSquareText, Trash2, Wand2, X } from "lucide-react";
 import { useDensity, type Density } from "./density";
 import { useLocale, type Locale } from "./i18n";
 
@@ -9,7 +9,9 @@ export function SettingsDialog({
   onDeleteAccount,
   onOpenRules,
   onOpenCaptureAlerts,
+  onOpenSmsAutoCapture,
   pendingAlertCount = 0,
+  linkedSmsCount = 0,
   security,
   notifications,
   household,
@@ -20,7 +22,9 @@ export function SettingsDialog({
   onDeleteAccount?: () => void;
   onOpenRules?: () => void;
   onOpenCaptureAlerts?: () => void;
+  onOpenSmsAutoCapture?: () => void;
   pendingAlertCount?: number;
+  linkedSmsCount?: number;
   security?: ReactNode;
   notifications?: ReactNode;
   household?: ReactNode;
@@ -166,6 +170,25 @@ export function SettingsDialog({
           </div>
           <button type="button" className="secondary" onClick={onOpenRules}>
             <Wand2 size={15} /> {t("common.manageRules")}
+          </button>
+        </div>
+      )}
+      {onOpenSmsAutoCapture && (
+        <div className="settings-danger">
+          <div>
+            <b>SMS Auto-Capture (Android)</b>
+            <p className="muted small">
+              Link accounts to bank SMS senders, backfill history, and configure
+              Android notification channels.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="secondary"
+            onClick={onOpenSmsAutoCapture}
+          >
+            <MessageSquareText size={15} /> Manage SMS
+            {linkedSmsCount > 0 ? ` (${linkedSmsCount})` : ""}
           </button>
         </div>
       )}

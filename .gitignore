@@ -15,3 +15,6 @@ ledger_web_model.json
 .pocketbase/
 playwright-report/
 test-results/
+
+# Generated mobile headless SMS engine staging output
+dist-mobile-engine/

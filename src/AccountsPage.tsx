@@ -3,6 +3,7 @@ import { useState } from "react";
 import {
   ArrowRight,
   Calculator,
+  MessageSquareText,
   Pencil,
   Plus,
   Trash2,
@@ -12,6 +13,7 @@ import { computeCardSummary, type CardSummary } from "./debtTools";
 import { DebtToolsModal } from "./DebtToolsModal";
 import { balance, today, type Account, type Ledger } from "./domain";
 import { ACCOUNT_TYPES, type EditorModalState } from "./EditorModal";
+import type { SmsAccountLink } from "./mobile/smsLinks";
 import { Empty } from "./TransactionList";
 
 function formatShortWindow(start: string, end: string): string {
@@ -46,9 +48,11 @@ export function AccountsPage({
   busy,
   concealed,
   balanceNote,
+  smsLinks = [],
   onSelectAccount,
   onOpenModal,
   onDeleteAccount,
+  onOpenSmsAutoCapture,
 }: {
   ledger: Ledger;
   net: number;
@@ -56,9 +60,11 @@ export function AccountsPage({
   busy: boolean;
   concealed: (v: number) => string;
   balanceNote: (a: Account, short?: boolean) => string;
+  smsLinks?: SmsAccountLink[];
   onSelectAccount: (accountId: string) => void;
   onOpenModal: (modal: EditorModalState) => void;
   onDeleteAccount: (account: Account) => void;
+  onOpenSmsAutoCapture?: (accountId?: string) => void;
 }) {
   const [debtToolsOpen, setDebtToolsOpen] = useState(false);
   const todayIso = today();
@@ -77,6 +83,16 @@ export function AccountsPage({
           </small>
         </div>
         <div className="accounts-summary-actions">
+          {onOpenSmsAutoCapture && (
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => onOpenSmsAutoCapture()}
+            >
+              <MessageSquareText size={16} /> {uiText("SMS Auto-Capture")}
+              {smsLinks.length > 0 ? ` (${smsLinks.length})` : ""}
+            </button>
+          )}
           <button
             type="button"
             className="secondary"
@@ -156,6 +172,20 @@ export function AccountsPage({
                   {concealed(value)}
                 </strong>
                 <span className="compact-actions">
+                  {onOpenSmsAutoCapture && (
+                    <button
+                      className="icon-button"
+                      title={
+                        smsLinks.some((l) => l.account_id === a.id)
+                          ? "Manage linked SMS sender"
+                          : "Link SMS sender"
+                      }
+                      aria-label={`Link SMS for ${a.name}`}
+                      onClick={() => onOpenSmsAutoCapture(a.id)}
+                    >
+                      <MessageSquareText size={14} />
+                    </button>
+                  )}
                   <button
                     className="icon-button"
                     aria-label={`Edit ${a.name}`}
@@ -186,6 +216,7 @@ export function AccountsPage({
         <div className="account-grid full">
           {ledger.accounts.map((a) => {
             const value = balance(a, ledger.transactions);
+            const linked = smsLinks.filter((l) => l.account_id === a.id);
             const cardSummary =
               a.type === "credit_card"
                 ? computeCardSummary(a, value, ledger.transactions, todayIso)
@@ -207,6 +238,20 @@ export function AccountsPage({
                       : ""}
                   </span>
                   <div className="row-actions">
+                    {onOpenSmsAutoCapture && (
+                      <button
+                        className="icon-button"
+                        title={
+                          linked.length
+                            ? "Manage linked SMS sender"
+                            : "Link SMS sender"
+                        }
+                        aria-label={`Link SMS for ${a.name}`}
+                        onClick={() => onOpenSmsAutoCapture(a.id)}
+                      >
+                        <MessageSquareText size={15} />
+                      </button>
+                    )}
                     <button
                       className="icon-button"
                       aria-label={`Edit ${a.name}`}
@@ -228,6 +273,17 @@ export function AccountsPage({
                   {a.name}{" "}
                   {a.household_id && (
                     <span className="shared-badge">{uiText("Shared")}</span>
+                  )}{" "}
+                  {linked.length > 0 && onOpenSmsAutoCapture && (
+                    <button
+                      type="button"
+                      className="sms-account-badge"
+                      onClick={() => onOpenSmsAutoCapture(a.id)}
+                    >
+                      <MessageSquareText size={11} />{" "}
+                      {linked[0].senders[0]}
+                      {linked[0].card_last4 ? ` ••${linked[0].card_last4}` : ""}
+                    </button>
                   )}
                 </h3>
                 <strong className="large-amount">{concealed(value)}</strong>

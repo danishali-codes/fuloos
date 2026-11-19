@@ -35,6 +35,7 @@ import { HouseholdSettings } from "./HouseholdSettings";
 import { NotificationSettings } from "./NotificationSettings";
 import { SettingsDialog } from "./Settings";
 import { planTransactionDeletion } from "./transactionDeletion";
+import type { SmsAccountLink } from "./mobile/smsLinks";
 
 const CsvImport = lazy(() =>
   import("./CsvImport").then((m) => ({ default: m.CsvImport })),
@@ -48,6 +49,11 @@ const PdfImport = lazy(() =>
 const CaptureAlertsModal = lazy(() =>
   import("./CaptureAlertsModal").then((m) => ({
     default: m.CaptureAlertsModal,
+  })),
+);
+const SmsAutoCaptureModal = lazy(() =>
+  import("./SmsAutoCaptureModal").then((m) => ({
+    default: m.SmsAutoCaptureModal,
   })),
 );
 
@@ -85,6 +91,11 @@ export function AppModals({
   setPdfOpen,
   captureAlertsOpen,
   setCaptureAlertsOpen,
+  smsAutoCaptureOpen,
+  smsAutoCaptureAccountId,
+  setSmsAutoCaptureOpen,
+  smsLinks,
+  onSmsLinksChange,
   pendingAlertCount,
   onImportCapturedAlert,
   onDismissCapturedAlert,
@@ -158,6 +169,11 @@ export function AppModals({
   setPdfOpen: (v: boolean) => void;
   captureAlertsOpen: boolean;
   setCaptureAlertsOpen: (v: boolean) => void;
+  smsAutoCaptureOpen: boolean;
+  smsAutoCaptureAccountId?: string;
+  setSmsAutoCaptureOpen: (v: boolean) => void;
+  smsLinks: SmsAccountLink[];
+  onSmsLinksChange: (next: SmsAccountLink[]) => Promise<void>;
   pendingAlertCount: number;
   onImportCapturedAlert: (
     alert: CapturedAlert,
@@ -223,6 +239,16 @@ export function AppModals({
             setSettingsOpen(false);
             setRulesOpen(true);
           }}
+          onOpenCaptureAlerts={() => {
+            setSettingsOpen(false);
+            setCaptureAlertsOpen(true);
+          }}
+          onOpenSmsAutoCapture={() => {
+            setSettingsOpen(false);
+            setSmsAutoCaptureOpen(true);
+          }}
+          pendingAlertCount={pendingAlertCount}
+          linkedSmsCount={smsLinks.length}
           security={security}
           notifications={
             <NotificationSettings
@@ -507,6 +533,24 @@ export function AppModals({
                 ? (id, patch) => backend!.updateCaptureTokenSettings(id, patch)
                 : undefined
             }
+          />
+        </Suspense>
+      )}
+      {smsAutoCaptureOpen && (
+        <Suspense fallback={null}>
+          <SmsAutoCaptureModal
+            demo={demo}
+            ledger={ledger}
+            owner={demo ? "demo" : (session?.user.id ?? "anonymous")}
+            learning={learningStore}
+            links={smsLinks}
+            initialAccountId={smsAutoCaptureAccountId}
+            onLinksChange={onSmsLinksChange}
+            onImportTransactions={(rows, progress, source, onSaved) =>
+              importTransactions(rows, progress, source, onSaved)
+            }
+            onOpenCaptureAlerts={() => setCaptureAlertsOpen(true)}
+            onClose={() => setSmsAutoCaptureOpen(false)}
           />
         </Suspense>
       )}

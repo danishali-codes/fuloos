@@ -442,22 +442,36 @@ export function CaptureAlertsModal({
               const type =
                 d.type ??
                 (alert.parsed_type === "income" ? "income" : "expense");
+              const linkedAccountId =
+                alert.account_id &&
+                ledger.accounts.some((a) => a.id === alert.account_id)
+                  ? alert.account_id
+                  : undefined;
               const accountId =
                 d.account_id ??
+                linkedAccountId ??
                 matchAccountHint(
                   alert.account_hint,
                   ledger.accounts,
                   tokenInfo?.default_account_id,
                 );
+              const preSuggestedCategory =
+                alert.suggested_category_id &&
+                categoryIds.has(alert.suggested_category_id)
+                  ? alert.suggested_category_id
+                  : null;
               const categoryId =
                 d.category_id !== undefined
                   ? (d.category_id ?? "")
-                  : (suggested.category_id ?? "");
+                  : (preSuggestedCategory ?? suggested.category_id ?? "");
               const payee = d.payee ?? suggested.payee;
               const date = d.date ?? (alert.parsed_date || uaeToday());
               const amountText =
                 d.amountText ?? (alert.parsed_amount / 100).toFixed(2);
               const isBusy = busyId === alert.id;
+              const quickChoices = (alert.top_suggestions ?? []).filter((s) =>
+                categoryIds.has(s.category_id),
+              );
 
               return (
                 <div
@@ -485,6 +499,19 @@ export function CaptureAlertsModal({
                           <Mail size={13} style={{ verticalAlign: "-2px" }} />{" "}
                           {uiText("Email")}{" "}
                         </>
+                      ) : alert.source === "sms_native" ? (
+                        <>
+                          <Smartphone
+                            size={13}
+                            style={{ verticalAlign: "-2px" }}
+                          />{" "}
+                          {uiText("Android SMS")}
+                          {alert.sms_sender ? ` (${alert.sms_sender})` : ""}
+                          {alert.card_last4 ? ` · ••${alert.card_last4}` : ""}
+                          {typeof alert.confidence === "number"
+                            ? ` · ${Math.round(alert.confidence * 100)}%`
+                            : ""}{" "}
+                        </>
                       ) : (
                         <>
                           <Smartphone
@@ -504,6 +531,27 @@ export function CaptureAlertsModal({
                         : uiText("Amount needed")}
                     </strong>
                   </div>
+
+                  {type === "expense" && quickChoices.length > 0 && (
+                    <div className="sms-quick-chips">
+                      <span className="small muted">{uiText("Quick pick:")}</span>
+                      {quickChoices.slice(0, 3).map((choice) => (
+                        <button
+                          key={choice.category_id}
+                          type="button"
+                          disabled={isBusy}
+                          className={`sms-chip ${categoryId === choice.category_id ? "is-active" : ""}`}
+                          onClick={() =>
+                            setDraft(alert.id, {
+                              category_id: choice.category_id,
+                            })
+                          }
+                        >
+                          {choice.name} ({Math.round(choice.confidence * 100)}%)
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
                   <div className="csv-grid">
                     <label>

@@ -183,9 +183,14 @@ export const defaultNotificationPreferences: NotificationPreferences = {
   timezone: "Asia/Dubai",
   channels: { email: false },
 };
-export type CaptureAlertSource = "email" | "shortcut";
+export type CaptureAlertSource = "email" | "shortcut" | "sms_native";
 export type CaptureAlertType = "expense" | "income" | "unknown";
 export type CaptureAlertStatus = "pending" | "imported" | "dismissed";
+export interface CaptureCategorySuggestion {
+  category_id: string;
+  name: string;
+  confidence: number;
+}
 export interface CaptureTokenInfo {
   id: string;
   token_preview: string;
@@ -205,6 +210,12 @@ export interface CapturedAlert {
   account_hint: string;
   status: CaptureAlertStatus;
   created_at_iso: string;
+  account_id?: string | null;
+  suggested_category_id?: string | null;
+  confidence?: number | null;
+  top_suggestions?: CaptureCategorySuggestion[];
+  sms_sender?: string;
+  card_last4?: string;
 }
 export interface Ledger {
   accounts: Account[];

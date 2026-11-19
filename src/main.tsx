@@ -73,11 +73,15 @@ import { useDeletionActions } from "./useDeletionActions";
 import { useImportAndBulk } from "./useImportAndBulk";
 import { executeRestore, type FuloosBackup, type RestoreMode } from "./backup";
 import { Sidebar } from "./Sidebar";
+import { MobileNav } from "./MobileNav";
 import { AppModals } from "./AppModals";
 import { AppPageHeader, AppTopbar } from "./AppHeader";
 import { pendingCapturedAlerts } from "./captureAlerts";
 import type { ImportTransaction } from "./csv";
 import type { CapturedAlert } from "./domain";
+import { platformBridge } from "./mobile/platformBridge";
+import type { SmsAccountLink } from "./mobile/smsLinks";
+import { useNativeMobile } from "./mobile/useNativeMobile";
 import { Leaf } from "lucide-react";
 import {
   balance,
@@ -169,6 +173,11 @@ function App() {
   const [smsOpen, setSmsOpen] = useState(false);
   const [pdfOpen, setPdfOpen] = useState(false);
   const [captureAlertsOpen, setCaptureAlertsOpen] = useState(false);
+  const [smsAutoCaptureOpen, setSmsAutoCaptureOpen] = useState(false);
+  const [smsAutoCaptureAccountId, setSmsAutoCaptureAccountId] = useState<
+    string | undefined
+  >(undefined);
+  const [smsLinks, setSmsLinks] = useState<SmsAccountLink[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(
     new Set(),
@@ -1448,6 +1457,96 @@ function App() {
           month,
         )
       : start.toISOString().slice(0, 7);
+
+  useEffect(() => {
+    let live = true;
+    void platformBridge.getLinks().then((loaded) => {
+      if (live) setSmsLinks(loaded);
+    });
+    return () => {
+      live = false;
+    };
+  }, [demo, session?.user.id]);
+
+  async function handleSmsLinksChange(next: SmsAccountLink[]) {
+    setSmsLinks(next);
+    await platformBridge.saveLinks(next);
+  }
+
+  function openSmsAutoCapture(accountId?: string) {
+    setSmsAutoCaptureAccountId(accountId);
+    setSmsAutoCaptureOpen(true);
+  }
+
+  const navigatePage = (name: string) => {
+    setPage(name);
+    setSearch("");
+    setAccountFilter("");
+    setKindFilter("");
+    if (name === "Recurring") {
+      setRecurringFilter("all");
+      setRecurringTab("schedules");
+    }
+  };
+
+  const hasOpenModal = Boolean(
+    settingsOpen ||
+      rulesOpen ||
+      smsAutoCaptureOpen ||
+      captureAlertsOpen ||
+      importOpen ||
+      smsOpen ||
+      pdfOpen ||
+      deleteOpen ||
+      modal ||
+      quickAdd ||
+      bulkItems ||
+      budgetModal ||
+      goalModal ||
+      goalContributeTarget ||
+      netWorthModal ||
+      netWorthValuationTarget ||
+      recurringModal ||
+      confirmOcc,
+  );
+
+  useNativeMobile({
+    demo,
+    pbUrl: backend?.url ?? "",
+    session,
+    ledger,
+    links: smsLinks,
+    learningStore,
+    page,
+    hasOpenModal,
+    onCloseTopModal: () => {
+      if (quickAdd) setQuickAdd(null);
+      else if (smsAutoCaptureOpen) setSmsAutoCaptureOpen(false);
+      else if (captureAlertsOpen) setCaptureAlertsOpen(false);
+      else if (rulesOpen) setRulesOpen(false);
+      else if (settingsOpen) setSettingsOpen(false);
+      else if (importOpen) setImportOpen(false);
+      else if (smsOpen) setSmsOpen(false);
+      else if (pdfOpen) setPdfOpen(false);
+      else if (modal) setModal(null);
+      else if (bulkItems) setBulkItems(null);
+      else if (budgetModal) setBudgetModal(null);
+      else if (goalModal) setGoalModal(null);
+      else if (goalContributeTarget) setGoalContributeTarget(null);
+      else if (netWorthModal) setNetWorthModal(null);
+      else if (netWorthValuationTarget) setNetWorthValuationTarget(null);
+      else if (recurringModal) setRecurringModal(null);
+      else if (confirmOcc) setConfirmOcc(null);
+      else if (deleteOpen) setDeleteOpen(false);
+    },
+    onNavigate: navigatePage,
+    onOpenCaptureAlerts: () => setCaptureAlertsOpen(true),
+    onOpenSmsAutoCapture: () => openSmsAutoCapture(),
+    onReloadLedger: () => {
+      if (!demo && session) void load();
+    },
+  });
+
   if (checking)
     return <div className="loading">{uiText("Opening Fuloos…")}</div>;
   if (!session && !demo)
@@ -1480,17 +1579,24 @@ function App() {
         page={page}
         demo={demo}
         session={session}
-        onNavigate={(name) => {
-          setPage(name);
-          setSearch("");
-          setAccountFilter("");
-          setKindFilter("");
-          if (name === "Recurring") {
-            setRecurringFilter("all");
-            setRecurringTab("schedules");
-          }
-        }}
+        onNavigate={navigatePage}
         onOpenSettings={() => setSettingsOpen(true)}
+        onSignOutDemo={(empty) => {
+          setDemo(false);
+          setLedger(empty);
+        }}
+      />
+      <MobileNav
+        page={page}
+        demo={demo}
+        session={session}
+        pendingAlertCount={pendingCapturedAlerts(ledger.captured_alerts).length}
+        linkedSmsCount={smsLinks.length}
+        onNavigate={navigatePage}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenRules={() => setRulesOpen(true)}
+        onOpenCaptureAlerts={() => setCaptureAlertsOpen(true)}
+        onOpenSmsAutoCapture={() => openSmsAutoCapture()}
         onSignOutDemo={(empty) => {
           setDemo(false);
           setLedger(empty);
@@ -1740,6 +1846,11 @@ function App() {
               }}
               onOpenModal={setModal}
               onDeleteAccount={setAccountToDelete}
+              smsLinks={smsLinks}
+              onOpenSmsAutoCapture={(accountId) => {
+                setSmsAutoCaptureAccountId(accountId ?? undefined);
+                setSmsAutoCaptureOpen(true);
+              }}
             />
           )}
           {page === "Categories" && (
@@ -1832,6 +1943,14 @@ function App() {
         setPdfOpen={setPdfOpen}
         captureAlertsOpen={captureAlertsOpen}
         setCaptureAlertsOpen={setCaptureAlertsOpen}
+        smsAutoCaptureOpen={smsAutoCaptureOpen}
+        smsAutoCaptureAccountId={smsAutoCaptureAccountId}
+        setSmsAutoCaptureOpen={(v) => {
+          setSmsAutoCaptureOpen(v);
+          if (!v) setSmsAutoCaptureAccountId(undefined);
+        }}
+        smsLinks={smsLinks}
+        onSmsLinksChange={handleSmsLinksChange}
         pendingAlertCount={pendingCapturedAlerts(ledger.captured_alerts).length}
         onImportCapturedAlert={importCapturedAlert}
         onDismissCapturedAlert={dismissCapturedAlert}
