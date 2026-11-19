@@ -90,6 +90,8 @@ export function SmsAutoCaptureModal({
   onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const linksRef = useRef(links);
+  linksRef.current = links;
   const [view, setView] = useState<ModalView>(
     initialAccountId ? "link_form" : "overview",
   );
@@ -403,7 +405,13 @@ export function SmsAutoCaptureModal({
     const account = accountById.get(backfillLink.account_id);
     const minDate = onlySinceOpeningDate ? account?.opening_date : undefined;
 
-    const toImport: { decision: SmsDecision; tx: ImportTransaction }[] = [];
+    const toImport: Array<{
+      decision: SmsDecision;
+      tx: ImportTransaction;
+      learningExample?: LearningExample;
+    }> = [];
+    const backfillDecisionsSnapshot = backfillAllDecisions;
+    const backfillLinkSnapshot = backfillLink;
 
     for (const d of backfillSummary.readyToImport) {
       if (!d.transaction) continue;
@@ -411,7 +419,6 @@ export function SmsAutoCaptureModal({
       toImport.push({ decision: d, tx: d.transaction });
     }
 
-    const newLearningRows: LearningExample[] = [];
     for (const g of backfillSummary.merchantGroups) {
       const chosenCatId = groupCategories[g.key] || null;
       for (const d of g.decisions) {
@@ -421,7 +428,7 @@ export function SmsAutoCaptureModal({
           ...d.transaction,
           category_id: d.transaction.type === "expense" ? chosenCatId : null,
         };
-        toImport.push({ decision: d, tx });
+        let learningExample: LearningExample | undefined;
         if (
           learningSettings?.learn_consent &&
           tx.type === "expense" &&
@@ -439,8 +446,9 @@ export function SmsAutoCaptureModal({
                 ? modelState.model.meta.version
                 : "rules",
           });
-          if (ex) newLearningRows.push(ex);
+          if (ex) learningExample = ex;
         }
+        toImport.push({ decision: d, tx, learningExample });
       }
     }
 
@@ -452,39 +460,90 @@ export function SmsAutoCaptureModal({
     setBusy(true);
     setError("");
     setImportProgress({ done: 0, total: toImport.length });
+
+    // Finalize hashes, learning rows, and catch-up watermark strictly as batches are
+    // confirmed saved via onSaved so failed/cancelled imports never hide unsaved SMSes.
+    let savedCount = 0;
+    let finalized = false;
+    let finalizeChain = Promise.resolve();
+    const importedHashes = new Set(toImport.map((item) => item.decision.smsHash));
+    const scannedNewestTs = backfillDecisionsSnapshot.reduce(
+      (max, d) => Math.max(max, d.timestampMs || 0),
+      0,
+    );
+
+    const onSaved = (n: number) => {
+      const newlySaved = toImport.slice(savedCount, n);
+      savedCount = Math.max(savedCount, n);
+      if (!newlySaved.length) return;
+      const isComplete = !finalized && savedCount >= toImport.length;
+      if (isComplete) finalized = true;
+
+      finalizeChain = finalizeChain
+        .then(async () => {
+          await platformBridge.markHashesProcessed(
+            newlySaved.map(({ decision }) => ({
+              smsHash: decision.smsHash,
+              androidSmsId: decision.androidSmsId,
+              accountId: backfillLinkSnapshot.account_id,
+              status: "imported",
+            })),
+          );
+
+          const chunkExamples = newlySaved
+            .map((item) => item.learningExample)
+            .filter((ex): ex is LearningExample => Boolean(ex));
+          if (chunkExamples.length) {
+            await learning.addExamples(chunkExamples).catch(() => {});
+          }
+
+          if (isComplete) {
+            const nonImportedEntries = backfillDecisionsSnapshot
+              .filter((d) => !importedHashes.has(d.smsHash))
+              .map((d) => ({
+                smsHash: d.smsHash,
+                androidSmsId: d.androidSmsId,
+                accountId: backfillLinkSnapshot.account_id,
+                status: "skipped",
+              }));
+            if (nonImportedEntries.length) {
+              await platformBridge.markHashesProcessed(nonImportedEntries);
+            }
+
+            if (scannedNewestTs > (backfillLinkSnapshot.last_synced_at || 0)) {
+              const updatedLinks = linksRef.current.map((l) =>
+                l.id === backfillLinkSnapshot.id
+                  ? {
+                      ...l,
+                      last_synced_at: Math.max(
+                        l.last_synced_at || 0,
+                        scannedNewestTs,
+                      ),
+                    }
+                  : l,
+              );
+              await onLinksChange(updatedLinks);
+            }
+          }
+        })
+        .catch(() => {
+          // Non-fatal: saved transactions remain in PocketBase; catch-up will reconcile metadata.
+        });
+    };
+
     try {
       await onImportTransactions(
         toImport.map((item) => item.tx),
         (done) => setImportProgress({ done, total: toImport.length }),
         "SMS backfill:",
+        onSaved,
       );
-
-      if (newLearningRows.length) {
-        await learning.addExamples(newLearningRows).catch(() => {});
-      }
-
-      // Mark all scanned SMS hashes as processed on-device and advance watermark so future background runs only process NEW SMSes.
-      const newestTs = backfillAllDecisions.reduce(
-        (max, d) => Math.max(max, d.timestampMs || 0),
-        Date.now(),
-      );
-      await platformBridge.markHashesProcessed(
-        backfillAllDecisions.map((d) => ({
-          smsHash: d.smsHash,
-          androidSmsId: d.androidSmsId,
-          accountId: backfillLink.account_id,
-          status:
-            d.action === "skip" || d.duplicate ? "skipped" : "imported",
-        })),
-      );
-
-      const updatedLinks = links.map((l) =>
-        l.id === backfillLink.id ? { ...l, last_synced_at: newestTs } : l,
-      );
-      await onLinksChange(updatedLinks);
+      await finalizeChain;
 
       setStatusMsg(
-        `Imported ${toImport.length} transactions from ${backfillLink.senders.join(", ")}. Future SMS messages will now be captured automatically.`,
+        demo
+          ? `Imported ${toImport.length} transactions from ${backfillLinkSnapshot.senders.join(", ")}. Future SMS messages will now be captured automatically.`
+          : `Queued ${toImport.length} transactions from ${backfillLinkSnapshot.senders.join(", ")} for import. Hashes and catch-up sync will finalize automatically as each batch saves.`,
       );
       setImportProgress(null);
       setView("overview");

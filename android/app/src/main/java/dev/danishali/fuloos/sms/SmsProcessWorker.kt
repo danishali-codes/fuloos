@@ -85,47 +85,70 @@ class SmsProcessWorker(
         val (senders, sinceTs) = db.getEnabledSendersAndWatermark()
         if (senders.isEmpty()) return Result.success()
 
-        val inboxResult = SmsInboxReader.readMessages(
-            context = applicationContext,
-            senders = senders,
-            sinceTimestampMs = sinceTs,
-            limit = 150,
-            offset = 0,
-        )
-        val messages = inboxResult.optJSONArray("messages") ?: return Result.success()
-        if (messages.length() == 0) return Result.success()
-
-        val decisions = engine.processBatch(messages.toString(), ctxJson) ?: return Result.success()
+        val scanStartedAtMs = System.currentTimeMillis()
         var needsRetry = false
         val firstFailedTsByLink = mutableMapOf<String, Long>()
         val coveredTimestampsByLink = mutableMapOf<String, MutableList<Long>>()
+        var maxScannedTs = 0L
+        var offset = 0
+        var hasMore = true
+        var completedAllPages = false
 
-        // Decisions are in chronological (DATE ASC) order matching SmsInboxReader.readMessages.
-        // Only advance a link's catch-up watermark across timestamps strictly covered without
-        // leaving an earlier failed/unprocessed message behind.
-        for (i in 0 until decisions.length()) {
-            val decision = decisions.optJSONObject(i) ?: continue
-            val linkId = decision.optNonNullString("linkId")
-            val ts = decision.optLong("timestampMs", 0L)
-            val outcome = applyDecision(decision, ctxJson)
-            when (outcome) {
-                DecisionOutcome.COVERED -> {
-                    if (linkId.isNotEmpty() && ts > 0L && linkId !in firstFailedTsByLink) {
-                        coveredTimestampsByLink.getOrPut(linkId) { mutableListOf() }.add(ts)
+        // Paginate across all inbox messages > sinceTs in chronological (DATE ASC) order
+        // so a dormant link's older watermark can never starve newer messages on active links.
+        while (hasMore) {
+            val inboxResult = SmsInboxReader.readMessages(
+                context = applicationContext,
+                senders = senders,
+                sinceTimestampMs = sinceTs,
+                limit = CATCH_UP_PAGE_SIZE,
+                offset = offset,
+            )
+            val messages = inboxResult.optJSONArray("messages") ?: break
+            if (messages.length() == 0) {
+                completedAllPages = true
+                break
+            }
+
+            for (i in 0 until messages.length()) {
+                val msgTs = messages.optJSONObject(i)?.optLong("timestampMs", 0L) ?: 0L
+                if (msgTs > maxScannedTs) maxScannedTs = msgTs
+            }
+
+            val decisions = engine.processBatch(messages.toString(), ctxJson)
+            if (decisions == null) {
+                needsRetry = true
+                break
+            }
+
+            for (i in 0 until decisions.length()) {
+                val decision = decisions.optJSONObject(i) ?: continue
+                val linkId = decision.optNonNullString("linkId")
+                val ts = decision.optLong("timestampMs", 0L)
+                val outcome = applyDecision(decision, ctxJson)
+                when (outcome) {
+                    DecisionOutcome.COVERED -> {
+                        if (linkId.isNotEmpty() && ts > 0L && linkId !in firstFailedTsByLink) {
+                            coveredTimestampsByLink.getOrPut(linkId) { mutableListOf() }.add(ts)
+                        }
                     }
-                }
-                DecisionOutcome.FAILED_RETRYABLE -> {
-                    needsRetry = true
-                    if (linkId.isNotEmpty() && linkId !in firstFailedTsByLink) {
-                        firstFailedTsByLink[linkId] = ts
+                    DecisionOutcome.FAILED_RETRYABLE -> {
+                        needsRetry = true
+                        if (linkId.isNotEmpty() && linkId !in firstFailedTsByLink) {
+                            firstFailedTsByLink[linkId] = ts
+                        }
                     }
-                }
-                DecisionOutcome.FAILED_HOLD -> {
-                    if (linkId.isNotEmpty() && linkId !in firstFailedTsByLink) {
-                        firstFailedTsByLink[linkId] = ts
+                    DecisionOutcome.FAILED_HOLD -> {
+                        if (linkId.isNotEmpty() && linkId !in firstFailedTsByLink) {
+                            firstFailedTsByLink[linkId] = ts
+                        }
                     }
                 }
             }
+
+            offset += messages.length()
+            hasMore = inboxResult.optBoolean("hasMore", false)
+            if (!hasMore) completedAllPages = true
         }
 
         for ((linkId, timestamps) in coveredTimestampsByLink) {
@@ -138,6 +161,23 @@ class SmsProcessWorker(
             }
             if (safeMax != null && safeMax > 0L) {
                 db.updateLinkWatermark(linkId, safeMax)
+            }
+        }
+
+        // If the entire inbox scan finished cleanly with no failures, advance any quiet/dormant
+        // enabled links up to a conservative snapshot floor so future catch-ups stay fast.
+        if (completedAllPages && firstFailedTsByLink.isEmpty() && maxScannedTs > 0L) {
+            val dormantFloor = minOf(scanStartedAtMs - 60_000L, maxScannedTs)
+            if (dormantFloor > 0L) {
+                val links = db.getLinksArray()
+                for (i in 0 until links.length()) {
+                    val link = links.optJSONObject(i) ?: continue
+                    if (!link.optBoolean("enabled", true)) continue
+                    val id = link.optNonNullString("id")
+                    if (id.isNotEmpty() && id !in coveredTimestampsByLink) {
+                        db.updateLinkWatermark(id, dormantFloor)
+                    }
+                }
             }
         }
 
@@ -346,6 +386,7 @@ class SmsProcessWorker(
 
     companion object {
         private const val TAG = "SmsProcessWorker"
+        private const val CATCH_UP_PAGE_SIZE = 150
         private val processMutex = Mutex()
 
         const val KEY_MODE = "mode"

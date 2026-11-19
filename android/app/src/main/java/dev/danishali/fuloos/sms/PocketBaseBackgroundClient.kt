@@ -222,10 +222,6 @@ class PocketBaseBackgroundClient(
         var flushed = 0
         val items = db.getOfflineQueue(50)
         for (item in items) {
-            if (item.retryCount >= MAX_RETRIES) {
-                db.removeOfflineWrite(item.id)
-                continue
-            }
             val result = executeWrite(
                 session = session,
                 method = item.method,
@@ -244,7 +240,11 @@ class PocketBaseBackgroundClient(
                         // Permanent validation or idempotency error; drop item
                         db.removeOfflineWrite(item.id)
                     } else {
+                        // Retain queued financial writes durably across transient outages
                         db.incrementRetryCount(item.id)
+                        if (item.retryCount >= 8) {
+                            Log.w(TAG, "Queued write ${item.id} (${item.method} ${item.path}) still retrying after ${item.retryCount + 1} attempts")
+                        }
                         break
                     }
                 }
@@ -342,7 +342,6 @@ class PocketBaseBackgroundClient(
 
     companion object {
         private const val TAG = "PocketBaseBgClient"
-        private const val MAX_RETRIES = 8
         private const val PB_ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
         private val queueLock = Any()
