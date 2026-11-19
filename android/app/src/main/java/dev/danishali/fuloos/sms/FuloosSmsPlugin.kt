@@ -215,15 +215,15 @@ class FuloosSmsPlugin : Plugin() {
         val list = mutableListOf<FuloosLocalDb.ProcessedEntry>()
         for (i in 0 until entriesArr.length()) {
             val obj = entriesArr.optJSONObject(i) ?: continue
-            val hash = obj.optString("smsHash", "")
+            val hash = if (obj.isNull("smsHash")) "" else obj.optString("smsHash", "")
             if (hash.isBlank()) continue
             list.add(
                 FuloosLocalDb.ProcessedEntry(
                     smsHash = hash,
-                    androidSmsId = obj.optString("androidSmsId", "").ifBlank { null },
-                    accountId = obj.optString("accountId", "").ifBlank { null },
-                    transactionId = obj.optString("transactionId", "").ifBlank { null },
-                    status = obj.optString("status", "backfilled"),
+                    androidSmsId = if (obj.isNull("androidSmsId")) null else obj.optString("androidSmsId", "").ifBlank { null },
+                    accountId = if (obj.isNull("accountId")) null else obj.optString("accountId", "").ifBlank { null },
+                    transactionId = if (obj.isNull("transactionId")) null else obj.optString("transactionId", "").ifBlank { null },
+                    status = if (obj.isNull("status")) "backfilled" else obj.optString("status", "backfilled"),
                 ),
             )
         }

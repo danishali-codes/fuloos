@@ -64,18 +64,18 @@ class NotificationActionReceiver : BroadcastReceiver() {
         val db = FuloosLocalDb.getInstance(context)
         val result = pb.importCapturedAlertOrCreateTransaction(alertId, txJson)
 
-        val txId = when (result) {
-            is PocketBaseBackgroundClient.ApiResult.Success -> result.data
-            else -> null
-        }
+        val acceptedWrite = result is PocketBaseBackgroundClient.ApiResult.Success ||
+            result is PocketBaseBackgroundClient.ApiResult.QueuedOffline
+        val txId = (result as? PocketBaseBackgroundClient.ApiResult.Success)?.data
+        val accountId = if (txJson.isNull("account_id")) "" else txJson.optString("account_id", "")
 
-        if (smsHash.isNotEmpty()) {
+        if (acceptedWrite && smsHash.isNotEmpty()) {
             db.markProcessed(
                 listOf(
                     FuloosLocalDb.ProcessedEntry(
                         smsHash = smsHash,
                         androidSmsId = null,
-                        accountId = txJson.optString("account_id", ""),
+                        accountId = accountId.ifBlank { null },
                         transactionId = txId,
                         status = "auto_added",
                     ),
@@ -83,10 +83,10 @@ class NotificationActionReceiver : BroadcastReceiver() {
             )
         }
 
-        if (merchantClean.isNotBlank()) {
+        if (acceptedWrite && merchantClean.isNotBlank() && hasLearningConsent(db)) {
             pb.recordMlExample(
                 merchantText = merchantClean,
-                payee = txJson.optString("payee", ""),
+                payee = if (txJson.isNull("payee")) "" else txJson.optString("payee", ""),
                 amountFils = txJson.optLong("amount", 0L),
                 categoryId = categoryId,
                 suggestedCategory = categoryName,
@@ -95,30 +95,49 @@ class NotificationActionReceiver : BroadcastReceiver() {
         }
 
         SmsNotificationHelper.cancel(context, notifId)
-        FuloosSmsPlugin.notifySmsProcessed(
-            action = "auto_add",
-            transactionId = txId,
-            alertId = alertId,
-            accountId = txJson.optString("account_id", "").ifBlank { null },
-        )
+        if (acceptedWrite) {
+            FuloosSmsPlugin.notifySmsProcessed(
+                action = "auto_add",
+                transactionId = txId,
+                alertId = alertId,
+                accountId = accountId.ifBlank { null },
+            )
+        }
+    }
+
+    private fun hasLearningConsent(db: FuloosLocalDb): Boolean {
+        val raw = db.getEngineContextJson() ?: return false
+        return try {
+            val ctx = JSONObject(raw)
+            ctx.optJSONObject("learningSettings")?.optBoolean("learn_consent", false) == true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun handleUndoTransaction(context: Context, intent: Intent) {
         val notifId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, 0)
         val txId = intent.getStringExtra(EXTRA_TRANSACTION_ID).orEmpty()
+        var acceptedDelete = false
         if (txId.isNotBlank()) {
             val pb = PocketBaseBackgroundClient(context)
             val db = FuloosLocalDb.getInstance(context)
-            pb.deleteTransaction(txId)
-            db.updateProcessedStatusByTransaction(txId, "dismissed")
+            val res = pb.deleteTransaction(txId)
+            acceptedDelete = res is PocketBaseBackgroundClient.ApiResult.Success ||
+                res is PocketBaseBackgroundClient.ApiResult.QueuedOffline
+            if (acceptedDelete) {
+                db.updateProcessedStatusByTransaction(txId, "dismissed")
+            }
         }
         SmsNotificationHelper.cancel(context, notifId)
-        FuloosSmsPlugin.notifySmsProcessed(
-            action = "auto_add",
-            transactionId = txId.ifBlank { null },
-            alertId = null,
-            accountId = null,
-        )
+        if (acceptedDelete) {
+            FuloosSmsPlugin.notifySmsProcessed(
+                action = "auto_add",
+                transactionId = txId.ifBlank { null },
+                alertId = null,
+                accountId = null,
+            )
+        }
     }
 
     companion object {

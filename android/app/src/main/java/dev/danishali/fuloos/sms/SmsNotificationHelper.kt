@@ -142,7 +142,7 @@ object SmsNotificationHelper {
         ensureChannels(context)
 
         val notifId = stableNotificationId("review:$smsHash")
-        val payee = txJson.optString("payee", "").ifBlank { "Unknown merchant" }
+        val payee = (if (txJson.isNull("payee")) "" else txJson.optString("payee", "")).ifBlank { "Unknown merchant" }
         val amountStr = formatAed(txJson.optLong("amount", 0L))
         val title = "Categorise $amountStr at $payee?"
         val subtitleParts = buildList {
@@ -175,8 +175,8 @@ object SmsNotificationHelper {
         val maxButtons = minOf(2, topSuggestions.length())
         for (i in 0 until maxButtons) {
             val suggestion = topSuggestions.optJSONObject(i) ?: continue
-            val catId = suggestion.optString("category_id", "")
-            val catName = suggestion.optString("name", "")
+            val catId = if (suggestion.isNull("category_id")) "" else suggestion.optString("category_id", "")
+            val catName = if (suggestion.isNull("name")) "" else suggestion.optString("name", "")
             if (catId.isEmpty() || catName.isEmpty()) continue
 
             val actionIntent = Intent(context, NotificationActionReceiver::class.java).apply {

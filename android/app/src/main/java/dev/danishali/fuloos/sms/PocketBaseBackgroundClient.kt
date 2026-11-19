@@ -98,25 +98,20 @@ class PocketBaseBackgroundClient(
         val txPayload = buildTransactionPayload(txJson, session.userId)
 
         if (!alertId.isNullOrBlank()) {
+            // Always retain the atomic endpoint's pending-status and idempotency guard
+            // so stale notifications (already imported/dismissed on web) never create duplicates.
             val encoded = URLEncoder.encode(alertId, "UTF-8")
             val atomicBody = JSONObject().put("transaction", txPayload).toString()
-            val atomicResult = executeWrite(
+            return executeWrite(
                 session = session,
                 method = "POST",
                 path = "/api/fuloos/captured-alerts/$encoded/import",
                 bodyJson = atomicBody,
-                queueOnNetworkFailure = false,
+                queueOnNetworkFailure = true,
             )
-            if (atomicResult is ApiResult.Success || atomicResult is ApiResult.AuthExpired) {
-                return atomicResult
-            }
         }
 
-        val created = createTransaction(txJson, queueOnNetworkFailure = true)
-        if (created is ApiResult.Success && !alertId.isNullOrBlank()) {
-            markAlertStatus(alertId, "imported")
-        }
-        return created
+        return createTransaction(txJson, queueOnNetworkFailure = true)
     }
 
     fun markAlertStatus(alertId: String, status: String): ApiResult<String> {
@@ -190,7 +185,7 @@ class PocketBaseBackgroundClient(
                 is ApiResult.AuthExpired -> break
                 is ApiResult.Failure -> {
                     if (result.status in 400..499 && result.status != 408 && result.status != 429) {
-                        // Permanent validation error (e.g. deleted account); drop item
+                        // Permanent validation or idempotency error; drop item
                         db.removeOfflineWrite(item.id)
                     } else {
                         db.incrementRetryCount(item.id)
@@ -208,17 +203,17 @@ class PocketBaseBackgroundClient(
         val splits = txJson.optJSONArray("splits") ?: JSONArray()
         return JSONObject().apply {
             put("user_id", userId)
-            put("type", txJson.optString("type", "expense"))
+            put("type", txJson.optNonNullString("type", "expense"))
             put("amount", txJson.optLong("amount", 0L))
-            put("date", txJson.optString("date", ""))
-            put("account_id", txJson.optString("account_id", ""))
-            put("to_account_id", txJson.optString("to_account_id", ""))
-            put("category_id", if (txJson.isNull("category_id")) "" else txJson.optString("category_id", ""))
-            put("payee", txJson.optString("payee", "").take(120))
-            put("notes", txJson.optString("notes", "").take(500))
+            put("date", txJson.optNonNullString("date"))
+            put("account_id", txJson.optNonNullString("account_id"))
+            put("to_account_id", txJson.optNonNullString("to_account_id"))
+            put("category_id", txJson.optNonNullString("category_id"))
+            put("payee", txJson.optNonNullString("payee").take(120))
+            put("notes", txJson.optNonNullString("notes").take(500))
             put("tags", tags)
             put("splits", splits)
-            val origCurr = txJson.optString("original_currency", "")
+            val origCurr = txJson.optNonNullString("original_currency")
             if (origCurr.isNotEmpty() && origCurr != "AED") {
                 put("original_currency", origCurr)
                 if (txJson.has("original_amount") && !txJson.isNull("original_amount")) {
@@ -229,6 +224,10 @@ class PocketBaseBackgroundClient(
                 }
             }
         }
+    }
+
+    private fun JSONObject.optNonNullString(key: String, fallback: String = ""): String {
+        return if (isNull(key)) fallback else optString(key, fallback)
     }
 
     private fun executeWrite(
@@ -257,14 +256,14 @@ class PocketBaseBackgroundClient(
                 when {
                     resp.isSuccessful -> {
                         val id = try {
-                            JSONObject(rawBody).optString("id", "")
+                            JSONObject(rawBody).optNonNullString("id")
                         } catch (_: Exception) {
                             ""
                         }
                         ApiResult.Success(id)
                     }
                     resp.code == 401 || resp.code == 403 -> ApiResult.AuthExpired(resp.code)
-                    resp.code >= 500 && queueOnNetworkFailure -> {
+                    (resp.code == 408 || resp.code == 429 || resp.code >= 500) && queueOnNetworkFailure -> {
                         val qId = db.enqueueOfflineWrite(method, path, bodyJson)
                         ApiResult.QueuedOffline(qId)
                     }

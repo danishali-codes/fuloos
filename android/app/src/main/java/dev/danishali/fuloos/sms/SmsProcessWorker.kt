@@ -62,8 +62,7 @@ class SmsProcessWorker(
         }
 
         val decision = engine.processSingleSms(rawSms.toString(), ctxJson) ?: return Result.retry()
-        applyDecision(decision, ctxJson)
-        return Result.success()
+        return if (applyDecision(decision, ctxJson)) Result.retry() else Result.success()
     }
 
     private suspend fun handleCatchUp(): Result {
@@ -89,21 +88,26 @@ class SmsProcessWorker(
         if (messages.length() == 0) return Result.success()
 
         val decisions = engine.processBatch(messages.toString(), ctxJson) ?: return Result.success()
+        var needsRetry = false
         for (i in 0 until decisions.length()) {
             val decision = decisions.optJSONObject(i) ?: continue
-            applyDecision(decision, ctxJson)
+            if (applyDecision(decision, ctxJson)) needsRetry = true
         }
-        return Result.success()
+        return if (needsRetry && runAttemptCount < 3) Result.retry() else Result.success()
     }
 
-    private fun applyDecision(decision: JSONObject, ctxJson: String) {
-        val smsHash = decision.optString("smsHash", "")
-        if (smsHash.isBlank() || db.isProcessed(smsHash)) return
+    /**
+     * Applies one SMS decision. Returns `true` if a retryable failure occurred and
+     * the worker should retry without marking the SMS hash processed.
+     */
+    private fun applyDecision(decision: JSONObject, ctxJson: String): Boolean {
+        val smsHash = decision.optNonNullString("smsHash")
+        if (smsHash.isBlank() || db.isProcessed(smsHash)) return false
 
-        val action = decision.optString("action", "skip")
-        val linkId = decision.optString("linkId", "")
-        val accountId = decision.optString("accountId", "")
-        val androidSmsId = decision.optString("androidSmsId", "").ifBlank { null }
+        val action = decision.optNonNullString("action", "skip")
+        val linkId = decision.optNonNullString("linkId")
+        val accountId = decision.optNonNullString("accountId")
+        val androidSmsId = decision.optNonNullString("androidSmsId").ifBlank { null }
         val timestampMs = decision.optLong("timestampMs", System.currentTimeMillis())
 
         if (action == "skip") {
@@ -119,23 +123,27 @@ class SmsProcessWorker(
                 ),
             )
             if (linkId.isNotEmpty()) db.updateLinkWatermark(linkId, timestampMs)
-            return
+            return false
         }
 
-        val txJson = decision.optJSONObject("transaction") ?: return
+        val txJson = decision.optJSONObject("transaction") ?: return false
         val lookups = parseLookups(ctxJson)
         val accountName = lookups.accounts[accountId]
-        val cardLast4 = decision.optString("cardLast4", "").ifBlank { null }
+        val cardLast4 = decision.optNonNullString("cardLast4").ifBlank { null }
 
         if (action == "auto_add") {
             val apiResult = pb.createTransaction(txJson, queueOnNetworkFailure = true)
             val txId = when (apiResult) {
                 is PocketBaseBackgroundClient.ApiResult.Success -> apiResult.data
-                else -> null
-            }
-            if (apiResult is PocketBaseBackgroundClient.ApiResult.AuthExpired) {
-                Log.w(TAG, "PocketBase auth expired; leaving SMS hash unprocessed for later catch-up")
-                return
+                is PocketBaseBackgroundClient.ApiResult.QueuedOffline -> null
+                is PocketBaseBackgroundClient.ApiResult.AuthExpired -> {
+                    Log.w(TAG, "PocketBase auth expired; leaving SMS hash unprocessed for later catch-up")
+                    return false
+                }
+                is PocketBaseBackgroundClient.ApiResult.Failure -> {
+                    Log.w(TAG, "PocketBase auto_add write failed (${apiResult.status}): ${apiResult.message}")
+                    return isRetryableStatus(apiResult.status)
+                }
             }
 
             db.markProcessed(
@@ -151,11 +159,11 @@ class SmsProcessWorker(
             )
             if (linkId.isNotEmpty()) db.updateLinkWatermark(linkId, timestampMs)
 
-            val catId = if (txJson.isNull("category_id")) "" else txJson.optString("category_id", "")
+            val catId = txJson.optNonNullString("category_id")
             SmsNotificationHelper.postAutoAddedNotification(
                 context = applicationContext,
                 transactionId = txId ?: smsHash.take(12),
-                payee = txJson.optString("payee", ""),
+                payee = txJson.optNonNullString("payee"),
                 amountFils = txJson.optLong("amount", 0L),
                 categoryName = lookups.categories[catId],
                 accountName = accountName,
@@ -167,21 +175,24 @@ class SmsProcessWorker(
                 alertId = null,
                 accountId = accountId.ifBlank { null },
             )
-            return
+            return false
         }
 
         if (action == "needs_review") {
             val draft = decision.optJSONObject("capturedAlertDraft")
             var alertId: String? = null
             if (draft != null) {
-                val alertRes = pb.createCapturedAlert(draft, queueOnNetworkFailure = true)
-                when (alertRes) {
+                when (val alertRes = pb.createCapturedAlert(draft, queueOnNetworkFailure = true)) {
                     is PocketBaseBackgroundClient.ApiResult.Success -> alertId = alertRes.data
+                    is PocketBaseBackgroundClient.ApiResult.QueuedOffline -> alertId = null
                     is PocketBaseBackgroundClient.ApiResult.AuthExpired -> {
                         Log.w(TAG, "PocketBase auth expired while syncing captured alert draft")
-                        return
+                        return false
                     }
-                    else -> Unit
+                    is PocketBaseBackgroundClient.ApiResult.Failure -> {
+                        Log.w(TAG, "PocketBase captured alert sync failed (${alertRes.status}): ${alertRes.message}")
+                        return isRetryableStatus(alertRes.status)
+                    }
                 }
             }
 
@@ -204,7 +215,7 @@ class SmsProcessWorker(
                 smsHash = smsHash,
                 alertId = alertId,
                 txJson = txJson,
-                merchantClean = decision.optString("merchantClean", "").ifBlank { null },
+                merchantClean = decision.optNonNullString("merchantClean").ifBlank { null },
                 accountName = accountName,
                 cardLast4 = cardLast4,
                 topSuggestions = topSuggestions,
@@ -216,6 +227,15 @@ class SmsProcessWorker(
                 accountId = accountId.ifBlank { null },
             )
         }
+        return false
+    }
+
+    private fun isRetryableStatus(status: Int): Boolean {
+        return status == 0 || status == 408 || status == 429 || status >= 500
+    }
+
+    private fun JSONObject.optNonNullString(key: String, fallback: String = ""): String {
+        return if (isNull(key)) fallback else optString(key, fallback)
     }
 
     private data class ContextLookups(
