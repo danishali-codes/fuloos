@@ -571,5 +571,17 @@ test("collectExistingDedupeKeys: deduplicates existing ledger transactions and p
 
   // Existing ledger transactions are included in the dedupe key set.
   assert.ok(existingKeys.includes(transactionKey(ledger.transactions[0]!)));
+
+  // Large ledgers (>5,000 rows) are never truncated by default during historical backfill.
+  const largeLedger = Array.from({ length: 5050 }, (_, idx) => ({
+    account_id: checking.id,
+    to_account_id: null,
+    date: `2020-01-${String((idx % 28) + 1).padStart(2, "0")}`,
+    type: "expense" as const,
+    amount: 100 + idx,
+    payee: `Merchant ${idx}`,
+  }));
+  assert.equal(collectExistingDedupeKeys(largeLedger).length, 5050);
+  assert.equal(collectExistingDedupeKeys(largeLedger, [], undefined, 5000).length, 5000);
 });
 

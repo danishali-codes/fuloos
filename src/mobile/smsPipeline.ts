@@ -446,11 +446,11 @@ export function collectExistingDedupeKeys(
   >[],
   capturedAlerts: CapturedAlert[] = [],
   fallbackAccountId?: string,
-  maxTransactions = 5000,
+  maxTransactions = Number.POSITIVE_INFINITY,
 ): string[] {
   const keys = new Set<string>();
   const txSlice =
-    transactions.length > maxTransactions
+    Number.isFinite(maxTransactions) && transactions.length > maxTransactions
       ? [...transactions]
           .sort((a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0))
           .slice(0, maxTransactions)

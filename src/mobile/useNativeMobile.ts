@@ -106,6 +106,8 @@ export function useNativeMobile({
           existingKeys: collectExistingDedupeKeys(
             ledger.transactions,
             ledger.captured_alerts ?? [],
+            undefined,
+            5000,
           ),
         };
         await platformBridge.syncEngineContext(ctx, ownerKey);
