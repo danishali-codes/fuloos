@@ -434,6 +434,53 @@ export interface PreparedEngineState {
   existingKeys: Set<string>;
 }
 
+/**
+ * Builds the deduplication key set covering both existing ledger transactions and
+ * pending captured alerts so neither historical backfill nor background SMS catch-up
+ * creates duplicates of already-imported or pending-review transactions.
+ */
+export function collectExistingDedupeKeys(
+  transactions: Pick<
+    ImportTransaction,
+    "account_id" | "date" | "type" | "to_account_id" | "amount" | "payee"
+  >[],
+  capturedAlerts: CapturedAlert[] = [],
+  fallbackAccountId?: string,
+  maxTransactions = 5000,
+): string[] {
+  const keys = new Set<string>();
+  const txSlice =
+    transactions.length > maxTransactions
+      ? [...transactions]
+          .sort((a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0))
+          .slice(0, maxTransactions)
+      : transactions;
+  for (const tx of txSlice) {
+    keys.add(transactionKey(tx as ImportTransaction));
+  }
+  for (const alert of capturedAlerts) {
+    if (alert.status !== "pending") continue;
+    const accountId =
+      alert.account_id ||
+      (alert.source === "sms_native" ? fallbackAccountId : undefined);
+    if (!accountId || !alert.parsed_date || !alert.parsed_amount) continue;
+    const type = alert.parsed_type === "income" ? "income" : "expense";
+    keys.add(
+      transactionKey({
+        date: alert.parsed_date,
+        account_id: accountId,
+        to_account_id: null,
+        category_id: alert.suggested_category_id ?? null,
+        type,
+        amount: alert.parsed_amount,
+        payee: alert.parsed_payee || "",
+        notes: alert.parsed_notes || "",
+      }),
+    );
+  }
+  return [...keys];
+}
+
 export function prepareEngineState(ctx: SmsEngineContext): PreparedEngineState {
   const categoryIds = new Set(ctx.categories.map((c) => c.id));
   const categoryById = new Map(ctx.categories.map((c) => [c.id, c]));

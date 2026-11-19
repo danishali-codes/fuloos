@@ -5,7 +5,7 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 import { transactionKey } from "../src/csv.ts";
 import { demoLedger } from "../src/demo.ts";
-import type { TransactionRule } from "../src/domain.ts";
+import type { CapturedAlert, TransactionRule } from "../src/domain.ts";
 import {
   createDefaultSmsLink,
   extractCardLast4,
@@ -17,6 +17,7 @@ import {
 } from "../src/mobile/smsLinks.ts";
 import {
   buildCapturedAlertDraft,
+  collectExistingDedupeKeys,
   groupBackfillForReview,
   processSingleSms,
   sha256Hex,
@@ -512,3 +513,63 @@ test("migration 1794860000_native_sms_capture extends fuloos_captured_alerts and
   assert.deepEqual(sourceField.values, ["email", "shortcut"]);
   assert.equal(fields.length, 1);
 });
+
+test("collectExistingDedupeKeys: deduplicates existing ledger transactions and pending native captured alerts", () => {
+  const ledger = demoLedger();
+  const checking = ledger.accounts[0]!;
+  const link = makeLink("link-dedupe", checking.id, ["ADCB"], {
+    bank_template: "ADCB",
+    confidence_threshold: 0.6,
+  });
+
+  const rawSms: RawNativeSms = {
+    id: "501",
+    sender: "ADCB",
+    timestampMs: Date.UTC(2026, 10, 14, 9, 0, 0),
+    body: "AED 64.00 spent on your ADCB Card XX4512 at AL MARWA VENTURES, SHARJAH on 14/11/2026.",
+  };
+
+  // First evaluation produces a needs_review decision & pending captured alert draft.
+  const initialCtx = buildTestContext([link]);
+  const initialDecision = processSingleSms(rawSms, initialCtx);
+  assert.equal(initialDecision.action, "needs_review");
+  const draft = buildCapturedAlertDraft(initialDecision);
+
+  const pendingAlert: CapturedAlert = {
+    id: "alert0000000001",
+    ...draft,
+    status: "pending",
+  };
+  const dismissedAlert: CapturedAlert = {
+    id: "alert0000000002",
+    ...draft,
+    parsed_amount: 9900,
+    status: "dismissed",
+  };
+
+  const existingKeys = collectExistingDedupeKeys(
+    ledger.transactions,
+    [pendingAlert, dismissedAlert],
+    checking.id,
+  );
+
+  // Subsequent scan (backfill or catch-up) recognizes the pending alert as already captured.
+  const dedupedCtx = buildTestContext([link], { existingKeys });
+  const secondDecision = processSingleSms(rawSms, dedupedCtx);
+  assert.equal(secondDecision.duplicate, true);
+  assert.equal(secondDecision.action, "skip");
+
+  // Dismissed alerts are not treated as duplicates.
+  const dismissedSms: RawNativeSms = {
+    ...rawSms,
+    id: "502",
+    body: "AED 99.00 spent on your ADCB Card XX4512 at AL MARWA VENTURES, SHARJAH on 14/11/2026.",
+  };
+  const dismissedDecision = processSingleSms(dismissedSms, dedupedCtx);
+  assert.equal(dismissedDecision.duplicate, false);
+  assert.equal(dismissedDecision.action, "needs_review");
+
+  // Existing ledger transactions are included in the dedupe key set.
+  assert.ok(existingKeys.includes(transactionKey(ledger.transactions[0]!)));
+});
+

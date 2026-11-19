@@ -8,12 +8,15 @@ import { loadMap } from "../ledger/mapping";
 import type { LearningStore } from "../ledger/learningStore";
 import { platformBridge } from "./platformBridge";
 import type { SmsAccountLink } from "./smsLinks";
-import type { SmsEngineContext } from "./smsPipeline";
+import {
+  collectExistingDedupeKeys,
+  type SmsEngineContext,
+} from "./smsPipeline";
 
 /**
  * Coordinates Capacitor native mobile lifecycle hooks:
  *  - Syncs PocketBase auth session into Android Keystore (EncryptedSharedPreferences)
- *  - Syncs serialized SMS engine context (links, categories, rules, ML examples, base model) for offline background processing
+ *  - Syncs serialized SMS engine context (links, categories, rules, ML examples, base model, existing ledger keys) for offline background processing
  *  - Syncs Android StatusBar color with Fuloos light/dark theme
  *  - Handles hardware Back button and deep links from Android notifications
  *  - Refreshes ledger on resume or when background SMS processing adds a transaction
@@ -47,6 +50,11 @@ export function useNativeMobile({
   onOpenSmsAutoCapture: () => void;
   onReloadLedger: () => void;
 }) {
+  const ownerKey =
+    !demo && session && pbUrl
+      ? `${pbUrl.trim().replace(/\/+$/, "")}|${session.user.id}`
+      : "";
+
   // 1. Sync PocketBase auth credentials into Android EncryptedSharedPreferences
   useEffect(() => {
     if (!platformBridge.isNativePlatform()) return;
@@ -59,7 +67,7 @@ export function useNativeMobile({
 
   // 2. Sync serialized engine context for headless Android WorkManager background processing
   useEffect(() => {
-    if (!platformBridge.isNativePlatform() || demo || !session) return;
+    if (!platformBridge.isNativePlatform() || demo || !session || !ownerKey) return;
     let active = true;
     const owner = session.user.id;
     const categoryIds = new Set(ledger.categories.map((c) => c.id));
@@ -95,8 +103,12 @@ export function useNativeMobile({
           learningExamples: learnData?.examples ?? [],
           categoryMap: mergedMap,
           baseModel: modelState.status === "ready" ? modelState.model : null,
+          existingKeys: collectExistingDedupeKeys(
+            ledger.transactions,
+            ledger.captured_alerts ?? [],
+          ),
         };
-        await platformBridge.syncEngineContext(ctx);
+        await platformBridge.syncEngineContext(ctx, ownerKey);
       } catch {
         /* ignore background sync errors */
       }
@@ -107,11 +119,14 @@ export function useNativeMobile({
     };
   }, [
     demo,
+    ownerKey,
     session?.user.id,
     links,
     ledger.accounts,
     ledger.categories,
     ledger.rules,
+    ledger.transactions,
+    ledger.captured_alerts,
     learningStore,
   ]);
 

@@ -83,18 +83,18 @@ class PocketBaseBackgroundClient(
         queuedWriteId: Long = -1L,
     ): ApiResult<String> {
         synchronized(queueLock) {
-            if (queuedWriteId > 0L && db.removeOfflineWrite(queuedWriteId)) {
+            val session = authStore.load() ?: return ApiResult.AuthExpired(401)
+            if (queuedWriteId > 0L && db.removeOfflineWrite(queuedWriteId, session.ownerKey)) {
                 return ApiResult.Success(transactionId)
             }
             if (transactionId.isBlank()) {
                 return ApiResult.Failure(400, "Missing transaction id")
             }
-            val session = authStore.load() ?: return ApiResult.AuthExpired(401)
             flushOfflineQueueLocked(session)
             val encoded = URLEncoder.encode(transactionId, "UTF-8")
             val path = "/api/collections/fuloos_transactions/records/$encoded"
-            if (db.getOfflineQueue(1).isNotEmpty()) {
-                val qId = db.enqueueOfflineWrite("DELETE", path, "")
+            if (db.getOfflineQueue(session.ownerKey, 1).isNotEmpty()) {
+                val qId = db.enqueueOfflineWrite(session.ownerKey, "DELETE", path, "")
                 return ApiResult.QueuedOffline(qId, transactionId)
             }
             return executeWrite(
@@ -147,8 +147,8 @@ class PocketBaseBackgroundClient(
                 val encoded = URLEncoder.encode(alertId, "UTF-8")
                 val path = "/api/fuloos/captured-alerts/$encoded/import"
                 val atomicBody = JSONObject().put("transaction", txPayload).toString()
-                if (db.getOfflineQueue(1).isNotEmpty()) {
-                    val qId = db.enqueueOfflineWrite("POST", path, atomicBody)
+                if (db.getOfflineQueue(session.ownerKey, 1).isNotEmpty()) {
+                    val qId = db.enqueueOfflineWrite(session.ownerKey, "POST", path, atomicBody)
                     return ApiResult.QueuedOffline(qId)
                 }
                 return executeWrite(
@@ -220,7 +220,7 @@ class PocketBaseBackgroundClient(
 
     private fun flushOfflineQueueLocked(session: SecureAuthStore.AuthSession): Int {
         var flushed = 0
-        val items = db.getOfflineQueue(50)
+        val items = db.getOfflineQueue(session.ownerKey, 50)
         for (item in items) {
             val result = executeWrite(
                 session = session,
@@ -231,14 +231,14 @@ class PocketBaseBackgroundClient(
             )
             when (result) {
                 is ApiResult.Success -> {
-                    db.removeOfflineWrite(item.id)
+                    db.removeOfflineWrite(item.id, session.ownerKey)
                     flushed++
                 }
                 is ApiResult.AuthExpired -> break
                 is ApiResult.Failure -> {
                     if (result.status in 400..499 && result.status != 408 && result.status != 429) {
                         // Permanent validation or idempotency error; drop item
-                        db.removeOfflineWrite(item.id)
+                        db.removeOfflineWrite(item.id, session.ownerKey)
                     } else {
                         // Retain queued financial writes durably across transient outages
                         db.incrementRetryCount(item.id)
@@ -321,7 +321,7 @@ class PocketBaseBackgroundClient(
                     }
                     resp.code == 401 || resp.code == 403 -> ApiResult.AuthExpired(resp.code)
                     (resp.code == 408 || resp.code == 429 || resp.code >= 500) && queueOnNetworkFailure -> {
-                        val qId = db.enqueueOfflineWrite(method, path, bodyJson)
+                        val qId = db.enqueueOfflineWrite(session.ownerKey, method, path, bodyJson)
                         ApiResult.QueuedOffline(qId, queuedRecordId)
                     }
                     else -> {
@@ -332,7 +332,7 @@ class PocketBaseBackgroundClient(
             }
         } catch (e: IOException) {
             if (queueOnNetworkFailure) {
-                val qId = db.enqueueOfflineWrite(method, path, bodyJson)
+                val qId = db.enqueueOfflineWrite(session.ownerKey, method, path, bodyJson)
                 ApiResult.QueuedOffline(qId, queuedRecordId)
             } else {
                 ApiResult.Failure(0, e.message ?: "Network error")

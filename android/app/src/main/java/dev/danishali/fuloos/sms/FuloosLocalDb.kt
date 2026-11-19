@@ -49,25 +49,28 @@ class FuloosLocalDb private constructor(context: Context) :
         db.execSQL(
             """
             CREATE TABLE IF NOT EXISTS processed_sms (
-                sms_hash TEXT PRIMARY KEY,
+                owner_key TEXT NOT NULL,
+                sms_hash TEXT NOT NULL,
                 android_sms_id TEXT,
                 account_id TEXT,
                 transaction_id TEXT,
                 status TEXT NOT NULL,
-                processed_at INTEGER NOT NULL
+                processed_at INTEGER NOT NULL,
+                PRIMARY KEY (owner_key, sms_hash)
             )
             """.trimIndent(),
         )
         db.execSQL(
             """
-            CREATE INDEX IF NOT EXISTS idx_processed_sms_status
-            ON processed_sms (status, processed_at)
+            CREATE INDEX IF NOT EXISTS idx_processed_sms_owner_status
+            ON processed_sms (owner_key, status, processed_at)
             """.trimIndent(),
         )
         db.execSQL(
             """
             CREATE TABLE IF NOT EXISTS offline_queue (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_key TEXT NOT NULL,
                 method TEXT NOT NULL,
                 path TEXT NOT NULL,
                 body_json TEXT NOT NULL,
@@ -76,36 +79,73 @@ class FuloosLocalDb private constructor(context: Context) :
             )
             """.trimIndent(),
         )
+        db.execSQL(
+            """
+            CREATE INDEX IF NOT EXISTS idx_offline_queue_owner
+            ON offline_queue (owner_key, id)
+            """.trimIndent(),
+        )
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            // Recreate local-only cache/dedupe/queue tables with owner_key partitioning
+            // so unscoped v1 rows cannot leak across authenticated users/servers.
+            db.execSQL("DROP TABLE IF EXISTS processed_sms")
+            db.execSQL("DROP TABLE IF EXISTS offline_queue")
+            db.execSQL("DELETE FROM engine_cache")
+        }
         onCreate(db)
     }
 
     @Synchronized
-    fun getLinksJson(): String {
-        return getCache(KEY_SMS_LINKS) ?: "[]"
+    fun getActiveOwnerKey(): String {
+        return getCache(KEY_ACTIVE_OWNER)?.trim().orEmpty()
     }
 
     @Synchronized
-    fun saveLinksJson(linksJson: String) {
-        putCache(KEY_SMS_LINKS, linksJson)
+    fun setActiveOwnerKey(ownerKey: String) {
+        val clean = ownerKey.trim()
+        if (clean.isEmpty()) {
+            clearActiveOwnerKey()
+        } else {
+            putCache(KEY_ACTIVE_OWNER, clean)
+        }
     }
 
     @Synchronized
-    fun getEngineContextJson(): String? {
-        return getCache(KEY_ENGINE_CONTEXT)
+    fun clearActiveOwnerKey() {
+        writableDatabase.delete("engine_cache", "cache_key = ?", arrayOf(KEY_ACTIVE_OWNER))
     }
 
     @Synchronized
-    fun saveEngineContextJson(contextJson: String) {
-        putCache(KEY_ENGINE_CONTEXT, contextJson)
+    fun getLinksJson(ownerKey: String = getActiveOwnerKey()): String {
+        if (ownerKey.isBlank()) return "[]"
+        return getCache(scopedKey(ownerKey, KEY_SMS_LINKS)) ?: "[]"
     }
 
     @Synchronized
-    fun getLinksArray(): JSONArray {
+    fun saveLinksJson(linksJson: String, ownerKey: String = getActiveOwnerKey()) {
+        if (ownerKey.isBlank()) return
+        putCache(scopedKey(ownerKey, KEY_SMS_LINKS), linksJson)
+    }
+
+    @Synchronized
+    fun getEngineContextJson(ownerKey: String = getActiveOwnerKey()): String? {
+        if (ownerKey.isBlank()) return null
+        return getCache(scopedKey(ownerKey, KEY_ENGINE_CONTEXT))
+    }
+
+    @Synchronized
+    fun saveEngineContextJson(contextJson: String, ownerKey: String = getActiveOwnerKey()) {
+        if (ownerKey.isBlank()) return
+        putCache(scopedKey(ownerKey, KEY_ENGINE_CONTEXT), contextJson)
+    }
+
+    @Synchronized
+    fun getLinksArray(ownerKey: String = getActiveOwnerKey()): JSONArray {
         return try {
-            JSONArray(getLinksJson())
+            JSONArray(getLinksJson(ownerKey))
         } catch (_: Exception) {
             JSONArray()
         }
@@ -116,10 +156,11 @@ class FuloosLocalDb private constructor(context: Context) :
      * an incoming SMS sender matches any enabled account link before waking WorkManager.
      */
     @Synchronized
-    fun hasEnabledLinkForSender(rawSender: String): Boolean {
+    fun hasEnabledLinkForSender(rawSender: String, ownerKey: String = getActiveOwnerKey()): Boolean {
+        if (ownerKey.isBlank()) return false
         val norm = normalizeSender(rawSender)
         if (norm.isEmpty()) return false
-        val links = getLinksArray()
+        val links = getLinksArray(ownerKey)
         for (i in 0 until links.length()) {
             val link = links.optJSONObject(i) ?: continue
             if (!link.optBoolean("enabled", true)) continue
@@ -138,8 +179,9 @@ class FuloosLocalDb private constructor(context: Context) :
      * watermark timestamp so catch-up scans only inspect recent messages.
      */
     @Synchronized
-    fun getEnabledSendersAndWatermark(): Pair<List<String>, Long> {
-        val links = getLinksArray()
+    fun getEnabledSendersAndWatermark(ownerKey: String = getActiveOwnerKey()): Pair<List<String>, Long> {
+        if (ownerKey.isBlank()) return emptyList<String>() to 0L
+        val links = getLinksArray(ownerKey)
         val senders = linkedSetOf<String>()
         var minWatermark = Long.MAX_VALUE
         var hasWatermark = false
@@ -163,9 +205,9 @@ class FuloosLocalDb private constructor(context: Context) :
     }
 
     @Synchronized
-    fun updateLinkWatermark(linkId: String, timestampMs: Long) {
-        if (linkId.isEmpty() || timestampMs <= 0L) return
-        val links = getLinksArray()
+    fun updateLinkWatermark(linkId: String, timestampMs: Long, ownerKey: String = getActiveOwnerKey()) {
+        if (ownerKey.isBlank() || linkId.isEmpty() || timestampMs <= 0L) return
+        val links = getLinksArray(ownerKey)
         var changed = false
         for (i in 0 until links.length()) {
             val link = links.optJSONObject(i) ?: continue
@@ -178,24 +220,24 @@ class FuloosLocalDb private constructor(context: Context) :
             }
         }
         if (changed) {
-            saveLinksJson(links.toString())
+            saveLinksJson(links.toString(), ownerKey)
         }
     }
 
     @Synchronized
-    fun isProcessed(smsHash: String): Boolean {
-        if (smsHash.isEmpty()) return false
+    fun isProcessed(smsHash: String, ownerKey: String = getActiveOwnerKey()): Boolean {
+        if (ownerKey.isBlank() || smsHash.isEmpty()) return false
         readableDatabase.rawQuery(
-            "SELECT 1 FROM processed_sms WHERE sms_hash = ? LIMIT 1",
-            arrayOf(smsHash),
+            "SELECT 1 FROM processed_sms WHERE owner_key = ? AND sms_hash = ? LIMIT 1",
+            arrayOf(ownerKey, smsHash),
         ).use { cursor ->
             return cursor.moveToFirst()
         }
     }
 
     @Synchronized
-    fun markProcessed(entries: List<ProcessedEntry>) {
-        if (entries.isEmpty()) return
+    fun markProcessed(entries: List<ProcessedEntry>, ownerKey: String = getActiveOwnerKey()) {
+        if (ownerKey.isBlank() || entries.isEmpty()) return
         val now = System.currentTimeMillis()
         val db = writableDatabase
         db.beginTransaction()
@@ -203,6 +245,7 @@ class FuloosLocalDb private constructor(context: Context) :
             for (entry in entries) {
                 if (entry.smsHash.isBlank()) continue
                 val cv = ContentValues().apply {
+                    put("owner_key", ownerKey)
                     put("sms_hash", entry.smsHash)
                     put("android_sms_id", entry.androidSmsId)
                     put("account_id", entry.accountId)
@@ -219,8 +262,12 @@ class FuloosLocalDb private constructor(context: Context) :
     }
 
     @Synchronized
-    fun updateProcessedStatusByTransaction(transactionId: String, status: String) {
-        if (transactionId.isBlank()) return
+    fun updateProcessedStatusByTransaction(
+        transactionId: String,
+        status: String,
+        ownerKey: String = getActiveOwnerKey(),
+    ) {
+        if (ownerKey.isBlank() || transactionId.isBlank()) return
         val cv = ContentValues().apply {
             put("status", status)
             put("processed_at", System.currentTimeMillis())
@@ -228,14 +275,18 @@ class FuloosLocalDb private constructor(context: Context) :
         writableDatabase.update(
             "processed_sms",
             cv,
-            "transaction_id = ?",
-            arrayOf(transactionId),
+            "owner_key = ? AND transaction_id = ?",
+            arrayOf(ownerKey, transactionId),
         )
     }
 
     @Synchronized
-    fun updateProcessedStatusByHash(smsHash: String, status: String) {
-        if (smsHash.isBlank()) return
+    fun updateProcessedStatusByHash(
+        smsHash: String,
+        status: String,
+        ownerKey: String = getActiveOwnerKey(),
+    ) {
+        if (ownerKey.isBlank() || smsHash.isBlank()) return
         val cv = ContentValues().apply {
             put("status", status)
             put("processed_at", System.currentTimeMillis())
@@ -243,14 +294,21 @@ class FuloosLocalDb private constructor(context: Context) :
         writableDatabase.update(
             "processed_sms",
             cv,
-            "sms_hash = ?",
-            arrayOf(smsHash),
+            "owner_key = ? AND sms_hash = ?",
+            arrayOf(ownerKey, smsHash),
         )
     }
 
     @Synchronized
-    fun enqueueOfflineWrite(method: String, path: String, bodyJson: String): Long {
+    fun enqueueOfflineWrite(
+        ownerKey: String,
+        method: String,
+        path: String,
+        bodyJson: String,
+    ): Long {
+        if (ownerKey.isBlank()) return -1L
         val cv = ContentValues().apply {
+            put("owner_key", ownerKey)
             put("method", method)
             put("path", path)
             put("body_json", bodyJson)
@@ -261,16 +319,18 @@ class FuloosLocalDb private constructor(context: Context) :
     }
 
     @Synchronized
-    fun getOfflineQueue(limit: Int = 50): List<QueuedWrite> {
+    fun getOfflineQueue(ownerKey: String, limit: Int = 50): List<QueuedWrite> {
+        if (ownerKey.isBlank()) return emptyList()
         val result = mutableListOf<QueuedWrite>()
         readableDatabase.rawQuery(
             """
             SELECT id, method, path, body_json, created_at, retry_count
             FROM offline_queue
+            WHERE owner_key = ?
             ORDER BY id ASC
             LIMIT ?
             """.trimIndent(),
-            arrayOf(limit.toString()),
+            arrayOf(ownerKey, limit.toString()),
         ).use { c ->
             while (c.moveToNext()) {
                 result.add(
@@ -289,8 +349,16 @@ class FuloosLocalDb private constructor(context: Context) :
     }
 
     @Synchronized
-    fun removeOfflineWrite(id: Long): Boolean {
-        return writableDatabase.delete("offline_queue", "id = ?", arrayOf(id.toString())) > 0
+    fun removeOfflineWrite(id: Long, ownerKey: String? = null): Boolean {
+        return if (!ownerKey.isNullOrBlank()) {
+            writableDatabase.delete(
+                "offline_queue",
+                "id = ? AND owner_key = ?",
+                arrayOf(id.toString(), ownerKey),
+            ) > 0
+        } else {
+            writableDatabase.delete("offline_queue", "id = ?", arrayOf(id.toString())) > 0
+        }
     }
 
     @Synchronized
@@ -306,15 +374,20 @@ class FuloosLocalDb private constructor(context: Context) :
      * workers always evaluate with up-to-date sender & card routing links.
      */
     @Synchronized
-    fun buildEffectiveEngineContextJson(): String? {
-        val rawCtx = getEngineContextJson() ?: return null
+    fun buildEffectiveEngineContextJson(ownerKey: String = getActiveOwnerKey()): String? {
+        if (ownerKey.isBlank()) return null
+        val rawCtx = getEngineContextJson(ownerKey) ?: return null
         return try {
             val ctx = JSONObject(rawCtx)
-            ctx.put("links", getLinksArray())
+            ctx.put("links", getLinksArray(ownerKey))
             ctx.toString()
         } catch (_: Exception) {
             rawCtx
         }
+    }
+
+    private fun scopedKey(ownerKey: String, key: String): String {
+        return "$ownerKey::$key"
     }
 
     private fun getCache(key: String): String? {
@@ -337,7 +410,8 @@ class FuloosLocalDb private constructor(context: Context) :
 
     companion object {
         private const val DB_NAME = "fuloos_sms_local.db"
-        private const val DB_VERSION = 1
+        private const val DB_VERSION = 2
+        private const val KEY_ACTIVE_OWNER = "active_owner_key"
         private const val KEY_SMS_LINKS = "sms_links"
         private const val KEY_ENGINE_CONTEXT = "engine_context"
         private const val DEFAULT_CATCHUP_WINDOW_MS = 1000L * 60 * 60 * 48 // 48 hours
@@ -349,6 +423,12 @@ class FuloosLocalDb private constructor(context: Context) :
             return instance ?: synchronized(this) {
                 instance ?: FuloosLocalDb(context).also { instance = it }
             }
+        }
+
+        fun ownerKeyFor(pbUrl: String, userId: String): String {
+            val cleanUrl = pbUrl.trim().trimEnd('/')
+            val cleanUser = userId.trim()
+            return if (cleanUrl.isEmpty() || cleanUser.isEmpty()) "" else "$cleanUrl|$cleanUser"
         }
 
         fun normalizeSender(raw: String): String {

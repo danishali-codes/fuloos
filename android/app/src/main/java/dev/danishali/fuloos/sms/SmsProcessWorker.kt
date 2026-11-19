@@ -26,17 +26,22 @@ class SmsProcessWorker(
 ) : CoroutineWorker(appContext, params) {
 
     private val db = FuloosLocalDb.getInstance(appContext)
-    private val pb = PocketBaseBackgroundClient(appContext)
+    private val authStore = SecureAuthStore(appContext)
+    private val pb = PocketBaseBackgroundClient(appContext, authStore, db)
     private val engine = HeadlessSmsEngine(appContext)
 
     override suspend fun doWork(): Result {
         val mode = inputData.getString(KEY_MODE) ?: MODE_CATCH_UP
         return try {
             processMutex.withLock {
+                val session = authStore.load() ?: return@withLock Result.success()
+                val ownerKey = session.ownerKey
+                if (ownerKey.isBlank()) return@withLock Result.success()
+
                 pb.flushOfflineQueue()
                 when (mode) {
-                    MODE_SINGLE_SMS -> handleSingleSms()
-                    MODE_CATCH_UP -> handleCatchUp()
+                    MODE_SINGLE_SMS -> handleSingleSms(ownerKey)
+                    MODE_CATCH_UP -> handleCatchUp(ownerKey)
                     MODE_FLUSH_QUEUE -> Result.success()
                     else -> Result.success()
                 }
@@ -47,13 +52,13 @@ class SmsProcessWorker(
         }
     }
 
-    private suspend fun handleSingleSms(): Result {
+    private suspend fun handleSingleSms(ownerKey: String): Result {
         val sender = inputData.getString(KEY_SENDER).orEmpty()
         val body = inputData.getString(KEY_BODY).orEmpty()
         val timestampMs = inputData.getLong(KEY_TIMESTAMP_MS, System.currentTimeMillis())
         if (sender.isBlank() || body.isBlank()) return Result.success()
 
-        val ctxJson = db.buildEffectiveEngineContextJson()
+        val ctxJson = db.buildEffectiveEngineContextJson(ownerKey)
         if (ctxJson.isNullOrBlank()) {
             Log.w(TAG, "Skipping background SMS: engine context not synced yet")
             return Result.success()
@@ -66,14 +71,14 @@ class SmsProcessWorker(
         }
 
         val decision = engine.processSingleSms(rawSms.toString(), ctxJson) ?: return Result.retry()
-        return if (applyDecision(decision, ctxJson) == DecisionOutcome.FAILED_RETRYABLE) {
+        return if (applyDecision(decision, ctxJson, ownerKey) == DecisionOutcome.FAILED_RETRYABLE) {
             Result.retry()
         } else {
             Result.success()
         }
     }
 
-    private suspend fun handleCatchUp(): Result {
+    private suspend fun handleCatchUp(ownerKey: String): Result {
         if (!BuildConfig.SUPPORTS_DIRECT_SMS) return Result.success()
         val hasReadSms = ContextCompat.checkSelfPermission(
             applicationContext,
@@ -81,8 +86,8 @@ class SmsProcessWorker(
         ) == PackageManager.PERMISSION_GRANTED
         if (!hasReadSms) return Result.success()
 
-        val ctxJson = db.buildEffectiveEngineContextJson() ?: return Result.success()
-        val (senders, sinceTs) = db.getEnabledSendersAndWatermark()
+        val ctxJson = db.buildEffectiveEngineContextJson(ownerKey) ?: return Result.success()
+        val (senders, sinceTs) = db.getEnabledSendersAndWatermark(ownerKey)
         if (senders.isEmpty()) return Result.success()
 
         val scanStartedAtMs = System.currentTimeMillis()
@@ -125,7 +130,7 @@ class SmsProcessWorker(
                 val decision = decisions.optJSONObject(i) ?: continue
                 val linkId = decision.optNonNullString("linkId")
                 val ts = decision.optLong("timestampMs", 0L)
-                val outcome = applyDecision(decision, ctxJson)
+                val outcome = applyDecision(decision, ctxJson, ownerKey)
                 when (outcome) {
                     DecisionOutcome.COVERED -> {
                         if (linkId.isNotEmpty() && ts > 0L && linkId !in firstFailedTsByLink) {
@@ -160,7 +165,7 @@ class SmsProcessWorker(
                 timestamps.maxOrNull()
             }
             if (safeMax != null && safeMax > 0L) {
-                db.updateLinkWatermark(linkId, safeMax)
+                db.updateLinkWatermark(linkId, safeMax, ownerKey)
             }
         }
 
@@ -169,13 +174,13 @@ class SmsProcessWorker(
         if (completedAllPages && firstFailedTsByLink.isEmpty() && maxScannedTs > 0L) {
             val dormantFloor = minOf(scanStartedAtMs - 60_000L, maxScannedTs)
             if (dormantFloor > 0L) {
-                val links = db.getLinksArray()
+                val links = db.getLinksArray(ownerKey)
                 for (i in 0 until links.length()) {
                     val link = links.optJSONObject(i) ?: continue
                     if (!link.optBoolean("enabled", true)) continue
                     val id = link.optNonNullString("id")
                     if (id.isNotEmpty() && id !in coveredTimestampsByLink) {
-                        db.updateLinkWatermark(id, dormantFloor)
+                        db.updateLinkWatermark(id, dormantFloor, ownerKey)
                     }
                 }
             }
@@ -194,9 +199,9 @@ class SmsProcessWorker(
      * Applies one SMS decision without advancing catch-up watermarks (watermarks are
      * advanced exclusively by [handleCatchUp] after scanning earlier inbox messages).
      */
-    private fun applyDecision(decision: JSONObject, ctxJson: String): DecisionOutcome {
+    private fun applyDecision(decision: JSONObject, ctxJson: String, ownerKey: String): DecisionOutcome {
         val smsHash = decision.optNonNullString("smsHash")
-        if (smsHash.isBlank() || db.isProcessed(smsHash)) return DecisionOutcome.COVERED
+        if (smsHash.isBlank() || db.isProcessed(smsHash, ownerKey)) return DecisionOutcome.COVERED
 
         val action = decision.optNonNullString("action", "skip")
         val accountId = decision.optNonNullString("accountId")
@@ -213,6 +218,7 @@ class SmsProcessWorker(
                         status = "skipped",
                     ),
                 ),
+                ownerKey,
             )
             return DecisionOutcome.COVERED
         }
@@ -259,6 +265,7 @@ class SmsProcessWorker(
                         status = "auto_added",
                     ),
                 ),
+                ownerKey,
             )
 
             val catId = txJson.optNonNullString("category_id")
@@ -272,6 +279,7 @@ class SmsProcessWorker(
                 cardLast4 = cardLast4,
                 queuedWriteId = queuedWriteId,
                 smsHash = smsHash,
+                ownerKey = ownerKey,
             )
             FuloosSmsPlugin.notifySmsProcessed(
                 action = "auto_add",
@@ -318,6 +326,7 @@ class SmsProcessWorker(
                         status = "pending_review",
                     ),
                 ),
+                ownerKey,
             )
 
             val topSuggestions = decision.optJSONArray("topSuggestions") ?: JSONArray()
@@ -330,6 +339,7 @@ class SmsProcessWorker(
                 accountName = accountName,
                 cardLast4 = cardLast4,
                 topSuggestions = topSuggestions,
+                ownerKey = ownerKey,
             )
             FuloosSmsPlugin.notifySmsProcessed(
                 action = "needs_review",

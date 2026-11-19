@@ -44,9 +44,15 @@ interface FuloosSmsPluginInterface {
     limit?: number;
     offset?: number;
   }): Promise<{ messages: RawNativeSms[]; total: number; hasMore: boolean }>;
-  getLinks(): Promise<{ links: SmsAccountLink[] }>;
-  saveLinks(options: { links: SmsAccountLink[] }): Promise<{ ok: boolean }>;
-  syncEngineContext(options: { contextJson: string }): Promise<{ ok: boolean }>;
+  getLinks(options?: { ownerKey?: string }): Promise<{ links: SmsAccountLink[] }>;
+  saveLinks(options: {
+    links: SmsAccountLink[];
+    ownerKey?: string;
+  }): Promise<{ ok: boolean }>;
+  syncEngineContext(options: {
+    contextJson: string;
+    ownerKey?: string;
+  }): Promise<{ ok: boolean }>;
   syncAuthSession(options: {
     pbUrl: string;
     token: string;
@@ -54,6 +60,7 @@ interface FuloosSmsPluginInterface {
   }): Promise<{ ok: boolean }>;
   clearAuthSession(): Promise<{ ok: boolean }>;
   markHashesProcessed(options: {
+    ownerKey?: string;
     entries: Array<{
       smsHash: string;
       androidSmsId?: string;
@@ -131,9 +138,13 @@ const DEMO_SAMPLE_SMS: RawNativeSms[] = [
   },
 ];
 
-function readLocalLinks(): SmsAccountLink[] {
+function linksStorageKey(ownerKey?: string): string {
+  return ownerKey ? `${WEB_LINKS_STORAGE_KEY}:${ownerKey}` : WEB_LINKS_STORAGE_KEY;
+}
+
+function readLocalLinks(ownerKey?: string): SmsAccountLink[] {
   try {
-    const raw = window.localStorage.getItem(WEB_LINKS_STORAGE_KEY);
+    const raw = window.localStorage.getItem(linksStorageKey(ownerKey));
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     return Array.isArray(parsed) ? (parsed as SmsAccountLink[]) : [];
@@ -142,9 +153,9 @@ function readLocalLinks(): SmsAccountLink[] {
   }
 }
 
-function writeLocalLinks(links: SmsAccountLink[]): void {
+function writeLocalLinks(links: SmsAccountLink[], ownerKey?: string): void {
   try {
-    window.localStorage.setItem(WEB_LINKS_STORAGE_KEY, JSON.stringify(links));
+    window.localStorage.setItem(linksStorageKey(ownerKey), JSON.stringify(links));
   } catch {
     /* ignore storage quota errors */
   }
@@ -279,30 +290,31 @@ export const platformBridge = {
     return { messages: filtered, total: filtered.length, hasMore: false };
   },
 
-  async getLinks(): Promise<SmsAccountLink[]> {
-    if (isNativePlatform() && getPlatform() === "android") {
+  async getLinks(ownerKey?: string): Promise<SmsAccountLink[]> {
+    if (isNativePlatform() && getPlatform() === "android" && ownerKey !== "demo") {
       try {
-        const res = await FuloosSmsNative.getLinks();
+        const res = await FuloosSmsNative.getLinks({ ownerKey });
         return res.links ?? [];
       } catch {
-        return readLocalLinks();
+        return readLocalLinks(ownerKey);
       }
     }
-    return readLocalLinks();
+    return readLocalLinks(ownerKey);
   },
 
-  async saveLinks(links: SmsAccountLink[]): Promise<void> {
-    writeLocalLinks(links);
-    if (isNativePlatform() && getPlatform() === "android") {
-      await FuloosSmsNative.saveLinks({ links });
+  async saveLinks(links: SmsAccountLink[], ownerKey?: string): Promise<void> {
+    writeLocalLinks(links, ownerKey);
+    if (isNativePlatform() && getPlatform() === "android" && ownerKey !== "demo") {
+      await FuloosSmsNative.saveLinks({ links, ownerKey });
     }
   },
 
-  async syncEngineContext(ctx: SmsEngineContext): Promise<void> {
+  async syncEngineContext(ctx: SmsEngineContext, ownerKey?: string): Promise<void> {
     if (!isNativePlatform() || getPlatform() !== "android") return;
     try {
       await FuloosSmsNative.syncEngineContext({
         contextJson: JSON.stringify(ctx),
+        ownerKey,
       });
     } catch {
       /* non-fatal if plugin unavailable */
@@ -339,12 +351,13 @@ export const platformBridge = {
       transactionId?: string;
       status: string;
     }>,
+    ownerKey?: string,
   ): Promise<void> {
     if (!isNativePlatform() || getPlatform() !== "android" || !entries.length) {
       return;
     }
     try {
-      await FuloosSmsNative.markHashesProcessed({ entries });
+      await FuloosSmsNative.markHashesProcessed({ entries, ownerKey });
     } catch {
       /* ignore */
     }

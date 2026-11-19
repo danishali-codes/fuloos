@@ -16,7 +16,10 @@ class SecureAuthStore(context: Context) {
         val pbUrl: String,
         val token: String,
         val userId: String,
-    )
+    ) {
+        val ownerKey: String
+            get() = FuloosLocalDb.ownerKeyFor(pbUrl, userId)
+    }
 
     private val appContext = context.applicationContext
 

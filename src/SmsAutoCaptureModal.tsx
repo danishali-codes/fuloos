@@ -15,7 +15,6 @@ import {
   X,
 } from "lucide-react";
 import type { ImportTransaction } from "./csv";
-import { transactionKey } from "./csv";
 import {
   errorMessage,
   money,
@@ -45,6 +44,7 @@ import {
   type SmsAutoAddMode,
 } from "./mobile/smsLinks";
 import {
+  collectExistingDedupeKeys,
   groupBackfillForReview,
   prepareEngineState,
   processSingleSms,
@@ -375,7 +375,11 @@ export function SmsAutoCaptureModal({
         learningExamples,
         categoryMap,
         baseModel: modelState.status === "ready" ? modelState.model : null,
-        existingKeys: ledger.transactions.map(transactionKey),
+        existingKeys: collectExistingDedupeKeys(
+          ledger.transactions,
+          ledger.captured_alerts ?? [],
+          targetLink.account_id,
+        ),
       };
 
       const prepared = prepareEngineState(ctx);

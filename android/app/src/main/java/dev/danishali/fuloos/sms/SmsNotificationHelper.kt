@@ -85,6 +85,7 @@ object SmsNotificationHelper {
         cardLast4: String?,
         queuedWriteId: Long = -1L,
         smsHash: String = "",
+        ownerKey: String = "",
     ) {
         if (!canPostNotifications(context)) return
         ensureChannels(context)
@@ -123,6 +124,7 @@ object SmsNotificationHelper {
                 putExtra(NotificationActionReceiver.EXTRA_TRANSACTION_ID, transactionId)
                 putExtra(NotificationActionReceiver.EXTRA_QUEUED_WRITE_ID, queuedWriteId)
                 putExtra(NotificationActionReceiver.EXTRA_SMS_HASH, smsHash)
+                putExtra(NotificationActionReceiver.EXTRA_OWNER_KEY, ownerKey)
             }
             val undoPending = PendingIntent.getBroadcast(
                 context,
@@ -145,6 +147,7 @@ object SmsNotificationHelper {
         accountName: String?,
         cardLast4: String?,
         topSuggestions: JSONArray,
+        ownerKey: String = "",
     ) {
         if (!canPostNotifications(context)) return
         ensureChannels(context)
@@ -196,6 +199,7 @@ object SmsNotificationHelper {
                 putExtra(NotificationActionReceiver.EXTRA_CATEGORY_NAME, catName)
                 putExtra(NotificationActionReceiver.EXTRA_MERCHANT_CLEAN, merchantClean.orEmpty())
                 putExtra(NotificationActionReceiver.EXTRA_TX_JSON, txJson.toString())
+                putExtra(NotificationActionReceiver.EXTRA_OWNER_KEY, ownerKey)
             }
             val actionPending = PendingIntent.getBroadcast(
                 context,

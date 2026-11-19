@@ -165,7 +165,8 @@ class FuloosSmsPlugin : Plugin() {
 
     @PluginMethod
     fun getLinks(call: PluginCall) {
-        val raw = db.getLinksJson()
+        val ownerKey = resolveOwnerKey(call)
+        val raw = db.getLinksJson(ownerKey)
         val arr = try {
             JSArray(raw)
         } catch (_: Exception) {
@@ -176,17 +177,19 @@ class FuloosSmsPlugin : Plugin() {
 
     @PluginMethod
     fun saveLinks(call: PluginCall) {
+        val ownerKey = resolveOwnerKey(call)
         val links = call.getArray("links") ?: JSArray()
-        db.saveLinksJson(links.toString())
-        schedulePeriodicCatchUpIfNeeded(context)
+        db.saveLinksJson(links.toString(), ownerKey)
+        schedulePeriodicCatchUpIfNeeded(context, ownerKey)
         call.resolve(JSObject().put("ok", true))
     }
 
     @PluginMethod
     fun syncEngineContext(call: PluginCall) {
+        val ownerKey = resolveOwnerKey(call)
         val ctxJson = call.getString("contextJson").orEmpty()
-        if (ctxJson.isNotBlank()) {
-            db.saveEngineContextJson(ctxJson)
+        if (ctxJson.isNotBlank() && ownerKey.isNotBlank()) {
+            db.saveEngineContextJson(ctxJson, ownerKey)
         }
         call.resolve(JSObject().put("ok", true))
     }
@@ -197,7 +200,10 @@ class FuloosSmsPlugin : Plugin() {
         val token = call.getString("token").orEmpty()
         val userId = call.getString("userId").orEmpty()
         if (pbUrl.isNotBlank() && token.isNotBlank() && userId.isNotBlank()) {
+            val ownerKey = FuloosLocalDb.ownerKeyFor(pbUrl, userId)
             authStore.save(pbUrl, token, userId)
+            db.setActiveOwnerKey(ownerKey)
+            schedulePeriodicCatchUpIfNeeded(context, ownerKey)
             enqueueOneOffWorker(context, SmsProcessWorker.MODE_FLUSH_QUEUE)
         }
         call.resolve(JSObject().put("ok", true))
@@ -206,11 +212,14 @@ class FuloosSmsPlugin : Plugin() {
     @PluginMethod
     fun clearAuthSession(call: PluginCall) {
         authStore.clear()
+        db.clearActiveOwnerKey()
+        schedulePeriodicCatchUpIfNeeded(context, "")
         call.resolve(JSObject().put("ok", true))
     }
 
     @PluginMethod
     fun markHashesProcessed(call: PluginCall) {
+        val ownerKey = resolveOwnerKey(call)
         val entriesArr = call.getArray("entries") ?: JSArray()
         val list = mutableListOf<FuloosLocalDb.ProcessedEntry>()
         for (i in 0 until entriesArr.length()) {
@@ -227,8 +236,14 @@ class FuloosSmsPlugin : Plugin() {
                 ),
             )
         }
-        db.markProcessed(list)
+        db.markProcessed(list, ownerKey)
         call.resolve(JSObject().put("ok", true))
+    }
+
+    private fun resolveOwnerKey(call: PluginCall): String {
+        val explicit = call.getString("ownerKey")?.trim().orEmpty()
+        if (explicit.isNotEmpty()) return explicit
+        return authStore.load()?.ownerKey ?: db.getActiveOwnerKey()
     }
 
     @PluginMethod
@@ -451,9 +466,9 @@ class FuloosSmsPlugin : Plugin() {
             plugin.dispatchSmsProcessed(payload)
         }
 
-        private fun schedulePeriodicCatchUpIfNeeded(context: Context) {
+        private fun schedulePeriodicCatchUpIfNeeded(context: Context, ownerKey: String) {
             val db = FuloosLocalDb.getInstance(context)
-            val links = db.getLinksArray()
+            val links = db.getLinksArray(ownerKey)
             val hasEnabled = (0 until links.length()).any { i ->
                 links.optJSONObject(i)?.optBoolean("enabled", true) == true
             }

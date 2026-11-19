@@ -1458,19 +1458,32 @@ function App() {
         )
       : start.toISOString().slice(0, 7);
 
+  const smsOwnerKey = demo
+    ? "demo"
+    : session && backend?.url
+      ? `${backend.url.trim().replace(/\/+$/, "")}|${session.user.id}`
+      : "";
+
   useEffect(() => {
     let live = true;
-    void platformBridge.getLinks().then((loaded) => {
+    if (!smsOwnerKey) {
+      setSmsLinks([]);
+      return () => {
+        live = false;
+      };
+    }
+    void platformBridge.getLinks(smsOwnerKey).then((loaded) => {
       if (live) setSmsLinks(loaded);
     });
     return () => {
       live = false;
     };
-  }, [demo, session?.user.id]);
+  }, [smsOwnerKey]);
 
   async function handleSmsLinksChange(next: SmsAccountLink[]) {
     setSmsLinks(next);
-    await platformBridge.saveLinks(next);
+    if (!smsOwnerKey) return;
+    await platformBridge.saveLinks(next, smsOwnerKey);
   }
 
   function openSmsAutoCapture(accountId?: string) {

@@ -41,6 +41,14 @@ class NotificationActionReceiver : BroadcastReceiver() {
 
     private fun handleQuickCategorize(context: Context, intent: Intent) {
         val notifId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, 0)
+        val expectedOwner = intent.getStringExtra(EXTRA_OWNER_KEY).orEmpty()
+        val session = SecureAuthStore(context).load()
+        if (session == null || (expectedOwner.isNotBlank() && session.ownerKey != expectedOwner)) {
+            SmsNotificationHelper.cancel(context, notifId)
+            return
+        }
+        val ownerKey = session.ownerKey
+
         val alertId = intent.getStringExtra(EXTRA_ALERT_ID).orEmpty().ifBlank { null }
         val smsHash = intent.getStringExtra(EXTRA_SMS_HASH).orEmpty()
         val categoryId = intent.getStringExtra(EXTRA_CATEGORY_ID).orEmpty()
@@ -80,10 +88,11 @@ class NotificationActionReceiver : BroadcastReceiver() {
                         status = "auto_added",
                     ),
                 ),
+                ownerKey,
             )
         }
 
-        if (acceptedWrite && merchantClean.isNotBlank() && hasLearningConsent(db)) {
+        if (acceptedWrite && merchantClean.isNotBlank() && hasLearningConsent(db, ownerKey)) {
             pb.recordMlExample(
                 merchantText = merchantClean,
                 payee = if (txJson.isNull("payee")) "" else txJson.optString("payee", ""),
@@ -105,8 +114,8 @@ class NotificationActionReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun hasLearningConsent(db: FuloosLocalDb): Boolean {
-        val raw = db.getEngineContextJson() ?: return false
+    private fun hasLearningConsent(db: FuloosLocalDb, ownerKey: String): Boolean {
+        val raw = db.getEngineContextJson(ownerKey) ?: return false
         return try {
             val ctx = JSONObject(raw)
             ctx.optJSONObject("learningSettings")?.optBoolean("learn_consent", false) == true
@@ -117,6 +126,14 @@ class NotificationActionReceiver : BroadcastReceiver() {
 
     private fun handleUndoTransaction(context: Context, intent: Intent) {
         val notifId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, 0)
+        val expectedOwner = intent.getStringExtra(EXTRA_OWNER_KEY).orEmpty()
+        val session = SecureAuthStore(context).load()
+        if (session == null || (expectedOwner.isNotBlank() && session.ownerKey != expectedOwner)) {
+            SmsNotificationHelper.cancel(context, notifId)
+            return
+        }
+        val ownerKey = session.ownerKey
+
         val txId = intent.getStringExtra(EXTRA_TRANSACTION_ID).orEmpty()
         val queuedWriteId = intent.getLongExtra(EXTRA_QUEUED_WRITE_ID, -1L)
         val smsHash = intent.getStringExtra(EXTRA_SMS_HASH).orEmpty()
@@ -128,8 +145,8 @@ class NotificationActionReceiver : BroadcastReceiver() {
             acceptedDelete = res is PocketBaseBackgroundClient.ApiResult.Success ||
                 res is PocketBaseBackgroundClient.ApiResult.QueuedOffline
             if (acceptedDelete) {
-                if (txId.isNotBlank()) db.updateProcessedStatusByTransaction(txId, "dismissed")
-                if (smsHash.isNotBlank()) db.updateProcessedStatusByHash(smsHash, "dismissed")
+                if (txId.isNotBlank()) db.updateProcessedStatusByTransaction(txId, "dismissed", ownerKey)
+                if (smsHash.isNotBlank()) db.updateProcessedStatusByHash(smsHash, "dismissed", ownerKey)
             }
         }
         SmsNotificationHelper.cancel(context, notifId)
@@ -158,5 +175,6 @@ class NotificationActionReceiver : BroadcastReceiver() {
         const val EXTRA_TX_JSON = "tx_json"
         const val EXTRA_TRANSACTION_ID = "transaction_id"
         const val EXTRA_QUEUED_WRITE_ID = "queued_write_id"
+        const val EXTRA_OWNER_KEY = "owner_key"
     }
 }
