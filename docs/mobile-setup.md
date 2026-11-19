@@ -45,7 +45,7 @@ Gradle defines two product flavors under the `distribution` dimension (`android/
 
 ### Building & Sideloading the `direct` APK
 
-Requires **Android Studio** (or Android SDK Platform 36 + JDK 17):
+Requires **Android Studio** (or Android SDK Platform 36 + JDK 21):
 
 ```sh
 cd android
@@ -53,6 +53,33 @@ cd android
 ```
 
 Install the generated APK (`android/app/build/outputs/apk/direct/debug/app-direct-debug.apk`) on your phone via USB (`adb install -r ...`) or by transferring the APK file.
+
+### Automatic GitHub Release APKs (CI)
+
+`.github/workflows/android-release.yml` automatically builds the `direct` APK (and verifies the `play` flavor compiles) and attaches it + its `.sha256` checksum to **GitHub Releases**:
+- **Every push to `main`:** updates the rolling `android-latest` pre-release with `fuloos-android-direct-latest.apk` (or `-debug-latest.apk` before release signing is configured).
+- **Version tags (`v*`, e.g. `git tag v1.0.0 && git push origin v1.0.0`) or published GitHub Releases:** builds and attaches `fuloos-android-direct-<tag>.apk`.
+- **Manual trigger:** run **Actions → Android APK Release → Run workflow** anytime.
+
+#### Optional Repository Variables & Signing Secrets
+Configure these under **GitHub → Settings → Secrets and variables → Actions**:
+
+| Name | Type | Purpose |
+| :--- | :--- | :--- |
+| `VITE_POCKETBASE_URL` | Variable (or Secret) | Your live PocketBase URL baked into release APKs (without this, the APK runs in local demo mode). |
+| `VITE_LEDGER_MODEL_URL` | Variable (optional) | URL for the optional on-device ML model bundle. |
+| `VITE_VAPID_PUBLIC_KEY` | Variable (optional) | Public VAPID key for Web Push notifications. |
+| `ANDROID_KEYSTORE_BASE64` | Secret (optional) | Base64-encoded `.jks` keystore (`base64 -w0 fuloos-release.jks`) so release APKs are signed consistently and upgrade in-place without uninstalling. |
+| `ANDROID_KEYSTORE_PASSWORD` | Secret (optional) | Keystore password. |
+| `ANDROID_KEY_ALIAS` | Secret (optional) | Key alias inside the keystore (e.g. `fuloos`). |
+| `ANDROID_KEY_PASSWORD` | Secret (optional) | Key password. |
+
+Generate a one-time release keystore locally with:
+
+```sh
+keytool -genkey -v -keystore fuloos-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias fuloos
+base64 -w0 fuloos-release.jks
+```
 
 > **Android 13+ Sideload Note ("Allow restricted settings"):**  
 > Android blocks `READ_SMS` / `RECEIVE_SMS` on sideloaded APKs until you approve restricted settings once:

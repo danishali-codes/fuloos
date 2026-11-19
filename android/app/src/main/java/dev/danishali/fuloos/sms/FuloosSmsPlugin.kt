@@ -66,7 +66,8 @@ class FuloosSmsPlugin : Plugin() {
         super.load()
         activeInstance = WeakReference(this)
         SmsNotificationHelper.ensureChannels(context)
-        schedulePeriodicCatchUpIfNeeded(context)
+        val ownerKey = authStore.load()?.ownerKey ?: db.getActiveOwnerKey()
+        schedulePeriodicCatchUpIfNeeded(context, ownerKey)
     }
 
     override fun handleOnDestroy() {
@@ -85,14 +86,14 @@ class FuloosSmsPlugin : Plugin() {
     fun requestSmsPermissions(call: PluginCall) {
         val aliases = mutableListOf<String>()
         if (BuildConfig.SUPPORTS_DIRECT_SMS) {
-            if (!hasPermission(Manifest.permission.READ_SMS) ||
-                !hasPermission(Manifest.permission.RECEIVE_SMS)
+            if (!hasAndroidPermission(Manifest.permission.READ_SMS) ||
+                !hasAndroidPermission(Manifest.permission.RECEIVE_SMS)
             ) {
                 aliases.add("sms")
             }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            !hasPermission(Manifest.permission.POST_NOTIFICATIONS)
+            !hasAndroidPermission(Manifest.permission.POST_NOTIFICATIONS)
         ) {
             aliases.add("notifications")
         }
@@ -111,7 +112,7 @@ class FuloosSmsPlugin : Plugin() {
 
     @PluginMethod
     fun listSmsSenders(call: PluginCall) {
-        if (!BuildConfig.SUPPORTS_DIRECT_SMS || !hasPermission(Manifest.permission.READ_SMS)) {
+        if (!BuildConfig.SUPPORTS_DIRECT_SMS || !hasAndroidPermission(Manifest.permission.READ_SMS)) {
             call.resolve(JSObject().put("senders", JSArray()))
             return
         }
@@ -128,7 +129,7 @@ class FuloosSmsPlugin : Plugin() {
 
     @PluginMethod
     fun readHistoricalSms(call: PluginCall) {
-        if (!BuildConfig.SUPPORTS_DIRECT_SMS || !hasPermission(Manifest.permission.READ_SMS)) {
+        if (!BuildConfig.SUPPORTS_DIRECT_SMS || !hasAndroidPermission(Manifest.permission.READ_SMS)) {
             call.resolve(
                 JSObject()
                     .put("messages", JSArray())
@@ -376,10 +377,10 @@ class FuloosSmsPlugin : Plugin() {
     }
 
     private fun buildPermissionStatus(): JSObject {
-        val readSms = BuildConfig.SUPPORTS_DIRECT_SMS && hasPermission(Manifest.permission.READ_SMS)
-        val receiveSms = BuildConfig.SUPPORTS_DIRECT_SMS && hasPermission(Manifest.permission.RECEIVE_SMS)
+        val readSms = BuildConfig.SUPPORTS_DIRECT_SMS && hasAndroidPermission(Manifest.permission.READ_SMS)
+        val receiveSms = BuildConfig.SUPPORTS_DIRECT_SMS && hasAndroidPermission(Manifest.permission.RECEIVE_SMS)
         val postNotifications = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            hasPermission(Manifest.permission.POST_NOTIFICATIONS)
+            hasAndroidPermission(Manifest.permission.POST_NOTIFICATIONS)
         } else {
             true
         }
@@ -393,7 +394,7 @@ class FuloosSmsPlugin : Plugin() {
         }
     }
 
-    private fun hasPermission(permission: String): Boolean {
+    private fun hasAndroidPermission(permission: String): Boolean {
         return ContextCompat.checkSelfPermission(context, permission) ==
             PackageManager.PERMISSION_GRANTED
     }
