@@ -8,124 +8,66 @@ import {
   type CaptureTokenInfo,
   type CapturedAlert,
   type Category,
-  type DigestDay,
   type GoalContribution,
   type Household,
   type HouseholdMember,
   type Ledger,
   type NotificationPreferences,
   type RecurringOccurrenceRecord,
-  type RecurringPreferences,
   type RecurringSchedule,
   type SavingsGoal,
   type Transaction,
   type TransactionRule,
 } from "./domain.ts";
-import { normalizeSplits, normalizeTags } from "./enrichment.ts";
 import type { NetWorthItem, NetWorthSnapshot } from "./netWorth.ts";
-export interface Session {
-  token: string;
-  user: {
-    id: string;
-    email: string;
-    verified?: boolean;
-    mfaEnabled?: boolean;
-  };
-}
-export type Table =
-  | "accounts"
-  | "categories"
-  | "transactions"
-  | "recurring"
-  | "recurring_occurrences"
-  | "recurring_prefs"
-  | "csv_presets"
-  | "budgets"
-  | "goals"
-  | "goal_contributions"
-  | "ml_settings"
-  | "ml_examples"
-  | "rules"
-  | "notification_prefs"
-  | "notification_log"
-  | "capture_tokens"
-  | "captured_alerts"
-  | "net_worth_items"
-  | "net_worth_snapshots"
-  | "push_subscriptions"
-  | "households"
-  | "household_members";
-export interface PushSubscriptionRecord {
-  id: string;
-  endpoint: string;
-  p256dh: string;
-  auth: string;
-  user_agent?: string;
-  created_at_iso?: string;
-}
-export interface CsvPresetRecord {
-  id: string;
-  name: string;
-  name_key: string;
-  config: unknown;
-}
-type SavedRecurringPreferences = RecurringPreferences & { id: string };
-type SavedNotificationPreferences = NotificationPreferences & { id: string };
-export interface NotificationLogRecord {
-  id: string;
-  dedup_key: string;
-  channel: string;
-  event_type: string;
-  period_key: string;
-  subject?: string;
-  sent_at?: string;
-}
-type RecordTypes = {
-  accounts: Account;
-  categories: Category;
-  transactions: Transaction;
-  recurring: RecurringSchedule;
-  recurring_occurrences: RecurringOccurrenceRecord;
-  recurring_prefs: SavedRecurringPreferences;
-  csv_presets: CsvPresetRecord;
-  budgets: Budget;
-  goals: SavingsGoal;
-  goal_contributions: GoalContribution;
-  ml_settings: MlSettingsRecord;
-  ml_examples: MlExampleRecord;
-  rules: TransactionRule;
-  notification_prefs: SavedNotificationPreferences;
-  notification_log: NotificationLogRecord;
-  capture_tokens: CaptureTokenInfo;
-  captured_alerts: CapturedAlert;
-  net_worth_items: NetWorthItem;
-  net_worth_snapshots: NetWorthSnapshot;
-  push_subscriptions: PushSubscriptionRecord;
-  households: Household;
-  household_members: HouseholdMember;
-};
-/** AI suggestion settings and correction log (see src/ledger/learning.ts). */
-export interface MlSettingsRecord {
-  id: string;
-  learn_consent: boolean;
-  share_consent?: boolean;
-  consent_version: string;
-  consent_at: string;
-  category_map: unknown;
-}
-export interface MlExampleRecord {
-  id: string;
-  merchant_text: string;
-  payee: string;
-  amount: number;
-  category_id: string | null;
-  source: "sms" | "csv" | "manual";
-  model_version: string;
-  suggested_category: string;
-  accepted: boolean;
-  created?: string;
-}
-export const IMPORT_BATCH_SIZE = 100;
+import {
+  BackendError,
+  IMPORT_BATCH_SIZE,
+  MfaRequiredError,
+  MissingCollectionError,
+  normalizeRecord,
+  serializeDismissedKeys,
+  validateBackendOrigin,
+  type CsvPresetRecord,
+  type FuloosBackend,
+  type PushSubscriptionRecord,
+  type RecordTypes,
+  type SavedNotificationPreferences,
+  type SavedRecurringPreferences,
+  type Session,
+  type StorageLike,
+  type Table,
+} from "./backendTypes.ts";
+
+export {
+  BackendError,
+  IMPORT_BATCH_SIZE,
+  MfaRequiredError,
+  MissingCollectionError,
+  normalizeRecord,
+  parseDismissedKeys,
+  resolveBackendConfig,
+  serializeDismissedKeys,
+  validateBackendOrigin,
+  type BackendEnv,
+  type BackendKind,
+  type CsvPresetRecord,
+  type FuloosBackend,
+  type MfaMethod,
+  type MlExampleRecord,
+  type MlSettingsRecord,
+  type NotificationLogRecord,
+  type PushSubscriptionRecord,
+  type RecordTypes,
+  type ResolvedBackendConfig,
+  type SavedNotificationPreferences,
+  type SavedRecurringPreferences,
+  type Session,
+  type StorageLike,
+  type Table,
+  type TotpEnrollment,
+} from "./backendTypes.ts";
+
 type AuthResponse = {
   token: string;
   record: {
@@ -135,76 +77,11 @@ type AuthResponse = {
     mfa_enabled?: boolean;
   };
 };
-interface StorageLike {
-  getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
-  removeItem(key: string): void;
-}
 const storageKey = "fuloos.auth.v1";
 
-/** A PocketBase error response, keeping the status and field codes for callers. */
-export class BackendError extends Error {
-  readonly status: number;
-  readonly fields: Record<string, { code?: string; message?: string }>;
-  constructor(
-    message: string,
-    status: number,
-    fields: Record<string, { code?: string; message?: string }> = {},
-  ) {
-    super(message);
-    this.name = "BackendError";
-    this.status = status;
-    this.fields = fields;
-  }
-}
-export class MissingCollectionError extends BackendError {}
-export class MfaRequiredError extends BackendError {
-  readonly mfaId: string;
-  constructor(
-    mfaId: string,
-    message = "Multi-factor authentication required.",
-  ) {
-    super(message, 401);
-    this.name = "MfaRequiredError";
-    this.mfaId = mfaId;
-  }
-}
-const MAX_DISMISSED_KEYS = 400;
-
-function parseDismissedKeys(raw: unknown): string[] {
-  if (Array.isArray(raw)) {
-    return [
-      ...new Set(raw.filter((v): v is string => typeof v === "string" && !!v)),
-    ].slice(-MAX_DISMISSED_KEYS);
-  }
-  if (typeof raw === "string" && raw.trim()) {
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return [
-          ...new Set(
-            parsed.filter((v): v is string => typeof v === "string" && !!v),
-          ),
-        ].slice(-MAX_DISMISSED_KEYS);
-      }
-    } catch {
-      return [];
-    }
-  }
-  return [];
-}
-
-function serializeDismissedKeys(raw: unknown): string {
-  const list = parseDismissedKeys(raw);
-  let encoded = JSON.stringify(list);
-  while (encoded.length > 19500 && list.length > 0) {
-    list.shift();
-    encoded = JSON.stringify(list);
-  }
-  return encoded;
-}
-
-export class PocketBaseBackend {
+export class PocketBaseBackend implements FuloosBackend {
+  readonly kind = "pocketbase" as const;
+  readonly mfaMethod = "email_otp" as const;
   private session: Session | null = null;
   private listeners = new Set<(session: Session | null) => void>();
   readonly url: string;
@@ -217,20 +94,7 @@ export class PocketBaseBackend {
   ) {
     this.storage = storage;
     this.fetcher = fetcher;
-    const parsed = new URL(url);
-    if (
-      parsed.protocol !== "https:" &&
-      !(
-        parsed.protocol === "http:" &&
-        ["localhost", "127.0.0.1"].includes(parsed.hostname)
-      )
-    )
-      throw new Error("PocketBase must use HTTPS.");
-    if (parsed.username || parsed.password || parsed.search || parsed.hash)
-      throw new Error(
-        "Use the public PocketBase origin without credentials or query parameters.",
-      );
-    this.url = parsed.href.replace(/\/$/, "");
+    this.url = validateBackendOrigin(url, "PocketBase");
     try {
       const raw = this.storage?.getItem(storageKey);
       if (raw) {
@@ -920,324 +784,7 @@ export class PocketBaseBackend {
     table: K,
     record: RecordTypes[K],
   ): RecordTypes[K] {
-    if (table === "accounts") {
-      const acc = { ...(record as Account) };
-      if (acc.currency && acc.currency.trim()) {
-        acc.currency = acc.currency.trim().toUpperCase();
-      } else {
-        delete acc.currency;
-      }
-      for (const key of [
-        "credit_limit",
-        "statement_day",
-        "payment_due_day",
-        "apr_bps",
-        "minimum_payment",
-      ] as const) {
-        const val = acc[key];
-        if (val != null && Number.isFinite(Number(val)) && Number(val) > 0) {
-          acc[key] = Math.trunc(Number(val));
-        } else {
-          delete acc[key];
-        }
-      }
-      if (acc.household_id && String(acc.household_id).trim()) {
-        acc.household_id = String(acc.household_id).trim();
-      } else {
-        delete acc.household_id;
-      }
-      return acc as RecordTypes[K];
-    }
-    if (table === "transactions") {
-      const tx = { ...(record as Transaction) };
-      const tags = normalizeTags(tx.tags);
-      const splits = normalizeSplits(tx.splits);
-      const hasForeign =
-        Boolean(tx.original_currency) && tx.original_currency !== "AED";
-      if (!hasForeign) {
-        delete tx.original_currency;
-        delete tx.original_amount;
-        delete tx.fx_rate;
-      }
-      return {
-        ...tx,
-        to_account_id: tx.to_account_id || null,
-        category_id: tx.category_id || null,
-        ...(tags.length ? { tags } : { tags: [] }),
-        ...(splits.length ? { splits } : { splits: [] }),
-        ...(tx.receipt ? { receipt: tx.receipt } : {}),
-      } as RecordTypes[K];
-    }
-    if (table === "rules") {
-      const r = record as TransactionRule;
-      const tags = normalizeTags(r.add_tags);
-      return {
-        id: r.id,
-        name: String(r.name ?? ""),
-        enabled: Boolean(r.enabled),
-        priority: Number.isFinite(Number(r.priority))
-          ? Math.trunc(Number(r.priority))
-          : 100,
-        match_field:
-          r.match_field === "payee" || r.match_field === "notes"
-            ? r.match_field
-            : "either",
-        match_type:
-          r.match_type === "starts_with" ||
-          r.match_type === "exact" ||
-          r.match_type === "regex"
-            ? r.match_type
-            : "contains",
-        pattern: String(r.pattern ?? ""),
-        min_amount:
-          r.min_amount != null && Number(r.min_amount) > 0
-            ? Math.trunc(Number(r.min_amount))
-            : null,
-        max_amount:
-          r.max_amount != null && Number(r.max_amount) > 0
-            ? Math.trunc(Number(r.max_amount))
-            : null,
-        set_category_id: r.set_category_id || null,
-        add_tags: tags,
-        set_payee: r.set_payee ? String(r.set_payee) : "",
-      } as RecordTypes[K];
-    }
-    if (table === "recurring") {
-      const r = record as RecurringSchedule;
-      return {
-        ...r,
-        category_id: r.category_id || null,
-        end_date: r.end_date || null,
-      } as RecordTypes[K];
-    }
-    if (table === "recurring_occurrences") {
-      const occ = record as RecurringOccurrenceRecord & {
-        match_source?: string;
-        match_reason?: string;
-      };
-      const normalized: RecurringOccurrenceRecord = { ...occ };
-      if (occ.match_source === "auto" || occ.match_source === "manual") {
-        normalized.match_source = occ.match_source;
-      } else {
-        delete normalized.match_source;
-      }
-      if (occ.match_reason) {
-        normalized.match_reason = String(occ.match_reason);
-      } else {
-        delete normalized.match_reason;
-      }
-      return normalized as RecordTypes[K];
-    }
-    if (table === "ml_examples") {
-      const e = record as MlExampleRecord;
-      return { ...e, category_id: e.category_id || null } as RecordTypes[K];
-    }
-    if (table === "budgets") {
-      const b = record as Budget;
-      return {
-        id: b.id,
-        category_id: b.category_id,
-        amount: b.amount,
-        start_month: b.start_month,
-        end_month: b.end_month || null,
-        ...(b.household_id ? { household_id: b.household_id } : {}),
-      } as RecordTypes[K];
-    }
-    if (table === "household_members") {
-      const m = record as HouseholdMember;
-      return {
-        id: m.id,
-        household_id: m.household_id,
-        user_id: m.user_id || null,
-        role: m.role === "owner" || m.role === "viewer" ? m.role : "editor",
-        status: m.status === "pending" ? "pending" : "active",
-        invite_code: m.invite_code || undefined,
-        member_email: m.member_email || undefined,
-      } as RecordTypes[K];
-    }
-    if (table === "goals") {
-      const g = record as SavingsGoal;
-      return {
-        id: g.id,
-        name: g.name,
-        target_amount: Number(g.target_amount ?? 0),
-        current_amount: Number(g.current_amount ?? 0),
-        target_date: g.target_date || null,
-        account_id: g.account_id || null,
-        color: g.color || "#1d5b48",
-        emoji: g.emoji || undefined,
-        kind: g.kind === "sinking_fund" ? "sinking_fund" : "savings",
-        status:
-          g.status === "completed" || g.status === "paused"
-            ? g.status
-            : "active",
-        notes: g.notes ?? "",
-      } as RecordTypes[K];
-    }
-    if (table === "goal_contributions") {
-      const c = record as GoalContribution;
-      return {
-        id: c.id,
-        goal_id: c.goal_id,
-        amount: Number(c.amount ?? 0),
-        date: c.date,
-        transaction_id: c.transaction_id || null,
-        notes: c.notes ?? "",
-      } as RecordTypes[K];
-    }
-    if (table === "recurring_prefs") {
-      const pref = record as {
-        id: string;
-        auto_detect?: string;
-        auto_match?: string;
-        dismissed_keys?: unknown;
-      };
-      return {
-        id: pref.id,
-        auto_detect: pref.auto_detect === "off" ? "off" : "on",
-        auto_match:
-          pref.auto_match === "review" || pref.auto_match === "off"
-            ? pref.auto_match
-            : "auto",
-        dismissed_keys: parseDismissedKeys(pref.dismissed_keys),
-      } as RecordTypes[K];
-    }
-    if (table === "notification_prefs") {
-      const p = record as Partial<SavedNotificationPreferences>;
-      const validDays: readonly DigestDay[] = [
-        "sun",
-        "mon",
-        "tue",
-        "wed",
-        "thu",
-        "fri",
-        "sat",
-      ];
-      const days = Number(p.upcoming_bill_days);
-      return {
-        id: String(p.id ?? ""),
-        email_enabled: Boolean(p.email_enabled),
-        upcoming_bill_enabled: Boolean(p.upcoming_bill_enabled),
-        upcoming_bill_days:
-          Number.isInteger(days) && days >= 1 && days <= 30 ? days : 3,
-        overdue_enabled: Boolean(p.overdue_enabled),
-        budget_80_enabled: Boolean(p.budget_80_enabled),
-        budget_100_enabled: Boolean(p.budget_100_enabled),
-        weekly_digest_enabled: Boolean(p.weekly_digest_enabled),
-        digest_day: validDays.includes(p.digest_day as DigestDay)
-          ? (p.digest_day as DigestDay)
-          : "sun",
-        timezone:
-          typeof p.timezone === "string" && p.timezone.trim()
-            ? p.timezone.trim()
-            : "Asia/Dubai",
-        channels:
-          p.channels && typeof p.channels === "object"
-            ? (p.channels as Record<string, boolean>)
-            : { email: Boolean(p.email_enabled) },
-      } as RecordTypes[K];
-    }
-    if (table === "push_subscriptions") {
-      const s = record as Partial<PushSubscriptionRecord>;
-      return {
-        id: String(s.id ?? ""),
-        endpoint: String(s.endpoint ?? ""),
-        p256dh: String(s.p256dh ?? ""),
-        auth: String(s.auth ?? ""),
-        user_agent: String(s.user_agent ?? ""),
-        created_at_iso: String(s.created_at_iso ?? ""),
-      } as RecordTypes[K];
-    }
-    if (table === "capture_tokens") {
-      const t = record as Partial<CaptureTokenInfo>;
-      return {
-        id: String(t.id ?? ""),
-        token_preview: String(t.token_preview ?? ""),
-        enabled: Boolean(t.enabled),
-        default_account_id: t.default_account_id || null,
-      } as RecordTypes[K];
-    }
-    if (table === "captured_alerts") {
-      const a = record as Partial<CapturedAlert>;
-      const source =
-        a.source === "sms_native"
-          ? "sms_native"
-          : a.source === "shortcut"
-            ? "shortcut"
-            : "email";
-      let topSuggestions: CapturedAlert["top_suggestions"] = undefined;
-      if (Array.isArray(a.top_suggestions)) {
-        topSuggestions = a.top_suggestions
-          .filter(
-            (s): s is NonNullable<CapturedAlert["top_suggestions"]>[number] =>
-              !!s &&
-              typeof s === "object" &&
-              typeof s.category_id === "string" &&
-              typeof s.name === "string",
-          )
-          .map((s) => ({
-            category_id: s.category_id,
-            name: s.name,
-            confidence: Number(s.confidence ?? 0),
-          }));
-      }
-      return {
-        id: String(a.id ?? ""),
-        source,
-        subject: String(a.subject ?? ""),
-        raw_text: String(a.raw_text ?? ""),
-        parsed_type:
-          a.parsed_type === "expense" || a.parsed_type === "income"
-            ? a.parsed_type
-            : "unknown",
-        parsed_amount: Number(a.parsed_amount ?? 0),
-        parsed_date: String(a.parsed_date ?? ""),
-        parsed_payee: String(a.parsed_payee ?? ""),
-        parsed_notes: String(a.parsed_notes ?? ""),
-        account_hint: String(a.account_hint ?? ""),
-        status:
-          a.status === "imported" || a.status === "dismissed"
-            ? a.status
-            : "pending",
-        created_at_iso: String(a.created_at_iso ?? ""),
-        ...(a.account_id ? { account_id: String(a.account_id) } : {}),
-        ...(a.suggested_category_id
-          ? { suggested_category_id: String(a.suggested_category_id) }
-          : {}),
-        ...(typeof a.confidence === "number" && Number.isFinite(a.confidence)
-          ? { confidence: a.confidence }
-          : {}),
-        ...(topSuggestions?.length ? { top_suggestions: topSuggestions } : {}),
-        ...(a.sms_sender ? { sms_sender: String(a.sms_sender) } : {}),
-        ...(a.card_last4 ? { card_last4: String(a.card_last4) } : {}),
-      } as RecordTypes[K];
-    }
-    if (table === "net_worth_items") {
-      const i = record as NetWorthItem;
-      return {
-        id: i.id,
-        name: String(i.name ?? ""),
-        kind: i.kind === "liability" ? "liability" : "asset",
-        category: i.category,
-        current_value: Number(i.current_value ?? 0),
-        as_of_date: String(i.as_of_date ?? ""),
-        notes: i.notes ?? "",
-        color: i.color || "#1d5b48",
-        emoji: i.emoji || undefined,
-      } as RecordTypes[K];
-    }
-    if (table === "net_worth_snapshots") {
-      const s = record as NetWorthSnapshot;
-      return {
-        id: s.id,
-        item_id: s.item_id,
-        value: Number(s.value ?? 0),
-        date: String(s.date ?? ""),
-        notes: s.notes ?? "",
-        ...(s.revision !== undefined ? { revision: Number(s.revision) } : {}),
-      } as RecordTypes[K];
-    }
-    return record;
+    return normalizeRecord(table, record);
   }
   async updateTransactions(
     values: Transaction[],

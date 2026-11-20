@@ -76,7 +76,7 @@ export function createSessionLearningStore(): LearningStore {
   };
 }
 
-/** The subset of PocketBaseBackend this store needs (kept small so tests can fake it). */
+/** The subset of FuloosBackend this store needs (kept small so tests can fake it). */
 export interface LearningRemote {
   listSettings(): Promise<
     {

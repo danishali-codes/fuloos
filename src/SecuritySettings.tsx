@@ -1,6 +1,7 @@
 import { translateText as uiText } from "./i18n";
 import React, { useState } from "react";
 import { KeyRound, Lock, LogOut, Mail, ShieldCheck } from "lucide-react";
+import type { TotpEnrollment } from "./backendTypes";
 import { backend, type Session } from "./client";
 import { confirmDialog } from "./dialogStore";
 import { errorMessage } from "./domain";
@@ -32,9 +33,17 @@ export function SecuritySettings({
   onCloseSettings: () => void;
 }) {
   const userId = session.user.id;
+  const isTotpMfa = backend?.mfaMethod === "totp";
+  const isSupabase = backend?.kind === "supabase";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+
+  // TOTP MFA enrollment (Supabase)
+  const [totpEnrollment, setTotpEnrollment] = useState<TotpEnrollment | null>(
+    null,
+  );
+  const [totpCode, setTotpCode] = useState("");
 
   // Email verification
   const [verifyOpen, setVerifyOpen] = useState(false);
@@ -97,6 +106,68 @@ export function SecuritySettings({
           ? "Two-factor authentication (Email OTP) is now enabled."
           : "Two-factor authentication has been turned off.",
       );
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function startTotpSetup() {
+    if (!backend?.enrollTotpMfa || busy) return;
+    clearFeedback();
+    setBusy(true);
+    try {
+      const enrollment = await backend.enrollTotpMfa();
+      setTotpEnrollment(enrollment);
+      setTotpCode("");
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitTotpEnrollment(e: React.FormEvent) {
+    e.preventDefault();
+    if (!backend?.verifyTotpEnrollment || !totpEnrollment || busy) return;
+    clearFeedback();
+    setBusy(true);
+    try {
+      await backend.verifyTotpEnrollment(totpEnrollment.factorId, totpCode);
+      setTotpEnrollment(null);
+      setTotpCode("");
+      setNotice(
+        "Two-factor authentication (Authenticator app) is now enabled.",
+      );
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function disableTotp() {
+    if (!backend || busy) return;
+    clearFeedback();
+    const ok = await confirmDialog({
+      title: "Disable authenticator two-factor authentication?",
+      message:
+        "Signing in will no longer ask for a 6-digit code from your authenticator app.",
+      confirmLabel: "Disable 2FA",
+      tone: "danger",
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      if (backend.disableTotpMfa) {
+        await backend.disableTotpMfa();
+      } else {
+        await backend.setMfaEnabled(false);
+      }
+      setTotpEnrollment(null);
+      setTotpCode("");
+      setNotice("Two-factor authentication has been turned off.");
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -389,29 +460,128 @@ export function SecuritySettings({
       <div className="security-block">
         <div className="security-row">
           <div>
-            <b>{uiText("Two-factor authentication (Email OTP)")}</b>
+            <b>
+              {isTotpMfa
+                ? uiText("Two-factor authentication (Authenticator app)")
+                : uiText("Two-factor authentication (Email OTP)")}
+            </b>
             <p className="muted small">
-              {session.user.mfaEnabled
-                ? uiText(
-                    "Enabled — password sign-in requires a one-time email code.",
-                  )
-                : uiText(
-                    "Optional — require a one-time email code on sign-in (requires server SMTP).",
-                  )}
+              {isTotpMfa
+                ? session.user.mfaEnabled
+                  ? uiText(
+                      "Enabled — signing in requires a 6-digit code from your authenticator app.",
+                    )
+                  : uiText(
+                      "Optional — protect your account with a 6-digit code from an authenticator app.",
+                    )
+                : session.user.mfaEnabled
+                  ? uiText(
+                      "Enabled — password sign-in requires a one-time email code.",
+                    )
+                  : uiText(
+                      "Optional — require a one-time email code on sign-in (requires server SMTP).",
+                    )}
             </p>
           </div>
-          <button
-            type="button"
-            className="secondary"
-            disabled={busy}
-            onClick={toggleMfa}
-          >
-            <ShieldCheck size={14} />{" "}
-            {session.user.mfaEnabled
-              ? uiText("Disable 2FA")
-              : uiText("Enable 2FA")}
-          </button>
+          {isTotpMfa ? (
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy}
+              onClick={session.user.mfaEnabled ? disableTotp : startTotpSetup}
+            >
+              <ShieldCheck size={14} />{" "}
+              {session.user.mfaEnabled
+                ? uiText("Disable 2FA")
+                : uiText("Set up 2FA")}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy}
+              onClick={toggleMfa}
+            >
+              <ShieldCheck size={14} />{" "}
+              {session.user.mfaEnabled
+                ? uiText("Disable 2FA")
+                : uiText("Enable 2FA")}
+            </button>
+          )}
         </div>
+
+        {isTotpMfa && totpEnrollment && (
+          <form onSubmit={submitTotpEnrollment} className="security-sub-form">
+            <p className="muted small">
+              {uiText(
+                "Scan this QR code with your authenticator app, or enter the setup key manually, then confirm with a 6-digit code.",
+              )}
+            </p>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "12px",
+                alignItems: "center",
+              }}
+            >
+              {totpEnrollment.qrCode && (
+                <img
+                  src={totpEnrollment.qrCode}
+                  alt={uiText("Authenticator QR code")}
+                  width={160}
+                  height={160}
+                  style={{
+                    borderRadius: "8px",
+                    background: "#fff",
+                    padding: "6px",
+                  }}
+                />
+              )}
+              <div style={{ display: "grid", gap: "8px", flex: "1 1 200px" }}>
+                <div className="small muted">
+                  {uiText("Manual setup key:")}{" "}
+                  <code style={{ wordBreak: "break-all" }}>
+                    {totpEnrollment.secret}
+                  </code>
+                </div>
+                <label>
+                  {" "}
+                  {uiText("6-digit verification code")}{" "}
+                  <input
+                    required
+                    autoComplete="one-time-code"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={totpCode}
+                    onChange={(e) =>
+                      setTotpCode(e.target.value.replace(/\D/g, ""))
+                    }
+                    placeholder="000000"
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="security-actions">
+              <button type="submit" className="primary" disabled={busy}>
+                {" "}
+                {uiText("Verify & enable 2FA")}{" "}
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy}
+                onClick={() => {
+                  setTotpEnrollment(null);
+                  setTotpCode("");
+                }}
+              >
+                {" "}
+                {uiText("Cancel")}{" "}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
 
       <div className="security-block">
@@ -591,17 +761,19 @@ export function SecuritySettings({
 
         {pwOpen && (
           <form onSubmit={submitPasswordChange} className="security-sub-form">
-            <label>
-              {" "}
-              {uiText("Current password")}{" "}
-              <input
-                required
-                type="password"
-                autoComplete="current-password"
-                value={oldPassword}
-                onChange={(e) => setOldPassword(e.target.value)}
-              />
-            </label>
+            {!isSupabase && (
+              <label>
+                {" "}
+                {uiText("Current password")}{" "}
+                <input
+                  required
+                  type="password"
+                  autoComplete="current-password"
+                  value={oldPassword}
+                  onChange={(e) => setOldPassword(e.target.value)}
+                />
+              </label>
+            )}
             <div className="security-grid">
               <label>
                 {" "}
@@ -682,17 +854,19 @@ export function SecuritySettings({
                     placeholder={uiText("Token from email")}
                   />
                 </label>
-                <label>
-                  {" "}
-                  {uiText("Current password")}{" "}
-                  <input
-                    required
-                    type="password"
-                    autoComplete="current-password"
-                    value={emailConfirmPassword}
-                    onChange={(e) => setEmailConfirmPassword(e.target.value)}
-                  />
-                </label>
+                {!isSupabase && (
+                  <label>
+                    {" "}
+                    {uiText("Current password")}{" "}
+                    <input
+                      required
+                      type="password"
+                      autoComplete="current-password"
+                      value={emailConfirmPassword}
+                      onChange={(e) => setEmailConfirmPassword(e.target.value)}
+                    />
+                  </label>
+                )}
               </div>
               <button type="submit" className="secondary" disabled={busy}>
                 {" "}

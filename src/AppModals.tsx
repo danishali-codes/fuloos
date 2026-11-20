@@ -515,6 +515,7 @@ export function AppModals({
           <CaptureAlertsModal
             demo={demo}
             pbUrl={backend?.url ?? ""}
+            backendKind={backend?.kind}
             ledger={ledger}
             owner={demo ? "demo" : (session?.user.id ?? "anonymous")}
             learning={learningStore}
