@@ -10,6 +10,21 @@ import {
 } from "../src/schemaStatus.ts";
 
 test("summarizeSchemaStatus reports ok when all collections exist", () => {
+  assert.equal(EXPECTED_COLLECTIONS.length, 22);
+  for (const required of [
+    "notification_prefs",
+    "notification_log",
+    "capture_tokens",
+    "captured_alerts",
+    "push_subscriptions",
+    "households",
+    "household_members",
+  ] as const) {
+    assert.ok(
+      EXPECTED_COLLECTIONS.includes(required),
+      `Missing ${required} in EXPECTED_COLLECTIONS`,
+    );
+  }
   const status = summarizeSchemaStatus(
     EXPECTED_COLLECTIONS.map((table) => ({ table, exists: true })),
   );

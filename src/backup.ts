@@ -1,4 +1,4 @@
-import type { PocketBaseBackend } from "./backend.ts";
+import type { FuloosBackend } from "./backendTypes.ts";
 import { validateSavingsGoal, validateGoalContribution } from "./goals.ts";
 import {
   validateNetWorthItem,
@@ -1001,10 +1001,10 @@ function transactionFingerprint(t: Omit<Transaction, "id">): string {
   ]);
 }
 
-export type RestoreBackend = Pick<PocketBaseBackend, "save" | "createMany"> &
+export type RestoreBackend = Pick<FuloosBackend, "save" | "createMany"> &
   Partial<
     Pick<
-      PocketBaseBackend,
+      FuloosBackend,
       | "saveTransactionWithReceipt"
       | "createHousehold"
       | "shareAccountWithHousehold"

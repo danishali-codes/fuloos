@@ -251,5 +251,17 @@ test("captureAlerts: pendingCapturedAlerts and webhook helpers", () => {
 
   const url = buildCaptureWebhookUrl("https://pb.example.com/");
   assert.equal(url, "https://pb.example.com/api/fuloos/inbound-email");
+  assert.equal(
+    buildCaptureWebhookUrl("https://proj.supabase.co/", "supabase"),
+    "https://proj.supabase.co/functions/v1/inbound-capture",
+  );
+  assert.equal(
+    buildCaptureWebhookUrl(
+      "https://proj.supabase.co/",
+      "supabase",
+      "https://fuloos.danishali.dev/api/inbound-email",
+    ),
+    "https://fuloos.danishali.dev/api/inbound-email",
+  );
   assert.match(buildShortcutSnippet(url, "flc_123"), /flc_123/);
 });

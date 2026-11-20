@@ -1,4 +1,4 @@
-import { MissingCollectionError, type Table } from "./backend.ts";
+import { MissingCollectionError, type Table } from "./backendTypes.ts";
 
 export const EXPECTED_COLLECTIONS: readonly Table[] = [
   "accounts",
@@ -14,8 +14,15 @@ export const EXPECTED_COLLECTIONS: readonly Table[] = [
   "ml_settings",
   "ml_examples",
   "rules",
+  "notification_prefs",
+  "notification_log",
+  "capture_tokens",
+  "captured_alerts",
   "net_worth_items",
   "net_worth_snapshots",
+  "push_subscriptions",
+  "households",
+  "household_members",
 ];
 
 export interface SchemaStatus {

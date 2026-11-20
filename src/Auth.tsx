@@ -8,12 +8,25 @@ import { ThemeToggle } from "./ThemeToggle";
 import { LanguageToggle } from "./LanguageToggle";
 import { useLocale } from "./i18n";
 
+export interface PendingMfaChallenge {
+  method: "email_otp" | "totp";
+  mfaId: string;
+  otpId: string;
+  factorId?: string;
+  challengeId?: string;
+  email: string;
+}
+
 export function Auth({
   onDemo,
   externalError,
+  initialMfa,
+  onClearInitialMfa,
 }: {
   onDemo: () => void;
   externalError: string;
+  initialMfa?: PendingMfaChallenge | null;
+  onClearInitialMfa?: () => void;
 }) {
   const { t } = useLocale();
   const [signup, setSignup] = useState(false),
@@ -22,12 +35,16 @@ export function Auth({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
-  const [mfa, setMfa] = useState<{
-    mfaId: string;
-    otpId: string;
-    email: string;
-  } | null>(null);
+  const [mfa, setMfa] = useState<PendingMfaChallenge | null>(
+    () => initialMfa ?? null,
+  );
   const [otpCode, setOtpCode] = useState("");
+  useEffect(() => {
+    if (initialMfa) {
+      setMfa(initialMfa);
+      setOtpCode("");
+    }
+  }, [initialMfa]);
   const [resetMode, setResetMode] = useState<"none" | "request" | "confirm">(
     "none",
   );
@@ -60,6 +77,18 @@ export function Auth({
       .signInWithGoogle()
       .catch(async (e) => {
         if (e instanceof MfaRequiredError) {
+          if (e.method === "totp" && e.factorId && e.challengeId) {
+            setMfa({
+              method: "totp",
+              mfaId: e.mfaId,
+              otpId: "",
+              factorId: e.factorId,
+              challengeId: e.challengeId,
+              email: e.email || email,
+            });
+            setOtpCode("");
+            return;
+          }
           setError(
             "Multi-factor authentication is required for this account. Please sign in with email and password.",
           );
@@ -73,11 +102,11 @@ export function Auth({
     if (!backend) return;
     try {
       const { otpId } = await backend.requestOtp(targetEmail);
-      setMfa({ mfaId, otpId, email: targetEmail });
+      setMfa({ method: "email_otp", mfaId, otpId, email: targetEmail });
       setOtpCode("");
       setNotice(`We sent a verification code to ${targetEmail.trim()}.`);
     } catch (e) {
-      setMfa({ mfaId, otpId: "", email: targetEmail });
+      setMfa({ method: "email_otp", mfaId, otpId: "", email: targetEmail });
       setError(
         errorMessage(e) ||
           "Could not send the email verification code. Try resending or contact support.",
@@ -89,6 +118,30 @@ export function Auth({
     if (!backend || !mfa) return;
     setError("");
     setNotice("");
+    if (mfa.method === "totp") {
+      if (!mfa.factorId || !mfa.challengeId || !backend.verifyMfaTotp) {
+        setError("Authenticator verification is unavailable. Please sign in again.");
+        return;
+      }
+      setBusy(true);
+      try {
+        await backend.verifyMfaTotp(mfa.factorId, mfa.challengeId, otpCode);
+        onClearInitialMfa?.();
+      } catch (err) {
+        if (err instanceof BackendError && err.status === 401) {
+          setMfa(null);
+          setOtpCode("");
+          onClearInitialMfa?.();
+          backend.signOut();
+          setError("Your sign-in session expired. Please sign in again.");
+        } else {
+          setError(errorMessage(err));
+        }
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     if (!mfa.otpId) {
       setError("Request a verification code first.");
       return;
@@ -96,10 +149,12 @@ export function Auth({
     setBusy(true);
     try {
       await backend.verifyMfaOtp(mfa.mfaId, mfa.otpId, otpCode);
+      onClearInitialMfa?.();
     } catch (err) {
       if (err instanceof BackendError && err.status === 401) {
         setMfa(null);
         setOtpCode("");
+        onClearInitialMfa?.();
         setError("Your sign-in session expired. Please sign in again.");
       } else {
         setError(errorMessage(err));
@@ -109,7 +164,7 @@ export function Auth({
     }
   }
   async function resendOtp() {
-    if (!backend || !mfa || busy) return;
+    if (!backend || !mfa || mfa.method !== "email_otp" || busy) return;
     setError("");
     setNotice("");
     setBusy(true);
@@ -193,7 +248,19 @@ export function Auth({
       } else await backend.signIn(email, password);
     } catch (e) {
       if (e instanceof MfaRequiredError) {
-        await startMfaOtp(e.mfaId, email);
+        if (e.method === "totp" && e.factorId && e.challengeId) {
+          setMfa({
+            method: "totp",
+            mfaId: e.mfaId,
+            otpId: "",
+            factorId: e.factorId,
+            challengeId: e.challengeId,
+            email: e.email || email,
+          });
+          setOtpCode("");
+        } else {
+          await startMfaOtp(e.mfaId, email);
+        }
       } else {
         setError(errorMessage(e));
       }
@@ -285,8 +352,14 @@ export function Auth({
               <p className="muted small">
                 {" "}
                 {uiText("Two-factor verification is enabled for")}{" "}
-                <b>{mfa.email}</b>
-                {uiText(". Enter the one-time code sent to your email.")}{" "}
+                <b>{mfa.email || uiText("your account")}</b>
+                {mfa.method === "totp"
+                  ? uiText(
+                      ". Enter the 6-digit code from your authenticator app.",
+                    )
+                  : uiText(
+                      ". Enter the one-time code sent to your email.",
+                    )}{" "}
               </p>
               <label>
                 {" "}
@@ -296,9 +369,14 @@ export function Auth({
                   autoFocus
                   autoComplete="one-time-code"
                   inputMode="numeric"
+                  maxLength={mfa.method === "totp" ? 6 : undefined}
                   value={otpCode}
                   onChange={(e) => setOtpCode(e.target.value)}
-                  placeholder={uiText("Enter code from email")}
+                  placeholder={
+                    mfa.method === "totp"
+                      ? uiText("Enter 6-digit authenticator code")
+                      : uiText("Enter code from email")
+                  }
                 />
               </label>
               {(error || externalError) && (
@@ -316,24 +394,29 @@ export function Auth({
                 <ArrowRight size={17} />
               </button>
               <div className="auth-aux-actions">
-                <button
-                  type="button"
-                  className="text-button"
-                  disabled={busy}
-                  onClick={resendOtp}
-                >
-                  {" "}
-                  {uiText("Resend code")}{" "}
-                </button>
+                {mfa.method === "email_otp" && (
+                  <button
+                    type="button"
+                    className="text-button"
+                    disabled={busy}
+                    onClick={resendOtp}
+                  >
+                    {" "}
+                    {uiText("Resend code")}{" "}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="text-button"
                   disabled={busy}
                   onClick={() => {
+                    const wasTotp = mfa.method === "totp";
                     setMfa(null);
                     setOtpCode("");
                     setError("");
                     setNotice("");
+                    onClearInitialMfa?.();
+                    if (wasTotp) backend?.signOut();
                   }}
                 >
                   {" "}

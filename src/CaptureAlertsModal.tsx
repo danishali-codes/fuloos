@@ -53,6 +53,7 @@ interface RowDraft {
 export function CaptureAlertsModal({
   demo,
   pbUrl,
+  backendKind = "pocketbase",
   ledger,
   owner,
   learning,
@@ -66,6 +67,7 @@ export function CaptureAlertsModal({
 }: {
   demo: boolean;
   pbUrl: string;
+  backendKind?: "pocketbase" | "supabase";
   ledger: Ledger;
   owner: string;
   learning: LearningStore;
@@ -319,7 +321,12 @@ export function CaptureAlertsModal({
   }
 
   const webhookUrl = buildCaptureWebhookUrl(
-    pbUrl || "https://your-pocketbase-host",
+    pbUrl ||
+      (backendKind === "supabase"
+        ? "https://your-supabase-project.supabase.co"
+        : "https://your-pocketbase-host"),
+    backendKind,
+    import.meta.env.VITE_CAPTURE_WEBHOOK_URL,
   );
 
   return (

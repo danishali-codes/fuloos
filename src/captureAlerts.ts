@@ -251,8 +251,17 @@ export function alertToImportTransaction(
   return tx;
 }
 
-export function buildCaptureWebhookUrl(pbUrl: string): string {
-  return `${pbUrl.replace(/\/$/, "")}/api/fuloos/inbound-email`;
+export function buildCaptureWebhookUrl(
+  baseUrl: string,
+  backendKind: "pocketbase" | "supabase" = "pocketbase",
+  overrideUrl?: string,
+): string {
+  if (overrideUrl?.trim()) return overrideUrl.trim();
+  const trimmed = baseUrl.replace(/\/$/, "");
+  if (backendKind === "supabase") {
+    return `${trimmed}/functions/v1/inbound-capture`;
+  }
+  return `${trimmed}/api/fuloos/inbound-email`;
 }
 
 export function buildShortcutSnippet(webhookUrl: string, token: string): string {

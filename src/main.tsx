@@ -23,7 +23,8 @@ import { type BudgetDraft } from "./BudgetsView";
 import { validateBudget } from "./budgets";
 import { TransactionsPanel } from "./TransactionTable";
 import { useDensity } from "./density";
-import { Auth } from "./Auth";
+import { MfaRequiredError } from "./backend";
+import { Auth, type PendingMfaChallenge } from "./Auth";
 import { type EditorModalState } from "./EditorModal";
 import { OverviewPage, type SpendingItem } from "./OverviewPage";
 import { AccountsPage } from "./AccountsPage";
@@ -346,6 +347,9 @@ function App() {
     }));
     setSelected((old) => new Set([...old].filter((id) => !byId.has(id))));
   }
+  const [pendingMfa, setPendingMfa] = useState<PendingMfaChallenge | null>(
+    null,
+  );
   useEffect(() => {
     if (!backend) return;
     backend
@@ -356,16 +360,31 @@ function App() {
           if (cfg?.lockOnReopen) setLocked(true);
         }
         bootCheckedRef.current = true;
+        setPendingMfa(null);
         setSession(s);
       })
       .catch((e) => {
         bootCheckedRef.current = true;
-        setError(errorMessage(e));
+        if (e instanceof MfaRequiredError) {
+          setPendingMfa({
+            method: e.method,
+            mfaId: e.mfaId,
+            otpId: "",
+            factorId: e.factorId,
+            challengeId: e.challengeId,
+            email: e.email ?? "",
+          });
+          setError("");
+        } else {
+          setError(errorMessage(e));
+        }
       })
       .finally(() => setChecking(false));
     return backend.subscribe((s) => {
       setSession(s);
-      if (!s) {
+      if (s) {
+        setPendingMfa(null);
+      } else {
         generation.current++;
         setLedger(emptyLedger);
         setLocked(false);
@@ -1563,7 +1582,14 @@ function App() {
   if (checking)
     return <div className="loading">{uiText("Opening Fuloos…")}</div>;
   if (!session && !demo)
-    return <Auth onDemo={startDemo} externalError={error} />;
+    return (
+      <Auth
+        onDemo={startDemo}
+        externalError={error}
+        initialMfa={pendingMfa}
+        onClearInitialMfa={() => setPendingMfa(null)}
+      />
+    );
   if (session && !demo && locked && lockConfig)
     return (
       <AppLockScreen
@@ -1677,6 +1703,7 @@ function App() {
               status={schemaStatus}
               dismissed={schemaDismissed}
               onDismiss={() => setSchemaDismissed(true)}
+              backendKind={backend?.kind}
             />
           )}
           {page === "Overview" && (

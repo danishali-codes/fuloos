@@ -1,4 +1,10 @@
-import { MissingCollectionError, PocketBaseBackend } from "./backend";
+import {
+  MissingCollectionError,
+  PocketBaseBackend,
+  resolveBackendConfig,
+  type FuloosBackend,
+} from "./backend";
+import { SupabaseBackend } from "./supabaseBackend";
 import {
   createAccountLearningStore,
   createSessionLearningStore,
@@ -9,15 +15,22 @@ import {
   createLocalPresetStore,
   type PresetStore,
 } from "./csvPresets";
-export type { Session } from "./backend";
-const url = import.meta.env.VITE_POCKETBASE_URL;
+export type { FuloosBackend, Session } from "./backend";
+
 let storage: Storage | undefined;
 try {
   storage = window.localStorage;
 } catch {
   /* Private browsers can use an in-memory session. */
 }
-export const backend = url ? new PocketBaseBackend(url, storage) : null;
+
+const config = resolveBackendConfig(import.meta.env);
+export const backend: FuloosBackend | null =
+  config?.kind === "supabase"
+    ? new SupabaseBackend(config.url, config.anonKey, storage)
+    : config?.kind === "pocketbase"
+      ? new PocketBaseBackend(config.url, storage)
+      : null;
 
 /** CSV presets sync to the signed-in account; demo and local-only modes keep them in this browser. */
 export function createPresetStore(signedIn: boolean): PresetStore {
