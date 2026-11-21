@@ -68,13 +68,13 @@ class NotificationActionReceiver : BroadcastReceiver() {
             return
         }
 
-        val pb = PocketBaseBackgroundClient(context)
+        val pb = BackgroundSyncClient(context)
         val db = FuloosLocalDb.getInstance(context)
         val result = pb.importCapturedAlertOrCreateTransaction(alertId, txJson)
 
-        val acceptedWrite = result is PocketBaseBackgroundClient.ApiResult.Success ||
-            result is PocketBaseBackgroundClient.ApiResult.QueuedOffline
-        val txId = (result as? PocketBaseBackgroundClient.ApiResult.Success)?.data
+        val acceptedWrite = result is BackgroundSyncClient.ApiResult.Success ||
+            result is BackgroundSyncClient.ApiResult.QueuedOffline
+        val txId = (result as? BackgroundSyncClient.ApiResult.Success)?.data
         val accountId = if (txJson.isNull("account_id")) "" else txJson.optString("account_id", "")
 
         if (acceptedWrite && smsHash.isNotEmpty()) {
@@ -139,11 +139,11 @@ class NotificationActionReceiver : BroadcastReceiver() {
         val smsHash = intent.getStringExtra(EXTRA_SMS_HASH).orEmpty()
         var acceptedDelete = false
         if (txId.isNotBlank() || queuedWriteId > 0L) {
-            val pb = PocketBaseBackgroundClient(context)
+            val pb = BackgroundSyncClient(context)
             val db = FuloosLocalDb.getInstance(context)
             val res = pb.cancelOrDeleteTransaction(txId, queuedWriteId)
-            acceptedDelete = res is PocketBaseBackgroundClient.ApiResult.Success ||
-                res is PocketBaseBackgroundClient.ApiResult.QueuedOffline
+            acceptedDelete = res is BackgroundSyncClient.ApiResult.Success ||
+                res is BackgroundSyncClient.ApiResult.QueuedOffline
             if (acceptedDelete) {
                 if (txId.isNotBlank()) db.updateProcessedStatusByTransaction(txId, "dismissed", ownerKey)
                 if (smsHash.isNotBlank()) db.updateProcessedStatusByHash(smsHash, "dismissed", ownerKey)

@@ -1,4 +1,8 @@
-import { Capacitor, registerPlugin, type PluginListenerHandle } from "@capacitor/core";
+import {
+  Capacitor,
+  registerPlugin,
+  type PluginListenerHandle,
+} from "@capacitor/core";
 import { maskForDisplay } from "../ledger/sms.ts";
 import {
   detectBankForSenderOrText,
@@ -27,6 +31,21 @@ export interface NativeDeepLinkEvent {
   transactionId?: string;
 }
 
+/**
+ * How the background SMS workers sign in to the backend.
+ * PocketBase: the WebView pushes its token. Supabase: the workers share supabase-js's
+ * session through native storage, so only the project details are registered.
+ */
+export type NativeAuthRegistration =
+  | { backend: "pocketbase"; url: string; token: string; userId: string }
+  | {
+      backend: "supabase";
+      url: string;
+      anonKey: string;
+      storageKey: string;
+      userId: string;
+    };
+
 export interface NativeSmsProcessedEvent {
   action: "auto_add" | "needs_review";
   transactionId?: string;
@@ -44,7 +63,9 @@ interface FuloosSmsPluginInterface {
     limit?: number;
     offset?: number;
   }): Promise<{ messages: RawNativeSms[]; total: number; hasMore: boolean }>;
-  getLinks(options?: { ownerKey?: string }): Promise<{ links: SmsAccountLink[] }>;
+  getLinks(options?: {
+    ownerKey?: string;
+  }): Promise<{ links: SmsAccountLink[] }>;
   saveLinks(options: {
     links: SmsAccountLink[];
     ownerKey?: string;
@@ -53,12 +74,17 @@ interface FuloosSmsPluginInterface {
     contextJson: string;
     ownerKey?: string;
   }): Promise<{ ok: boolean }>;
-  syncAuthSession(options: {
-    pbUrl: string;
-    token: string;
-    userId: string;
-  }): Promise<{ ok: boolean }>;
+  syncAuthSession(options: NativeAuthRegistration): Promise<{ ok: boolean }>;
   clearAuthSession(): Promise<{ ok: boolean }>;
+  authStorageGetItem(options: {
+    key: string;
+  }): Promise<{ value: string | null }>;
+  authStorageSetItem(options: {
+    key: string;
+    value: string;
+  }): Promise<{ ok: boolean }>;
+  authStorageRemoveItem(options: { key: string }): Promise<{ ok: boolean }>;
+  getPendingAuthCallback(): Promise<{ url: string | null }>;
   markHashesProcessed(options: {
     ownerKey?: string;
     entries: Array<{
@@ -81,6 +107,10 @@ interface FuloosSmsPluginInterface {
   addListener(
     eventName: "deepLink",
     listenerFunc: (event: NativeDeepLinkEvent) => void,
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    eventName: "authCallback",
+    listenerFunc: (event: { url: string }) => void,
   ): Promise<PluginListenerHandle>;
   addListener(
     eventName: "smsProcessed",
@@ -139,7 +169,9 @@ const DEMO_SAMPLE_SMS: RawNativeSms[] = [
 ];
 
 function linksStorageKey(ownerKey?: string): string {
-  return ownerKey ? `${WEB_LINKS_STORAGE_KEY}:${ownerKey}` : WEB_LINKS_STORAGE_KEY;
+  return ownerKey
+    ? `${WEB_LINKS_STORAGE_KEY}:${ownerKey}`
+    : WEB_LINKS_STORAGE_KEY;
 }
 
 function readLocalLinks(ownerKey?: string): SmsAccountLink[] {
@@ -155,13 +187,18 @@ function readLocalLinks(ownerKey?: string): SmsAccountLink[] {
 
 function writeLocalLinks(links: SmsAccountLink[], ownerKey?: string): void {
   try {
-    window.localStorage.setItem(linksStorageKey(ownerKey), JSON.stringify(links));
+    window.localStorage.setItem(
+      linksStorageKey(ownerKey),
+      JSON.stringify(links),
+    );
   } catch {
     /* ignore storage quota errors */
   }
 }
 
-function summarizeSampleSenders(messages: RawNativeSms[]): DiscoveredSmsSender[] {
+function summarizeSampleSenders(
+  messages: RawNativeSms[],
+): DiscoveredSmsSender[] {
   const bySender = new Map<
     string,
     {
@@ -291,7 +328,11 @@ export const platformBridge = {
   },
 
   async getLinks(ownerKey?: string): Promise<SmsAccountLink[]> {
-    if (isNativePlatform() && getPlatform() === "android" && ownerKey !== "demo") {
+    if (
+      isNativePlatform() &&
+      getPlatform() === "android" &&
+      ownerKey !== "demo"
+    ) {
       try {
         const res = await FuloosSmsNative.getLinks({ ownerKey });
         return res.links ?? [];
@@ -304,12 +345,19 @@ export const platformBridge = {
 
   async saveLinks(links: SmsAccountLink[], ownerKey?: string): Promise<void> {
     writeLocalLinks(links, ownerKey);
-    if (isNativePlatform() && getPlatform() === "android" && ownerKey !== "demo") {
+    if (
+      isNativePlatform() &&
+      getPlatform() === "android" &&
+      ownerKey !== "demo"
+    ) {
       await FuloosSmsNative.saveLinks({ links, ownerKey });
     }
   },
 
-  async syncEngineContext(ctx: SmsEngineContext, ownerKey?: string): Promise<void> {
+  async syncEngineContext(
+    ctx: SmsEngineContext,
+    ownerKey?: string,
+  ): Promise<void> {
     if (!isNativePlatform() || getPlatform() !== "android") return;
     try {
       await FuloosSmsNative.syncEngineContext({
@@ -321,17 +369,48 @@ export const platformBridge = {
     }
   },
 
-  async syncAuthSession(
-    pbUrl: string,
-    token: string,
-    userId: string,
-  ): Promise<void> {
+  async syncAuthSession(registration: NativeAuthRegistration): Promise<void> {
     if (!isNativePlatform() || getPlatform() !== "android") return;
     try {
-      await FuloosSmsNative.syncAuthSession({ pbUrl, token, userId });
+      await FuloosSmsNative.syncAuthSession(registration);
     } catch {
       /* ignore */
     }
+  },
+
+  /** True where supabase-js should keep its session in native secure storage. */
+  hasNativeAuthStorage(): boolean {
+    return isNativePlatform() && getPlatform() === "android";
+  },
+
+  async authStorageGetItem(key: string): Promise<string | null> {
+    const res = await FuloosSmsNative.authStorageGetItem({ key });
+    return res.value ?? null;
+  },
+
+  async authStorageSetItem(key: string, value: string): Promise<void> {
+    await FuloosSmsNative.authStorageSetItem({ key, value });
+  },
+
+  async authStorageRemoveItem(key: string): Promise<void> {
+    await FuloosSmsNative.authStorageRemoveItem({ key });
+  },
+
+  async getPendingAuthCallback(): Promise<string | null> {
+    if (!isNativePlatform() || getPlatform() !== "android") return null;
+    try {
+      const res = await FuloosSmsNative.getPendingAuthCallback();
+      return res.url ?? null;
+    } catch {
+      return null;
+    }
+  },
+
+  async onAuthCallback(
+    handler: (url: string) => void,
+  ): Promise<PluginListenerHandle | null> {
+    if (!isNativePlatform() || getPlatform() !== "android") return null;
+    return FuloosSmsNative.addListener("authCallback", (ev) => handler(ev.url));
   },
 
   async clearAuthSession(): Promise<void> {

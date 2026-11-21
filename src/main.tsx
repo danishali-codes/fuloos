@@ -12,6 +12,8 @@ import {
   backend,
   createLearningStore,
   createPresetStore,
+  nativeAuthRegistration,
+  syncNativeSession,
   type Session,
 } from "./client";
 import { ConfirmHost } from "./ConfirmHost";
@@ -1544,7 +1546,8 @@ function App() {
 
   useNativeMobile({
     demo,
-    pbUrl: backend?.url ?? "",
+    nativeAuth: nativeAuthRegistration(session),
+    onResumeSession: syncNativeSession,
     session,
     ledger,
     links: smsLinks,

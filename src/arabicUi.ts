@@ -903,8 +903,8 @@ export const ARABIC_UI: Record<string, string> = {
   "Format v": "إصدار التنسيق",
   "Forward bank alert emails to a worker that POSTs":
     "حوّل رسائل البنك إلى خدمة ترسل طلب POST",
-  "Household sharing isn't installed on the server yet. Apply the latest PocketBase migration and hooks to enable it.":
-    "المشاركة العائلية غير مثبتة على الخادم. ثبّت ترحيلات PocketBase والخطافات لتفعيلها.",
+  "Household sharing isn't installed on the server yet. Apply the latest server migrations to enable it.":
+    "المشاركة العائلية غير مثبتة على الخادم. ثبّت أحدث ترحيلات الخادم لتفعيلها.",
   "How bank transactions and CSV imports match active schedules":
     "كيفية مطابقة معاملات البنك واستيراد CSV بالجداول النشطة",
   "Include possible duplicates (same account, date, amount and payee)":
@@ -1012,7 +1012,7 @@ export const ARABIC_UI: Record<string, string> = {
     "عرض الرسائل المتخطاة (رموز التحقق والعمليات المرفوضة والتحويلات الداخلية)",
   "Showing every transaction. Pick a length above to browse by month.":
     "تُعرض جميع المعاملات. اختر مدة أعلاه للتصفح بالشهر.",
-  "Sign in with a live PocketBase account to generate your personal webhook token for Cloudflare Email Workers, iOS Shortcuts, or Android Tasker.":
+  "Sign in with a live account to generate your personal webhook token for Cloudflare Email Workers, iOS Shortcuts, or Android Tasker.":
     "سجل الدخول لإنشاء رمز الاستقبال الشخصي لخدمات تحويل البريد أو اختصارات iOS أو Tasker.",
   "Signed amounts: negative = expense, positive = income. Debit/credit amounts must be zero or positive. Unmapped categories stay uncategorized.":
     "المبلغ السالب مصروف والموجب دخل. يجب أن تكون قيم الخصم والإيداع غير سالبة. تبقى الفئات غير المرتبطة دون تصنيف.",
@@ -1063,8 +1063,8 @@ export const ARABIC_UI: Record<string, string> = {
     "عرض التدفق النقدي لمدة 30 أو 60 أو 90 يوماً",
   "Web Push is not configured in this build (VITE_VAPID_PUBLIC_KEY is missing).":
     "الإشعارات الفورية غير مُعدة في هذا الإصدار؛ مفتاح VAPID العام مفقود.",
-  "Web Push migration is not installed on the PocketBase server yet.":
-    "ترحيل الإشعارات الفورية غير مثبت على خادم PocketBase بعد.",
+  "Web Push migration is not installed on the server yet.":
+    "ترحيل الإشعارات الفورية غير مثبت على الخادم بعد.",
   "When on, Fuloos keeps the cleaned merchant name, amount, payee and category you choose for each imported expense":
     "عند التفعيل، يحفظ فلوس اسم التاجر المنقح والمبلغ والمستفيد والفئة لكل مصروف مستورد",
   "When you mark recurring payments as paid or auto-reconciliation matches bank transactions, they will be listed here.":

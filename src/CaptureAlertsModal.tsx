@@ -712,7 +712,7 @@ export function CaptureAlertsModal({
               <p className="muted small">
                 {" "}
                 {uiText(
-                  "Sign in with a live PocketBase account to generate your personal webhook token for Cloudflare Email Workers, iOS Shortcuts, or Android Tasker.",
+                  "Sign in with a live account to generate your personal webhook token for Cloudflare Email Workers, iOS Shortcuts, or Android Tasker.",
                 )}{" "}
               </p>
             ) : !tokenSupported ? (

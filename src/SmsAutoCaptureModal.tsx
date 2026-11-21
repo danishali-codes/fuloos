@@ -531,7 +531,7 @@ export function SmsAutoCaptureModal({
           }
         })
         .catch(() => {
-          // Non-fatal: saved transactions remain in PocketBase; catch-up will reconcile metadata.
+          // Non-fatal: saved transactions remain on the server; catch-up will reconcile metadata.
         });
     };
 
@@ -655,7 +655,7 @@ export function SmsAutoCaptureModal({
                 <strong>{uiText("On-device privacy first")}</strong>
                 <p className="muted small">
                   {uiText(
-                    "Raw bank SMS messages are parsed and categorized strictly on your phone. High-confidence transactions are added straight to PocketBase; low-confidence items sync masked previews so you can confirm them on mobile or web.",
+                    "Raw bank SMS messages are parsed and categorized strictly on your phone. High-confidence transactions are added straight to your Fuloos account; low-confidence items sync masked previews so you can confirm them on mobile or web.",
                   )}
                 </p>
               </div>
@@ -1080,7 +1080,7 @@ export function SmsAutoCaptureModal({
                   />
                   <span className="muted small">
                     {uiText(
-                      "Below this confidence, Fuloos sends a quick-categorize notification and syncs a draft to PocketBase.",
+                      "Below this confidence, Fuloos sends a quick-categorize notification and syncs a draft to your Fuloos account.",
                     )}
                   </span>
                 </label>
