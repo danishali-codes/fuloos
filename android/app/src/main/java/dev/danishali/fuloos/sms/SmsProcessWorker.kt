@@ -27,7 +27,7 @@ class SmsProcessWorker(
 
     private val db = FuloosLocalDb.getInstance(appContext)
     private val authStore = SecureAuthStore(appContext)
-    private val pb = PocketBaseBackgroundClient(appContext, authStore, db)
+    private val pb = BackgroundSyncClient(appContext, authStore, db)
     private val engine = HeadlessSmsEngine(appContext)
 
     override suspend fun doWork(): Result {
@@ -233,19 +233,19 @@ class SmsProcessWorker(
             val txId: String
             val queuedWriteId: Long
             when (apiResult) {
-                is PocketBaseBackgroundClient.ApiResult.Success -> {
+                is BackgroundSyncClient.ApiResult.Success -> {
                     txId = apiResult.data
                     queuedWriteId = -1L
                 }
-                is PocketBaseBackgroundClient.ApiResult.QueuedOffline -> {
+                is BackgroundSyncClient.ApiResult.QueuedOffline -> {
                     txId = apiResult.recordId.orEmpty()
                     queuedWriteId = apiResult.queueId
                 }
-                is PocketBaseBackgroundClient.ApiResult.AuthExpired -> {
+                is BackgroundSyncClient.ApiResult.AuthExpired -> {
                     Log.w(TAG, "PocketBase auth expired; leaving SMS hash unprocessed for later catch-up")
                     return DecisionOutcome.FAILED_HOLD
                 }
-                is PocketBaseBackgroundClient.ApiResult.Failure -> {
+                is BackgroundSyncClient.ApiResult.Failure -> {
                     Log.w(TAG, "PocketBase auto_add write failed (${apiResult.status}): ${apiResult.message}")
                     return if (isRetryableStatus(apiResult.status)) {
                         DecisionOutcome.FAILED_RETRYABLE
@@ -295,17 +295,17 @@ class SmsProcessWorker(
             var alertId: String? = null
             if (draft != null) {
                 when (val alertRes = pb.createCapturedAlert(draft, queueOnNetworkFailure = true)) {
-                    is PocketBaseBackgroundClient.ApiResult.Success -> {
+                    is BackgroundSyncClient.ApiResult.Success -> {
                         alertId = alertRes.data.ifBlank { null }
                     }
-                    is PocketBaseBackgroundClient.ApiResult.QueuedOffline -> {
+                    is BackgroundSyncClient.ApiResult.QueuedOffline -> {
                         alertId = alertRes.recordId?.ifBlank { null }
                     }
-                    is PocketBaseBackgroundClient.ApiResult.AuthExpired -> {
+                    is BackgroundSyncClient.ApiResult.AuthExpired -> {
                         Log.w(TAG, "PocketBase auth expired while syncing captured alert draft")
                         return DecisionOutcome.FAILED_HOLD
                     }
-                    is PocketBaseBackgroundClient.ApiResult.Failure -> {
+                    is BackgroundSyncClient.ApiResult.Failure -> {
                         Log.w(TAG, "PocketBase captured alert sync failed (${alertRes.status}): ${alertRes.message}")
                         return if (isRetryableStatus(alertRes.status)) {
                             DecisionOutcome.FAILED_RETRYABLE

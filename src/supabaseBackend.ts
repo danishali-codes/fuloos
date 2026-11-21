@@ -110,10 +110,27 @@ const NULLABLE_NUMERIC_FIELDS = new Set([
   "fx_rate",
 ]);
 
+/** supabase-js accepts async storage; the Android app keeps the session in the Keystore. */
+export interface SessionStorageLike {
+  getItem(key: string): string | null | Promise<string | null>;
+  setItem(key: string, value: string): void | Promise<void>;
+  removeItem(key: string): void | Promise<void>;
+}
+
+/**
+ * Fixed so the Android background workers can find the session supabase-js stores
+ * (see android/.../SecureAuthStore.kt, which only accepts keys with this prefix).
+ */
+export const SUPABASE_AUTH_STORAGE_KEY = "fuloos-supabase-auth";
+
+/** Deep link the Android app registers for OAuth and email redirects. */
+export const NATIVE_AUTH_REDIRECT = "fuloos://auth-callback";
+
 export interface SupabaseBackendOptions {
   redirectTo?: string;
   autoRefreshToken?: boolean;
   detectSessionInUrl?: boolean;
+  storageKey?: string;
 }
 
 interface SupabaseLikeError {
@@ -166,11 +183,13 @@ export class SupabaseBackend implements FuloosBackend {
   private listeners = new Set<(session: Session | null) => void>();
   private fetcher: typeof fetch;
   private redirectTo?: string;
+  readonly storageKey: string;
+  private handledRedirects = new Set<string>();
 
   constructor(
     url: string,
     anonKey: string,
-    storage?: StorageLike,
+    storage?: StorageLike | SessionStorageLike,
     fetcher?: typeof fetch,
     options: SupabaseBackendOptions = {},
   ) {
@@ -192,14 +211,17 @@ export class SupabaseBackend implements FuloosBackend {
     const isBrowser = typeof window !== "undefined";
     this.redirectTo =
       options.redirectTo ??
-      (isBrowser ? `${window.location.origin}${window.location.pathname}` : undefined);
+      (isBrowser
+        ? `${window.location.origin}${window.location.pathname}`
+        : undefined);
+    this.storageKey = options.storageKey ?? SUPABASE_AUTH_STORAGE_KEY;
 
     this.client = createClient(this.url, this.anonKey, {
       auth: {
         storage,
+        storageKey: this.storageKey,
         persistSession: Boolean(storage),
-        autoRefreshToken:
-          options.autoRefreshToken ?? (isBrowser && !fetcher),
+        autoRefreshToken: options.autoRefreshToken ?? (isBrowser && !fetcher),
         detectSessionInUrl:
           options.detectSessionInUrl ?? (isBrowser && !fetcher),
         flowType: "pkce",
@@ -363,6 +385,63 @@ export class SupabaseBackend implements FuloosBackend {
       return null;
     }
     return this.resolveSession(data.session);
+  }
+
+  /**
+   * Finishes an OAuth or email-link redirect that reopened the app through
+   * `fuloos://auth-callback` (PKCE code, or an error from the provider).
+   */
+  async completeAuthRedirect(url: string): Promise<Session | null> {
+    if (this.handledRedirects.has(url)) return this.session;
+    this.handledRedirects.add(url);
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new BackendError("The sign-in link was not valid.", 400);
+    }
+    const params = new URLSearchParams(parsed.search);
+    const hash = new URLSearchParams(parsed.hash.replace(/^#/, ""));
+    const errorDescription =
+      params.get("error_description") ?? hash.get("error_description");
+    if (errorDescription || params.get("error") || hash.get("error")) {
+      throw new BackendError(
+        errorDescription || "Sign-in was cancelled or failed.",
+        400,
+      );
+    }
+    const code = params.get("code");
+    if (!code) return this.session;
+    const { data, error } = await this.client.auth.exchangeCodeForSession(code);
+    if (error) throw this.toError(error);
+    if (!data.session) return null;
+    return this.resolveSession(data.session);
+  }
+
+  /**
+   * Picks up tokens another process rotated in the shared storage (the Android
+   * background workers refresh the session while the app is closed).
+   */
+  async syncSessionFromStorage(): Promise<void> {
+    if (!this.session || this.pendingMfa) return;
+    const current = this.session;
+    const { data } = await this.client.auth.getSession();
+    const next = data.session;
+    if (!next) {
+      if (this.session === current) this.publish(null);
+      return;
+    }
+    if (
+      next.user.id === current.user.id &&
+      next.access_token !== current.token &&
+      this.session === current
+    ) {
+      this.publish({
+        ...current,
+        token: next.access_token,
+        refreshToken: next.refresh_token,
+      });
+    }
   }
 
   async googleEnabled(): Promise<boolean> {
@@ -1457,15 +1536,18 @@ export class SupabaseBackend implements FuloosBackend {
     if (!this.session) throw new Error("Please sign in.");
     const trimmed = name.trim();
     if (!trimmed) throw new Error("Enter a household name.");
-    const { data: householdData, error: hhErr, status: hhStatus } =
-      await this.client
-        .from("fuloos_households")
-        .insert({
-          name: trimmed,
-          owner_id: this.session.user.id,
-        })
-        .select("*")
-        .single();
+    const {
+      data: householdData,
+      error: hhErr,
+      status: hhStatus,
+    } = await this.client
+      .from("fuloos_households")
+      .insert({
+        name: trimmed,
+        owner_id: this.session.user.id,
+      })
+      .select("*")
+      .single();
     if (hhErr) throw this.toError(hhErr, hhStatus, { table: "households" });
     const household = householdData as Household;
 
@@ -1480,19 +1562,22 @@ export class SupabaseBackend implements FuloosBackend {
     if (existing) {
       return { household, member: existing };
     }
-    const { data: created, error: memErr, status: memStatus } =
-      await this.client
-        .from("fuloos_household_members")
-        .insert({
-          household_id: household.id,
-          user_id: this.session.user.id,
-          role: "owner",
-          status: "active",
-          invite_code: null,
-          member_email: this.session.user.email,
-        })
-        .select("*")
-        .single();
+    const {
+      data: created,
+      error: memErr,
+      status: memStatus,
+    } = await this.client
+      .from("fuloos_household_members")
+      .insert({
+        household_id: household.id,
+        user_id: this.session.user.id,
+        role: "owner",
+        status: "active",
+        invite_code: null,
+        member_email: this.session.user.email,
+      })
+      .select("*")
+      .single();
     if (memErr) {
       throw this.toError(memErr, memStatus, { table: "household_members" });
     }

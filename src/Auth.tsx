@@ -2,7 +2,7 @@ import { translateText as uiText } from "./i18n";
 import React, { useEffect, useState } from "react";
 import { ArrowRight, Check, Leaf } from "lucide-react";
 import { BackendError, MfaRequiredError } from "./backend";
-import { backend } from "./client";
+import { AUTH_REDIRECT_ERROR_EVENT, backend } from "./client";
 import { errorMessage } from "./domain";
 import { ThemeToggle } from "./ThemeToggle";
 import { LanguageToggle } from "./LanguageToggle";
@@ -75,28 +75,39 @@ export function Auth({
     setBusy(true);
     backend
       .signInWithGoogle()
-      .catch(async (e) => {
-        if (e instanceof MfaRequiredError) {
-          if (e.method === "totp" && e.factorId && e.challengeId) {
-            setMfa({
-              method: "totp",
-              mfaId: e.mfaId,
-              otpId: "",
-              factorId: e.factorId,
-              challengeId: e.challengeId,
-              email: e.email || email,
-            });
-            setOtpCode("");
-            return;
-          }
-          setError(
-            "Multi-factor authentication is required for this account. Please sign in with email and password.",
-          );
-          return;
-        }
-        setError(errorMessage(e));
-      })
+      .catch((e) => handleGoogleError(e))
       .finally(() => setBusy(false));
+  }
+  // In the Android app Google sign-in finishes later, through the fuloos:// app link.
+  useEffect(() => {
+    const onRedirectError = (ev: Event) => {
+      setBusy(false);
+      handleGoogleError((ev as CustomEvent<unknown>).detail);
+    };
+    window.addEventListener(AUTH_REDIRECT_ERROR_EVENT, onRedirectError);
+    return () =>
+      window.removeEventListener(AUTH_REDIRECT_ERROR_EVENT, onRedirectError);
+  });
+  function handleGoogleError(e: unknown) {
+    if (e instanceof MfaRequiredError) {
+      if (e.method === "totp" && e.factorId && e.challengeId) {
+        setMfa({
+          method: "totp",
+          mfaId: e.mfaId,
+          otpId: "",
+          factorId: e.factorId,
+          challengeId: e.challengeId,
+          email: e.email || email,
+        });
+        setOtpCode("");
+        return;
+      }
+      setError(
+        "Multi-factor authentication is required for this account. Please sign in with email and password.",
+      );
+      return;
+    }
+    setError(errorMessage(e));
   }
   async function startMfaOtp(mfaId: string, targetEmail: string) {
     if (!backend) return;
@@ -120,7 +131,9 @@ export function Auth({
     setNotice("");
     if (mfa.method === "totp") {
       if (!mfa.factorId || !mfa.challengeId || !backend.verifyMfaTotp) {
-        setError("Authenticator verification is unavailable. Please sign in again.");
+        setError(
+          "Authenticator verification is unavailable. Please sign in again.",
+        );
         return;
       }
       setBusy(true);

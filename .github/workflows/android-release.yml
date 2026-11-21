@@ -91,6 +91,9 @@ jobs:
           DISPATCH_TAG: ${{ inputs.release_tag }}
           PB_URL_VAR: ${{ vars.VITE_POCKETBASE_URL }}
           PB_URL_SECRET: ${{ secrets.VITE_POCKETBASE_URL }}
+          BACKEND_KIND: ${{ vars.VITE_BACKEND || secrets.VITE_BACKEND }}
+          SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
+          SUPABASE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY || secrets.VITE_SUPABASE_PUBLISHABLE_KEY || vars.VITE_SUPABASE_ANON_KEY || secrets.VITE_SUPABASE_ANON_KEY }}
         run: |
           BUILD_SHA="$SHA_FULL"
           IS_ROLLING="false"
@@ -143,7 +146,14 @@ jobs:
             VERSION_NAME="0.0.${RUN_NUMBER}-${BUILD_SHA:0:7}"
           fi
 
-          if [ -n "$PB_URL_VAR" ] || [ -n "$PB_URL_SECRET" ]; then
+          # Mirrors resolveBackendConfig() in src/backendTypes.ts.
+          if [ "$(echo "${BACKEND_KIND:-pocketbase}" | tr '[:upper:]' '[:lower:]')" = "supabase" ]; then
+            if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_KEY" ]; then
+              PB_CONFIGURED="true"
+            else
+              PB_CONFIGURED="false"
+            fi
+          elif [ -n "$PB_URL_VAR" ] || [ -n "$PB_URL_SECRET" ]; then
             PB_CONFIGURED="true"
           else
             PB_CONFIGURED="false"
@@ -162,7 +172,12 @@ jobs:
 
       - name: Build web app, SMS engine, and sync Capacitor Android
         env:
+          VITE_BACKEND: ${{ vars.VITE_BACKEND || secrets.VITE_BACKEND }}
           VITE_POCKETBASE_URL: ${{ vars.VITE_POCKETBASE_URL || secrets.VITE_POCKETBASE_URL }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY || secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY || secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_CAPTURE_WEBHOOK_URL: ${{ vars.VITE_CAPTURE_WEBHOOK_URL || secrets.VITE_CAPTURE_WEBHOOK_URL }}
           VITE_LEDGER_MODEL_URL: ${{ vars.VITE_LEDGER_MODEL_URL || secrets.VITE_LEDGER_MODEL_URL }}
           VITE_VAPID_PUBLIC_KEY: ${{ vars.VITE_VAPID_PUBLIC_KEY || secrets.VITE_VAPID_PUBLIC_KEY }}
         run: npm run mobile:android
@@ -312,7 +327,7 @@ jobs:
             fi
             if [ "$PB_CONFIGURED" != "true" ]; then
               echo ""
-              echo "> **Note:** \`VITE_POCKETBASE_URL\` was not configured in GitHub Actions variables/secrets for this build, so this APK runs in local demo mode. Set \`VITE_POCKETBASE_URL\` under repository Actions variables to connect release APKs to your PocketBase server."
+              echo "> **Note:** No backend was configured in GitHub Actions variables/secrets for this build, so this APK runs in local demo mode. For Supabase set \`VITE_BACKEND=supabase\`, \`VITE_SUPABASE_URL\` and \`VITE_SUPABASE_PUBLISHABLE_KEY\`; for PocketBase set \`VITE_POCKETBASE_URL\` (see \`docs/mobile-setup.md\`)."
             fi
           } > "$NOTES_FILE"
 

@@ -385,7 +385,7 @@ export function HouseholdSettings({
         <p className="muted small">
           {" "}
           {uiText(
-            "Household sharing isn't installed on the server yet. Apply the latest PocketBase migration and hooks to enable it.",
+            "Household sharing isn't installed on the server yet. Apply the latest server migrations to enable it.",
           )}{" "}
         </p>
       )}

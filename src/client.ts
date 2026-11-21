@@ -4,7 +4,12 @@ import {
   resolveBackendConfig,
   type FuloosBackend,
 } from "./backend";
-import { SupabaseBackend } from "./supabaseBackend";
+import { NATIVE_AUTH_REDIRECT, SupabaseBackend } from "./supabaseBackend";
+import {
+  platformBridge,
+  type NativeAuthRegistration,
+} from "./mobile/platformBridge";
+import { createNativeAuthStorage } from "./mobile/nativeAuthStorage";
 import {
   createAccountLearningStore,
   createSessionLearningStore,
@@ -25,12 +30,71 @@ try {
 }
 
 const config = resolveBackendConfig(import.meta.env);
+/** In the Android app, Supabase keeps its session in the Keystore, shared with background SMS sync. */
+const nativeAuth =
+  config?.kind === "supabase" && platformBridge.hasNativeAuthStorage();
 export const backend: FuloosBackend | null =
   config?.kind === "supabase"
-    ? new SupabaseBackend(config.url, config.anonKey, storage)
+    ? new SupabaseBackend(
+        config.url,
+        config.anonKey,
+        nativeAuth ? createNativeAuthStorage(platformBridge) : storage,
+        undefined,
+        nativeAuth ? { redirectTo: NATIVE_AUTH_REDIRECT } : {},
+      )
     : config?.kind === "pocketbase"
       ? new PocketBaseBackend(config.url, storage)
       : null;
+
+/** Fired with the Error when an app-link sign-in (Google, email link) fails or needs MFA. */
+export const AUTH_REDIRECT_ERROR_EVENT = "fuloos:auth-redirect-error";
+
+if (nativeAuth && backend instanceof SupabaseBackend) {
+  const supabase = backend;
+  const finish = (url: string | null) => {
+    if (!url) return;
+    supabase.completeAuthRedirect(url).catch((e: unknown) => {
+      // The sign-in screen shows it (an MFA challenge opens the code prompt).
+      window.dispatchEvent(
+        new CustomEvent(AUTH_REDIRECT_ERROR_EVENT, {
+          detail:
+            e instanceof Error ? e : new Error("Could not finish signing in."),
+        }),
+      );
+    });
+  };
+  void platformBridge.onAuthCallback(finish);
+  void platformBridge.getPendingAuthCallback().then(finish);
+}
+
+/** What the Android background SMS workers need to write as the signed-in user. */
+export function nativeAuthRegistration(
+  session: { token: string; user: { id: string } } | null,
+): NativeAuthRegistration | null {
+  if (!backend || !session) return null;
+  if (backend instanceof SupabaseBackend) {
+    return {
+      backend: "supabase",
+      url: backend.url,
+      anonKey: backend.anonKey,
+      storageKey: backend.storageKey,
+      userId: session.user.id,
+    };
+  }
+  return {
+    backend: "pocketbase",
+    url: backend.url,
+    token: session.token,
+    userId: session.user.id,
+  };
+}
+
+/** After the app resumes, adopt tokens the background workers refreshed meanwhile. */
+export async function syncNativeSession(): Promise<void> {
+  if (nativeAuth && backend instanceof SupabaseBackend) {
+    await backend.syncSessionFromStorage().catch(() => {});
+  }
+}
 
 /** CSV presets sync to the signed-in account; demo and local-only modes keep them in this browser. */
 export function createPresetStore(signedIn: boolean): PresetStore {

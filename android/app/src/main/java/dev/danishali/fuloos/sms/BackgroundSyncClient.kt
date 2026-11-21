@@ -11,15 +11,22 @@ import org.json.JSONObject
 import java.io.IOException
 import java.net.URLEncoder
 import java.security.SecureRandom
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 /**
- * Background PocketBase HTTP client authenticated via SecureAuthStore.
+ * Background HTTP client for native SMS capture, authenticated via SecureAuthStore.
  *
- * Uses the exact same PocketBase REST collections as src/backend.ts and automatically
- * queues transient network failures in FuloosLocalDb.offline_queue for WorkManager retry.
+ * Talks to whichever backend the app is signed in to:
+ *  - PocketBase: the same REST collections and routes as src/backend.ts.
+ *  - Supabase: PostgREST tables and RPCs as src/supabaseBackend.ts, refreshing the
+ *    session shared with supabase-js when it is about to expire.
+ *
+ * Transient network failures are queued in FuloosLocalDb.offline_queue for WorkManager
+ * retry. Queued rows store a backend-relative path and are scoped by owner key
+ * (backend URL + user id), so they only replay against the backend that created them.
  */
-class PocketBaseBackgroundClient(
+class BackgroundSyncClient(
     private val context: Context,
     private val authStore: SecureAuthStore = SecureAuthStore(context),
     private val db: FuloosLocalDb = FuloosLocalDb.getInstance(context),
@@ -42,12 +49,12 @@ class PocketBaseBackgroundClient(
         txJson: JSONObject,
         queueOnNetworkFailure: Boolean = true,
     ): ApiResult<String> {
-        val session = authStore.load() ?: return ApiResult.AuthExpired(401)
-        val recordId = generatePocketBaseId()
-        val payload = buildTransactionPayload(txJson, session.userId).apply {
+        val session = activeSession() ?: return ApiResult.AuthExpired(401)
+        val recordId = newRecordId(session)
+        val payload = buildTransactionPayload(txJson, session).apply {
             put("id", recordId)
         }
-        val path = "/api/collections/fuloos_transactions/records"
+        val path = tablePath(session, "fuloos_transactions")
         return executeWrite(
             session = session,
             method = "POST",
@@ -62,9 +69,8 @@ class PocketBaseBackgroundClient(
         transactionId: String,
         queueOnNetworkFailure: Boolean = true,
     ): ApiResult<String> {
-        val session = authStore.load() ?: return ApiResult.AuthExpired(401)
-        val encoded = URLEncoder.encode(transactionId, "UTF-8")
-        val path = "/api/collections/fuloos_transactions/records/$encoded"
+        val session = activeSession() ?: return ApiResult.AuthExpired(401)
+        val path = recordPath(session, "fuloos_transactions", transactionId)
         return executeWrite(
             session = session,
             method = "DELETE",
@@ -76,14 +82,14 @@ class PocketBaseBackgroundClient(
 
     /**
      * Cancels a still-queued offline transaction creation before it is sent, or deletes
-     * the transaction in PocketBase if it was already created (online or via queue replay).
+     * the transaction on the server if it was already created (online or via queue replay).
      */
     fun cancelOrDeleteTransaction(
         transactionId: String,
         queuedWriteId: Long = -1L,
     ): ApiResult<String> {
         synchronized(queueLock) {
-            val session = authStore.load() ?: return ApiResult.AuthExpired(401)
+            val session = activeSession() ?: return ApiResult.AuthExpired(401)
             if (queuedWriteId > 0L && db.removeOfflineWrite(queuedWriteId, session.ownerKey)) {
                 return ApiResult.Success(transactionId)
             }
@@ -91,8 +97,7 @@ class PocketBaseBackgroundClient(
                 return ApiResult.Failure(400, "Missing transaction id")
             }
             flushOfflineQueueLocked(session)
-            val encoded = URLEncoder.encode(transactionId, "UTF-8")
-            val path = "/api/collections/fuloos_transactions/records/$encoded"
+            val path = recordPath(session, "fuloos_transactions", transactionId)
             if (db.getOfflineQueue(session.ownerKey, 1).isNotEmpty()) {
                 val qId = db.enqueueOfflineWrite(session.ownerKey, "DELETE", path, "")
                 return ApiResult.QueuedOffline(qId, transactionId)
@@ -112,16 +117,20 @@ class PocketBaseBackgroundClient(
         draftJson: JSONObject,
         queueOnNetworkFailure: Boolean = true,
     ): ApiResult<String> {
-        val session = authStore.load() ?: return ApiResult.AuthExpired(401)
-        val recordId = generatePocketBaseId()
+        val session = activeSession() ?: return ApiResult.AuthExpired(401)
+        val recordId = newRecordId(session)
         val payload = JSONObject(draftJson.toString()).apply {
             put("id", recordId)
             put("user_id", session.userId)
             put("source", "sms_native")
-            if (isNull("account_id")) put("account_id", "")
-            if (isNull("suggested_category_id")) put("suggested_category_id", "")
+            if (session.isSupabase) {
+                nullIfBlank(this, ALERT_NULLABLE_FIELDS)
+            } else {
+                if (isNull("account_id")) put("account_id", "")
+                if (isNull("suggested_category_id")) put("suggested_category_id", "")
+            }
         }
-        val path = "/api/collections/fuloos_captured_alerts/records"
+        val path = tablePath(session, "fuloos_captured_alerts")
         return executeWrite(
             session = session,
             method = "POST",
@@ -136,17 +145,29 @@ class PocketBaseBackgroundClient(
         alertId: String?,
         txJson: JSONObject,
     ): ApiResult<String> {
-        val session = authStore.load() ?: return ApiResult.AuthExpired(401)
-        val txPayload = buildTransactionPayload(txJson, session.userId)
+        val session = activeSession() ?: return ApiResult.AuthExpired(401)
+        val txPayload = buildTransactionPayload(txJson, session)
 
         if (!alertId.isNullOrBlank()) {
             // Serialize with queue draining so any queued alert creation runs before its import,
             // and retain the atomic endpoint's pending-status & idempotency guard.
             synchronized(queueLock) {
                 flushOfflineQueueLocked(session)
-                val encoded = URLEncoder.encode(alertId, "UTF-8")
-                val path = "/api/fuloos/captured-alerts/$encoded/import"
-                val atomicBody = JSONObject().put("transaction", txPayload).toString()
+                val path: String
+                val atomicBody: String
+                if (session.isSupabase) {
+                    // Same RPC as SupabaseBackend.importCapturedAlert; the server sets user_id.
+                    txPayload.remove("user_id")
+                    path = "/rest/v1/rpc/fuloos_import_captured_alert"
+                    atomicBody = JSONObject()
+                        .put("alert_id", alertId)
+                        .put("transaction", txPayload)
+                        .toString()
+                } else {
+                    val encoded = URLEncoder.encode(alertId, "UTF-8")
+                    path = "/api/fuloos/captured-alerts/$encoded/import"
+                    atomicBody = JSONObject().put("transaction", txPayload).toString()
+                }
                 if (db.getOfflineQueue(session.ownerKey, 1).isNotEmpty()) {
                     val qId = db.enqueueOfflineWrite(session.ownerKey, "POST", path, atomicBody)
                     return ApiResult.QueuedOffline(qId)
@@ -165,9 +186,8 @@ class PocketBaseBackgroundClient(
     }
 
     fun markAlertStatus(alertId: String, status: String): ApiResult<String> {
-        val session = authStore.load() ?: return ApiResult.AuthExpired(401)
-        val encoded = URLEncoder.encode(alertId, "UTF-8")
-        val path = "/api/collections/fuloos_captured_alerts/records/$encoded"
+        val session = activeSession() ?: return ApiResult.AuthExpired(401)
+        val path = recordPath(session, "fuloos_captured_alerts", alertId)
         val body = JSONObject().put("status", status).toString()
         return executeWrite(
             session = session,
@@ -186,13 +206,13 @@ class PocketBaseBackgroundClient(
         suggestedCategory: String,
         accepted: Boolean,
     ): ApiResult<String> {
-        val session = authStore.load() ?: return ApiResult.AuthExpired(401)
+        val session = activeSession() ?: return ApiResult.AuthExpired(401)
         val payload = JSONObject().apply {
             put("user_id", session.userId)
             put("merchant_text", merchantText.take(160))
             put("payee", payee.take(120))
             put("amount", amountFils)
-            put("category_id", categoryId)
+            put("category_id", if (session.isSupabase && categoryId.isBlank()) JSONObject.NULL else categoryId)
             put("source", "sms")
             put("model_version", "android-sms-v1")
             put("suggested_category", suggestedCategory.take(64))
@@ -201,7 +221,7 @@ class PocketBaseBackgroundClient(
         return executeWrite(
             session = session,
             method = "POST",
-            path = "/api/collections/fuloos_ml_examples/records",
+            path = tablePath(session, "fuloos_ml_examples"),
             bodyJson = payload.toString(),
             queueOnNetworkFailure = true,
         )
@@ -212,7 +232,7 @@ class PocketBaseBackgroundClient(
      * concurrent workers never replay the same queued row twice.
      */
     fun flushOfflineQueue(): Int {
-        val session = authStore.load() ?: return 0
+        val session = activeSession() ?: return 0
         synchronized(queueLock) {
             return flushOfflineQueueLocked(session)
         }
@@ -254,11 +274,14 @@ class PocketBaseBackgroundClient(
         return flushed
     }
 
-    private fun buildTransactionPayload(txJson: JSONObject, userId: String): JSONObject {
+    private fun buildTransactionPayload(
+        txJson: JSONObject,
+        session: SecureAuthStore.AuthSession,
+    ): JSONObject {
         val tags = txJson.optJSONArray("tags") ?: JSONArray()
         val splits = txJson.optJSONArray("splits") ?: JSONArray()
         return JSONObject().apply {
-            put("user_id", userId)
+            put("user_id", session.userId)
             put("type", txJson.optNonNullString("type", "expense"))
             put("amount", txJson.optLong("amount", 0L))
             put("date", txJson.optNonNullString("date"))
@@ -279,6 +302,92 @@ class PocketBaseBackgroundClient(
                     put("fx_rate", txJson.optDouble("fx_rate", 1.0))
                 }
             }
+            // Postgres foreign keys need NULL, not "", for "no account / category".
+            if (session.isSupabase) nullIfBlank(this, TX_NULLABLE_FIELDS)
+        }
+    }
+
+    private fun nullIfBlank(obj: JSONObject, keys: Array<String>) {
+        for (key in keys) {
+            if (obj.has(key) && (obj.isNull(key) || obj.optString(key, "").isBlank())) {
+                obj.put(key, JSONObject.NULL)
+            }
+        }
+    }
+
+    private fun newRecordId(session: SecureAuthStore.AuthSession): String =
+        if (session.isSupabase) UUID.randomUUID().toString() else generatePocketBaseId()
+
+    private fun tablePath(session: SecureAuthStore.AuthSession, table: String): String =
+        if (session.isSupabase) "/rest/v1/$table" else "/api/collections/$table/records"
+
+    private fun recordPath(session: SecureAuthStore.AuthSession, table: String, id: String): String {
+        val encoded = URLEncoder.encode(id, "UTF-8")
+        return if (session.isSupabase) "/rest/v1/$table?id=eq.$encoded"
+        else "/api/collections/$table/records/$encoded"
+    }
+
+    /**
+     * Loads the stored session and, for Supabase, refreshes it when the access token
+     * expires within [REFRESH_MARGIN_SECONDS]. The margin is shorter than supabase-js's
+     * own (90s), so while the app is open the WebView refreshes first and the worker
+     * just reads the rotated tokens from the shared store.
+     */
+    private fun activeSession(forceRefresh: Boolean = false): SecureAuthStore.AuthSession? {
+        val session = authStore.load() ?: return null
+        if (!session.isSupabase) return session
+        val nowSeconds = System.currentTimeMillis() / 1000
+        val needsRefresh = forceRefresh ||
+            (session.expiresAt > 0 && session.expiresAt - nowSeconds < REFRESH_MARGIN_SECONDS)
+        if (!needsRefresh) return session
+        synchronized(refreshLock) {
+            // Another worker (or the WebView) may have rotated the tokens meanwhile.
+            val latest = authStore.load() ?: return null
+            if (!latest.isSupabase) return latest
+            if (latest.refreshToken != session.refreshToken &&
+                latest.expiresAt - System.currentTimeMillis() / 1000 >= REFRESH_MARGIN_SECONDS
+            ) {
+                return latest
+            }
+            return refreshSupabaseSession(latest)
+        }
+    }
+
+    private fun refreshSupabaseSession(session: SecureAuthStore.AuthSession): SecureAuthStore.AuthSession? {
+        val body = JSONObject().put("refresh_token", session.refreshToken).toString()
+        val request = Request.Builder()
+            .url("${session.baseUrl}/auth/v1/token?grant_type=refresh_token")
+            .header("apikey", session.anonKey)
+            .header("Accept", "application/json")
+            .post(body.toRequestBody(JSON_MEDIA_TYPE))
+            .build()
+        return try {
+            client.newCall(request).execute().use { resp ->
+                val raw = resp.body?.string().orEmpty()
+                when {
+                    resp.isSuccessful -> {
+                        val next = JSONObject(raw)
+                        if (!next.has("expires_at") && next.has("expires_in")) {
+                            next.put("expires_at", System.currentTimeMillis() / 1000 + next.optLong("expires_in", 3600L))
+                        }
+                        val nextUser = next.optJSONObject("user")?.optString("id", "").orEmpty()
+                        if (nextUser.isNotEmpty() && nextUser != session.userId) return null
+                        authStore.setItem(session.storageKey, next.toString())
+                        authStore.load()
+                    }
+                    resp.code in 400..499 -> {
+                        // Refresh token revoked or already used: the user must sign in again.
+                        Log.w(TAG, "Supabase session refresh rejected (${resp.code})")
+                        null
+                    }
+                    // Server trouble: keep the current token; the write will queue offline.
+                    else -> session
+                }
+            }
+        } catch (_: IOException) {
+            session
+        } catch (_: org.json.JSONException) {
+            session
         }
     }
 
@@ -293,12 +402,20 @@ class PocketBaseBackgroundClient(
         bodyJson: String,
         queueOnNetworkFailure: Boolean,
         queuedRecordId: String? = null,
+        retriedAuth: Boolean = false,
     ): ApiResult<String> {
-        val url = "${session.pbUrl}$path"
+        val url = "${session.baseUrl}$path"
         val builder = Request.Builder()
             .url(url)
             .header("Authorization", "Bearer ${session.token}")
             .header("Accept", "application/json")
+        if (session.isSupabase) {
+            builder.header("apikey", session.anonKey)
+            if (!path.startsWith("/rest/v1/rpc/")) {
+                // Table writes use client-generated ids, so no representation is needed.
+                builder.header("Prefer", "return=minimal")
+            }
+        }
 
         val request = when (method.uppercase()) {
             "POST" -> builder.post(bodyJson.toRequestBody(JSON_MEDIA_TYPE)).build()
@@ -319,13 +436,38 @@ class PocketBaseBackgroundClient(
                         }
                         ApiResult.Success(id.ifBlank { queuedRecordId.orEmpty() })
                     }
-                    resp.code == 401 || resp.code == 403 -> ApiResult.AuthExpired(resp.code)
+                    // A replayed Supabase insert whose client-generated id already exists was
+                    // saved by an earlier attempt that lost its response.
+                    session.isSupabase && resp.code == 409 && method.uppercase() == "POST" &&
+                        !path.startsWith("/rest/v1/rpc/") -> {
+                        ApiResult.Success(queuedRecordId.orEmpty())
+                    }
+                    resp.code == 401 && session.isSupabase && !retriedAuth -> {
+                        val refreshed = activeSession(forceRefresh = true)
+                        if (refreshed == null) {
+                            ApiResult.AuthExpired(resp.code)
+                        } else {
+                            executeWrite(
+                                session = refreshed,
+                                method = method,
+                                path = path,
+                                bodyJson = bodyJson,
+                                queueOnNetworkFailure = queueOnNetworkFailure,
+                                queuedRecordId = queuedRecordId,
+                                retriedAuth = true,
+                            )
+                        }
+                    }
+                    // On Supabase a 403 is a row-level-security refusal, not an expired sign-in,
+                    // so it falls through to Failure and is not retried forever.
+                    resp.code == 401 || (resp.code == 403 && !session.isSupabase) ->
+                        ApiResult.AuthExpired(resp.code)
                     (resp.code == 408 || resp.code == 429 || resp.code >= 500) && queueOnNetworkFailure -> {
                         val qId = db.enqueueOfflineWrite(session.ownerKey, method, path, bodyJson)
                         ApiResult.QueuedOffline(qId, queuedRecordId)
                     }
                     else -> {
-                        Log.w(TAG, "PocketBase $method $path failed (${resp.code}): ${rawBody.take(200)}")
+                        Log.w(TAG, "${session.kind} $method $path failed (${resp.code}): ${rawBody.take(200)}")
                         ApiResult.Failure(resp.code, rawBody.take(200))
                     }
                 }
@@ -341,10 +483,14 @@ class PocketBaseBackgroundClient(
     }
 
     companion object {
-        private const val TAG = "PocketBaseBgClient"
+        private const val TAG = "FuloosBgClient"
+        private const val REFRESH_MARGIN_SECONDS = 45L
+        private val TX_NULLABLE_FIELDS = arrayOf("account_id", "to_account_id", "category_id", "original_currency")
+        private val ALERT_NULLABLE_FIELDS = arrayOf("account_id", "suggested_category_id", "parsed_date", "sms_sender", "card_last4")
         private const val PB_ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
         private val queueLock = Any()
+        private val refreshLock = Any()
         private val secureRandom = SecureRandom()
 
         fun generatePocketBaseId(): String {

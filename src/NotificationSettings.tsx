@@ -390,7 +390,7 @@ export function NotificationSettings({
             ? uiText("This browser does not support Web Push notifications.")
             : !pushServerSupported
               ? uiText(
-                  "Web Push migration is not installed on the PocketBase server yet.",
+                  "Web Push migration is not installed on the server yet.",
                 )
               : uiText(
                   "Web Push is not configured in this build (VITE_VAPID_PUBLIC_KEY is missing).",
