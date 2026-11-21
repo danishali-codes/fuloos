@@ -842,7 +842,7 @@ export function groupBackfillForReview(
 
 /**
  * Build a privacy-safe CapturedAlert draft (raw_text is masked!) to sync a low-confidence
- * native SMS decision to PocketBase so it can be reviewed on both mobile and desktop web.
+ * native SMS decision to the server so it can be reviewed on both mobile and desktop web.
  */
 export function buildCapturedAlertDraft(
   decision: SmsDecision,

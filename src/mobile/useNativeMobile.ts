@@ -6,7 +6,7 @@ import type { Ledger } from "../domain";
 import { loadLedgerModel } from "../ledger/loader";
 import { loadMap } from "../ledger/mapping";
 import type { LearningStore } from "../ledger/learningStore";
-import { platformBridge } from "./platformBridge";
+import { platformBridge, type NativeAuthRegistration } from "./platformBridge";
 import type { SmsAccountLink } from "./smsLinks";
 import {
   collectExistingDedupeKeys,
@@ -15,7 +15,8 @@ import {
 
 /**
  * Coordinates Capacitor native mobile lifecycle hooks:
- *  - Syncs PocketBase auth session into Android Keystore (EncryptedSharedPreferences)
+ *  - Registers the signed-in account with the Android background SMS workers
+ *    (PocketBase token, or the Supabase project whose session they share via the Keystore)
  *  - Syncs serialized SMS engine context (links, categories, rules, ML examples, base model, existing ledger keys) for offline background processing
  *  - Syncs Android StatusBar color with Fuloos light/dark theme
  *  - Handles hardware Back button and deep links from Android notifications
@@ -23,7 +24,8 @@ import {
  */
 export function useNativeMobile({
   demo,
-  pbUrl,
+  nativeAuth,
+  onResumeSession,
   session,
   ledger,
   links,
@@ -37,7 +39,10 @@ export function useNativeMobile({
   onReloadLedger,
 }: {
   demo: boolean;
-  pbUrl: string;
+  /** Background-sync registration for the signed-in account (null when signed out). */
+  nativeAuth: NativeAuthRegistration | null;
+  /** Called on resume so the app adopts tokens the background workers refreshed. */
+  onResumeSession?: () => Promise<void>;
   session: Session | null;
   ledger: Ledger;
   links: SmsAccountLink[];
@@ -51,23 +56,26 @@ export function useNativeMobile({
   onReloadLedger: () => void;
 }) {
   const ownerKey =
-    !demo && session && pbUrl
-      ? `${pbUrl.trim().replace(/\/+$/, "")}|${session.user.id}`
+    !demo && session && nativeAuth
+      ? `${nativeAuth.url.trim().replace(/\/+$/, "")}|${session.user.id}`
       : "";
+  const authKey = demo || !nativeAuth ? "" : JSON.stringify(nativeAuth);
 
-  // 1. Sync PocketBase auth credentials into Android EncryptedSharedPreferences
+  // 1. Register the account with the Android background workers (Keystore-backed)
   useEffect(() => {
     if (!platformBridge.isNativePlatform()) return;
-    if (!demo && session && pbUrl) {
-      void platformBridge.syncAuthSession(pbUrl, session.token, session.user.id);
+    if (!demo && session && nativeAuth) {
+      void platformBridge.syncAuthSession(nativeAuth);
     } else {
       void platformBridge.clearAuthSession();
     }
-  }, [demo, pbUrl, session?.token, session?.user.id]);
+    // authKey captures every field of nativeAuth (including a PocketBase token change).
+  }, [demo, authKey, session?.user.id]);
 
   // 2. Sync serialized engine context for headless Android WorkManager background processing
   useEffect(() => {
-    if (!platformBridge.isNativePlatform() || demo || !session || !ownerKey) return;
+    if (!platformBridge.isNativePlatform() || demo || !session || !ownerKey)
+      return;
     let active = true;
     const owner = session.user.id;
     const categoryIds = new Set(ledger.categories.map((c) => c.id));
@@ -213,8 +221,11 @@ export function useNativeMobile({
       });
     void CapApp.addListener("appStateChange", ({ isActive }) => {
       if (isActive && !demo && session) {
-        void platformBridge.triggerCatchUpSync();
-        onReloadLedger();
+        void (async () => {
+          await onResumeSession?.();
+          void platformBridge.triggerCatchUpSync();
+          onReloadLedger();
+        })();
       }
     }).then((h) => {
       resumeHandle = h;
@@ -232,5 +243,6 @@ export function useNativeMobile({
     onOpenCaptureAlerts,
     onOpenSmsAutoCapture,
     onReloadLedger,
+    onResumeSession,
   ]);
 }

@@ -195,19 +195,71 @@ class FuloosSmsPlugin : Plugin() {
         call.resolve(JSObject().put("ok", true))
     }
 
+    /**
+     * Registers the signed-in account for background sync.
+     *  - PocketBase: `{ backend: "pocketbase", url, token, userId }` (legacy `pbUrl` accepted).
+     *  - Supabase: `{ backend: "supabase", url, anonKey, storageKey, userId }`; the tokens
+     *    themselves live in the shared session storage below.
+     */
     @PluginMethod
     fun syncAuthSession(call: PluginCall) {
-        val pbUrl = call.getString("pbUrl").orEmpty()
+        val backend = call.getString("backend") ?: SecureAuthStore.KIND_POCKETBASE
+        val url = (call.getString("url") ?: call.getString("pbUrl")).orEmpty()
         val token = call.getString("token").orEmpty()
         val userId = call.getString("userId").orEmpty()
-        if (pbUrl.isNotBlank() && token.isNotBlank() && userId.isNotBlank()) {
-            val ownerKey = FuloosLocalDb.ownerKeyFor(pbUrl, userId)
-            authStore.save(pbUrl, token, userId)
+        val anonKey = call.getString("anonKey").orEmpty()
+        val storageKey = call.getString("storageKey").orEmpty()
+        val valid = if (backend == SecureAuthStore.KIND_SUPABASE) {
+            url.isNotBlank() && anonKey.isNotBlank() && SecureAuthStore.isSessionKey(storageKey) && userId.isNotBlank()
+        } else {
+            url.isNotBlank() && token.isNotBlank() && userId.isNotBlank()
+        }
+        if (valid) {
+            val ownerKey = FuloosLocalDb.ownerKeyFor(url, userId)
+            if (backend == SecureAuthStore.KIND_SUPABASE) {
+                authStore.saveSupabase(url, anonKey, storageKey, userId)
+            } else {
+                authStore.savePocketBase(url, token, userId)
+            }
             db.setActiveOwnerKey(ownerKey)
             schedulePeriodicCatchUpIfNeeded(context, ownerKey)
             enqueueOneOffWorker(context, SmsProcessWorker.MODE_FLUSH_QUEUE)
         }
         call.resolve(JSObject().put("ok", true))
+    }
+
+    /** supabase-js session storage (async adapter in src/mobile/nativeAuthStorage.ts). */
+    @PluginMethod
+    fun authStorageGetItem(call: PluginCall) {
+        val key = call.getString("key").orEmpty()
+        val value = authStore.getItem(key)
+        call.resolve(JSObject().put("value", value ?: JSONObject.NULL))
+    }
+
+    @PluginMethod
+    fun authStorageSetItem(call: PluginCall) {
+        val key = call.getString("key").orEmpty()
+        val value = call.getString("value")
+        if (!SecureAuthStore.isSessionKey(key) || value == null) {
+            call.reject("Unsupported auth storage key")
+            return
+        }
+        authStore.setItem(key, value)
+        call.resolve(JSObject().put("ok", true))
+    }
+
+    @PluginMethod
+    fun authStorageRemoveItem(call: PluginCall) {
+        authStore.removeItem(call.getString("key").orEmpty())
+        call.resolve(JSObject().put("ok", true))
+    }
+
+    /** Returns (once) an OAuth / email-link redirect that opened the app before the WebView listened. */
+    @PluginMethod
+    fun getPendingAuthCallback(call: PluginCall) {
+        val url = pendingAuthCallback
+        pendingAuthCallback = null
+        call.resolve(JSObject().put("url", url ?: JSONObject.NULL))
     }
 
     @PluginMethod
@@ -408,6 +460,10 @@ class FuloosSmsPlugin : Plugin() {
         notifyListeners("deepLink", payload, true)
     }
 
+    private fun dispatchAuthCallback(url: String) {
+        notifyListeners("authCallback", JSObject().put("url", url), true)
+    }
+
     private fun dispatchSmsProcessed(payload: JSObject) {
         notifyListeners("smsProcessed", payload, false)
     }
@@ -421,12 +477,27 @@ class FuloosSmsPlugin : Plugin() {
         @Volatile
         private var pendingDeepLink: JSObject? = null
 
+        @Volatile
+        private var pendingAuthCallback: String? = null
+
         @JvmStatic
         fun handleIntent(intent: Intent?) {
             val data = intent?.data ?: return
             if (data.scheme != "fuloos") return
             val host = data.host.orEmpty().lowercase()
             val firstSegment = data.pathSegments.firstOrNull().orEmpty()
+
+            if (host == "auth-callback") {
+                // Supabase OAuth / email redirect (fuloos://auth-callback?code=...).
+                val url = data.toString()
+                val plugin = activeInstance?.get()
+                if (plugin != null) {
+                    plugin.dispatchAuthCallback(url)
+                } else {
+                    pendingAuthCallback = url
+                }
+                return
+            }
 
             val payload = when (host) {
                 "review" -> JSObject().apply {

@@ -4,7 +4,15 @@ Fuloos Mobile wraps the shared React 19 + TypeScript app in **Capacitor 8**, pre
 
 ---
 
-## 1. PocketBase Migration (Required for Web + Mobile Review Sync)
+## 1. Backend
+
+The app works with Supabase (`VITE_BACKEND=supabase`) or PocketBase (default). With Supabase,
+the app keeps its sign-in in the Android Keystore and the background SMS workers share it, so
+capture keeps working while the app is closed. Add `fuloos://auth-callback` to the Supabase
+redirect URLs so Google sign-in and email links reopen the app. Everything the Supabase project
+needs is listed in [`supabase-client-contract.md`](supabase-client-contract.md).
+
+### PocketBase migration
 
 Low-confidence SMS transactions are synced (with masked text only — never raw SMS content) to `fuloos_captured_alerts` with `source = "sms_native"` so you can review them from either your phone or desktop web.
 
@@ -66,7 +74,10 @@ Configure these under **GitHub → Settings → Secrets and variables → Action
 
 | Name | Type | Purpose |
 | :--- | :--- | :--- |
-| `VITE_POCKETBASE_URL` | Variable (or Secret) | Your live PocketBase URL baked into release APKs (without this, the APK runs in local demo mode). |
+| `VITE_BACKEND` | Variable | `supabase` to build the APK against Supabase; leave unset for PocketBase. |
+| `VITE_SUPABASE_URL` | Variable | Supabase project URL (with `VITE_BACKEND=supabase`). |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Variable | Supabase publishable (anon) key. `VITE_SUPABASE_ANON_KEY` also works. |
+| `VITE_POCKETBASE_URL` | Variable (or Secret) | Your live PocketBase URL baked into release APKs when not using Supabase. Without a backend, the APK runs in local demo mode. |
 | `VITE_LEDGER_MODEL_URL` | Variable (optional) | URL for the optional on-device ML model bundle. |
 | `VITE_VAPID_PUBLIC_KEY` | Variable (optional) | Public VAPID key for Web Push notifications. |
 | `ANDROID_KEYSTORE_BASE64` | Secret (optional) | Base64-encoded `.jks` keystore (`base64 -w0 fuloos-release.jks`) so release APKs are signed consistently and upgrade in-place without uninstalling. |
@@ -103,8 +114,8 @@ base64 -w0 fuloos-release.jks
    - Optionally filter by your account's opening date to avoid double-counting balances.
 
 Going forward, every incoming SMS is processed in the background by `SmsBroadcastReceiver` → `SmsProcessWorker` → `HeadlessSmsEngine`:
-- **High confidence**: auto-added to PocketBase + silent notification with **Undo**.
-- **Low confidence**: synced as a masked draft to PocketBase (`fuloos_captured_alerts`) + interactive Android notification with **one-tap category buttons** and **Pick other…**.
+- **High confidence**: auto-added to your account + silent notification with **Undo**.
+- **Low confidence**: synced as a masked draft (`fuloos_captured_alerts`) + interactive Android notification with **one-tap category buttons** and **Pick other…**.
 - **Offline**: queued in on-device SQLite (`FuloosLocalDb`) and flushed automatically by `WorkManager` when connectivity returns.
 
 ---
