@@ -1,7 +1,15 @@
-import { formatLocalizedAed } from "./i18n.ts";
-import { validateForeignCurrencyFields } from "./currency.ts";
+import { formatLocalizedAed, formatLocalizedCurrency } from "./i18n.ts";
+import {
+  DEFAULT_CURRENCY,
+  normalizeCurrencyCode,
+  validateForeignCurrencyFields,
+  type FxSource,
+  type FxStatus,
+} from "./currency.ts";
 import { validateSplits, validateTags } from "./enrichment.ts";
 import type { NetWorthItem, NetWorthSnapshot } from "./netWorth.ts";
+
+export type { FxSource, FxStatus } from "./currency.ts";
 
 export type AccountType =
   "current" | "savings" | "credit_card" | "cash" | "other";
@@ -14,6 +22,21 @@ export type RecurringStatus = "active" | "paused";
 export type OccurrenceMatchSource = "manual" | "auto";
 export type AutoDetectSetting = "on" | "off";
 export type AutoMatchSetting = "auto" | "review" | "off";
+export type ConfirmForeignMode = "always" | "above_threshold" | "never";
+export interface UserSettings {
+  id?: string;
+  /** User's reporting currency for cross-account totals, budgets, and reports (ISO 4217). */
+  reporting_currency: string;
+  /** Whether to prompt the user to confirm estimated foreign-currency amounts. */
+  confirm_foreign_mode: ConfirmForeignMode;
+  /** Threshold in minor units of reporting_currency when confirm_foreign_mode === "above_threshold". */
+  confirm_foreign_threshold: number;
+}
+export const defaultUserSettings: UserSettings = {
+  reporting_currency: DEFAULT_CURRENCY,
+  confirm_foreign_mode: "always",
+  confirm_foreign_threshold: 5000,
+};
 export interface Account {
   id: string;
   name: string;
@@ -63,7 +86,10 @@ export interface TransactionRule {
 export interface Transaction {
   id: string;
   type: Kind;
+  /** Integer minor units of the linked account's currency (source account for transfers). */
   amount: number;
+  /** For cross-currency transfers: integer minor units credited to `to_account_id` in its own currency. */
+  to_amount?: number;
   account_id: string;
   to_account_id: string | null;
   category_id: string | null;
@@ -73,15 +99,26 @@ export interface Transaction {
   tags?: string[];
   splits?: TransactionSplit[];
   receipt?: string;
+  /** What the merchant charged, in integer minor units of `original_currency`. */
   original_amount?: number;
+  /** ISO 4217 uppercase transaction currency code. */
   original_currency?: string;
+  /** Exchange rate: 1 major unit of `original_currency` = `fx_rate` major units of account currency. */
   fx_rate?: number;
+  /** Effective YYYY-MM-DD date of the exchange rate used. */
+  fx_rate_date?: string | null;
+  /** Provenance of `fx_rate` / `amount`. */
+  fx_source?: FxSource;
+  /** Whether the account-currency `amount` is exact or an estimate awaiting confirmation. */
+  fx_status?: FxStatus;
 }
 export interface RecurringSchedule {
   id: string;
   name: string;
   type: RecurringKind;
   amount: number;
+  /** ISO 4217 currency of `amount` (defaults to the linked account's currency). */
+  currency?: string;
   amount_type: RecurringAmountType;
   account_id: string;
   category_id: string | null;
@@ -216,6 +253,13 @@ export interface CapturedAlert {
   top_suggestions?: CaptureCategorySuggestion[];
   sms_sender?: string;
   card_last4?: string;
+  parsed_currency?: string;
+  parsed_original_amount?: number;
+  parsed_fx_rate?: number;
+  parsed_fx_rate_date?: string | null;
+  parsed_fx_source?: FxSource;
+  parsed_fx_status?: FxStatus;
+  warnings?: string[];
 }
 export interface Ledger {
   accounts: Account[];
@@ -224,6 +268,7 @@ export interface Ledger {
   recurring?: RecurringSchedule[];
   recurring_occurrences?: RecurringOccurrenceRecord[];
   recurring_prefs?: RecurringPreferences;
+  user_settings?: UserSettings;
   budgets?: Budget[];
   goals?: SavingsGoal[];
   goal_contributions?: GoalContribution[];
@@ -239,6 +284,7 @@ export const emptyLedger: Ledger = {
   recurring: [],
   recurring_occurrences: [],
   recurring_prefs: defaultRecurringPreferences,
+  user_settings: defaultUserSettings,
   budgets: [],
   goals: [],
   goal_contributions: [],
@@ -257,7 +303,54 @@ export function minor(value: string): number {
     throw new Error("Amount is too large.");
   return result === 0 ? 0 : negative ? -result : result;
 }
-export const money = (amount: number) => formatLocalizedAed(amount);
+export const accountCurrency = (account?: Pick<Account, "currency"> | null): string =>
+  normalizeCurrencyCode(account?.currency);
+export const reportingCurrency = (ledger?: Pick<Ledger, "user_settings"> | null): string =>
+  normalizeCurrencyCode(ledger?.user_settings?.reporting_currency);
+export const money = (amount: number, currency: string = DEFAULT_CURRENCY) =>
+  currency === DEFAULT_CURRENCY
+    ? formatLocalizedAed(amount)
+    : formatLocalizedCurrency(amount, currency);
+export const moneyIn = (amount: number, currency: string = DEFAULT_CURRENCY) =>
+  formatLocalizedCurrency(amount, currency);
+export function shouldAskToConfirmForeign(
+  amountReportingMinor: number,
+  settings: UserSettings = defaultUserSettings,
+): boolean {
+  if (settings.confirm_foreign_mode === "never") return false;
+  if (settings.confirm_foreign_mode === "always") return true;
+  return Math.abs(amountReportingMinor) >= Math.max(0, settings.confirm_foreign_threshold);
+}
+/**
+ * Ensures a transaction carries consistent `original_*` and `fx_*` fields for its
+ * account currency according to the multi-currency money model.
+ */
+export function normalizeTransactionFx<T extends Omit<Transaction, "id">>(
+  tx: T,
+  accCurrency: string = DEFAULT_CURRENCY,
+): T {
+  const acctCode = normalizeCurrencyCode(accCurrency);
+  const origCode = normalizeCurrencyCode(tx.original_currency ?? acctCode);
+  if (origCode === acctCode) {
+    return {
+      ...tx,
+      original_currency: acctCode,
+      original_amount: tx.amount,
+      fx_rate: 1,
+      fx_rate_date: tx.fx_rate_date ?? tx.date,
+      fx_source: "same_currency" as FxSource,
+      fx_status: "exact" as FxStatus,
+    };
+  }
+  return {
+    ...tx,
+    original_currency: origCode,
+    original_amount: tx.original_amount ?? tx.amount,
+    fx_rate_date: tx.fx_rate_date ?? tx.date,
+    fx_source: tx.fx_source ?? ("manual_rate" as FxSource),
+    fx_status: tx.fx_status ?? ("exact" as FxStatus),
+  };
+}
 /**
  * An account's stored opening_balance is its balance at the start of
  * opening_date, before that day's transactions. The form shows this as
@@ -282,10 +375,12 @@ export const balanceAsOfDate = (account: Account) =>
   addDaysIso(account.opening_date, -1);
 /** Stored opening_date for a balance at the end of `asOf`. */
 export const openingDateFor = (asOf: string) => addDaysIso(asOf, 1);
-/** How much a transaction moves one account's balance, in fils. */
+/** How much a transaction moves one account's balance, in that account's minor units. */
 export function accountDelta(t: Transaction, accountId: string): number {
+  const creditAmount =
+    t.type === "transfer" && t.to_amount !== undefined ? t.to_amount : t.amount;
   return (
-    (t.to_account_id === accountId ? t.amount : 0) +
+    (t.to_account_id === accountId ? creditAmount : 0) +
     (t.account_id === accountId
       ? t.type === "income"
         ? t.amount
@@ -337,6 +432,16 @@ export function validateTransaction(
     if (!target || target.id === source.id)
       throw new Error("Choose two different accounts.");
     if (t.category_id) throw new Error("Transfers do not have a category.");
+    if (
+      t.to_amount !== undefined &&
+      (!Number.isSafeInteger(t.to_amount) ||
+        t.to_amount < 0 ||
+        t.to_amount > 100_000_000_000)
+    ) {
+      throw new Error(
+        "Receiving transfer amount must be zero or greater and within the supported limit.",
+      );
+    }
   } else {
     if (t.to_account_id)
       throw new Error("Only transfers can have a receiving account.");
@@ -349,7 +454,10 @@ export function validateTransaction(
   if (t.splits !== undefined) {
     validateSplits(t.splits, t.amount, t.type, ledger.categories);
   }
-  validateForeignCurrencyFields(t);
+  validateForeignCurrencyFields(t, {
+    accountCurrency: normalizeCurrencyCode(source.currency),
+    allowUnknownCode: t.fx_status === "estimated",
+  });
   if (t.id && ledger.recurring_occurrences?.length) {
     const link = ledger.recurring_occurrences.find(
       (o) => o.transaction_id === t.id,

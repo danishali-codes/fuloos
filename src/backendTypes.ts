@@ -1,23 +1,32 @@
-import type {
-  Account,
-  Budget,
-  CaptureAlertStatus,
-  CaptureTokenInfo,
-  CapturedAlert,
-  Category,
-  DigestDay,
-  GoalContribution,
-  Household,
-  HouseholdMember,
-  Ledger,
-  NotificationPreferences,
-  RecurringOccurrenceRecord,
-  RecurringPreferences,
-  RecurringSchedule,
-  SavingsGoal,
-  Transaction,
-  TransactionRule,
+import {
+  defaultUserSettings,
+  type Account,
+  type Budget,
+  type CaptureAlertStatus,
+  type CaptureTokenInfo,
+  type CapturedAlert,
+  type Category,
+  type ConfirmForeignMode,
+  type DigestDay,
+  type GoalContribution,
+  type Household,
+  type HouseholdMember,
+  type Ledger,
+  type NotificationPreferences,
+  type RecurringOccurrenceRecord,
+  type RecurringPreferences,
+  type RecurringSchedule,
+  type SavingsGoal,
+  type Transaction,
+  type TransactionRule,
+  type UserSettings,
 } from "./domain.ts";
+import {
+  DEFAULT_CURRENCY,
+  isValidFxSource,
+  isValidFxStatus,
+  normalizeCurrencyCode,
+} from "./currency.ts";
 import { normalizeSplits, normalizeTags } from "./enrichment.ts";
 import type { NetWorthItem, NetWorthSnapshot } from "./netWorth.ts";
 
@@ -49,6 +58,7 @@ export type Table =
   | "recurring"
   | "recurring_occurrences"
   | "recurring_prefs"
+  | "user_settings"
   | "csv_presets"
   | "budgets"
   | "goals"
@@ -86,6 +96,7 @@ export type SavedRecurringPreferences = RecurringPreferences & { id: string };
 export type SavedNotificationPreferences = NotificationPreferences & {
   id: string;
 };
+export type SavedUserSettings = UserSettings & { id: string };
 
 export interface NotificationLogRecord {
   id: string;
@@ -127,6 +138,7 @@ export type RecordTypes = {
   recurring: RecurringSchedule;
   recurring_occurrences: RecurringOccurrenceRecord;
   recurring_prefs: SavedRecurringPreferences;
+  user_settings: SavedUserSettings;
   csv_presets: CsvPresetRecord;
   budgets: Budget;
   goals: SavingsGoal;
@@ -375,6 +387,16 @@ export interface FuloosBackend {
     budgetId: string,
     householdId: string | null,
   ): Promise<Budget>;
+  loadUserSettings?(): Promise<{
+    settings: UserSettings;
+    supported: boolean;
+  }>;
+  saveUserSettings?(settings: UserSettings): Promise<UserSettings>;
+  fetchFxRate?(
+    from: string,
+    to: string,
+    date: string,
+  ): Promise<{ rate: number; rate_date: string; provider: string } | null>;
 }
 
 const MAX_DISMISSED_KEYS = 400;
@@ -522,19 +544,46 @@ export function normalizeRecord<K extends Table>(
     const tx = { ...(record as Transaction) };
     const tags = normalizeTags(tx.tags);
     const splits = normalizeSplits(tx.splits);
-    const hasForeign =
-      Boolean(tx.original_currency) && tx.original_currency !== "AED";
-    if (!hasForeign) {
+    const rawOrigCurr =
+      typeof tx.original_currency === "string"
+        ? tx.original_currency.trim().toUpperCase()
+        : "";
+    if (!rawOrigCurr) {
       delete tx.original_currency;
       delete tx.original_amount;
       delete tx.fx_rate;
     } else {
-      if (tx.original_amount != null) {
+      tx.original_currency = rawOrigCurr;
+      if (tx.original_amount != null && Number.isFinite(Number(tx.original_amount))) {
         tx.original_amount = Math.trunc(Number(tx.original_amount));
+      } else {
+        delete tx.original_amount;
       }
-      if (tx.fx_rate != null) {
+      if (tx.fx_rate != null && Number.isFinite(Number(tx.fx_rate)) && Number(tx.fx_rate) > 0) {
         tx.fx_rate = Number(tx.fx_rate);
+      } else {
+        delete tx.fx_rate;
       }
+    }
+    if (typeof tx.fx_rate_date === "string" && tx.fx_rate_date.trim()) {
+      tx.fx_rate_date = tx.fx_rate_date.trim().slice(0, 10);
+    } else {
+      delete tx.fx_rate_date;
+    }
+    if (!isValidFxSource(tx.fx_source)) {
+      delete tx.fx_source;
+    }
+    if (!isValidFxStatus(tx.fx_status)) {
+      delete tx.fx_status;
+    }
+    if (
+      tx.to_amount != null &&
+      Number.isFinite(Number(tx.to_amount)) &&
+      Number(tx.to_amount) >= 0
+    ) {
+      tx.to_amount = Math.trunc(Number(tx.to_amount));
+    } else {
+      delete tx.to_amount;
     }
     const receipt = tx.receipt ? String(tx.receipt) : undefined;
     delete tx.receipt;
@@ -586,9 +635,14 @@ export function normalizeRecord<K extends Table>(
   }
   if (table === "recurring") {
     const r = record as RecurringSchedule;
+    const currency =
+      typeof r.currency === "string" && r.currency.trim()
+        ? normalizeCurrencyCode(r.currency)
+        : undefined;
     return {
       ...r,
       amount: Math.trunc(Number(r.amount ?? 0)),
+      ...(currency ? { currency } : {}),
       notes: r.notes ?? "",
       category_id: r.category_id || null,
       end_date: r.end_date || null,
@@ -809,6 +863,50 @@ export function normalizeRecord<K extends Table>(
       ...(topSuggestions?.length ? { top_suggestions: topSuggestions } : {}),
       ...(a.sms_sender ? { sms_sender: String(a.sms_sender) } : {}),
       ...(a.card_last4 ? { card_last4: String(a.card_last4) } : {}),
+      ...(typeof a.parsed_currency === "string" && a.parsed_currency.trim()
+        ? { parsed_currency: a.parsed_currency.trim().toUpperCase() }
+        : {}),
+      ...(a.parsed_original_amount != null &&
+      Number.isFinite(Number(a.parsed_original_amount))
+        ? { parsed_original_amount: Math.trunc(Number(a.parsed_original_amount)) }
+        : {}),
+      ...(a.parsed_fx_rate != null &&
+      Number.isFinite(Number(a.parsed_fx_rate)) &&
+      Number(a.parsed_fx_rate) > 0
+        ? { parsed_fx_rate: Number(a.parsed_fx_rate) }
+        : {}),
+      ...(typeof a.parsed_fx_rate_date === "string" && a.parsed_fx_rate_date.trim()
+        ? { parsed_fx_rate_date: a.parsed_fx_rate_date.trim().slice(0, 10) }
+        : {}),
+      ...(isValidFxSource(a.parsed_fx_source)
+        ? { parsed_fx_source: a.parsed_fx_source }
+        : {}),
+      ...(isValidFxStatus(a.parsed_fx_status)
+        ? { parsed_fx_status: a.parsed_fx_status }
+        : {}),
+      ...(Array.isArray(a.warnings) && a.warnings.length
+        ? { warnings: a.warnings.map((w) => String(w)) }
+        : {}),
+    } as RecordTypes[K];
+  }
+  if (table === "user_settings") {
+    const s = record as Partial<SavedUserSettings>;
+    const mode: ConfirmForeignMode =
+      s.confirm_foreign_mode === "above_threshold" ||
+      s.confirm_foreign_mode === "never"
+        ? s.confirm_foreign_mode
+        : "always";
+    const threshold = Number(s.confirm_foreign_threshold);
+    return {
+      id: String(s.id ?? ""),
+      reporting_currency: normalizeCurrencyCode(
+        s.reporting_currency ?? DEFAULT_CURRENCY,
+      ),
+      confirm_foreign_mode: mode,
+      confirm_foreign_threshold:
+        Number.isFinite(threshold) && threshold >= 0
+          ? Math.trunc(threshold)
+          : defaultUserSettings.confirm_foreign_threshold,
     } as RecordTypes[K];
   }
   if (table === "net_worth_items") {
