@@ -85,6 +85,9 @@ import type { CapturedAlert } from "./domain";
 import { platformBridge } from "./mobile/platformBridge";
 import type { SmsAccountLink } from "./mobile/smsLinks";
 import { useNativeMobile } from "./mobile/useNativeMobile";
+import { isMobileApkMode } from "./mobile-ui/isMobileApkMode";
+import { MobileAuth } from "./mobile-ui/MobileAuth";
+import { MobileAppShell } from "./mobile-ui/MobileAppShell";
 import { Leaf } from "lucide-react";
 import {
   balance,
@@ -219,6 +222,12 @@ function App() {
       return null;
     },
   );
+  const apkMobile = useMemo(() => isMobileApkMode(), []);
+  const [mobileSelectedTx, setMobileSelectedTx] = useState<Transaction | null>(
+    null,
+  );
+  const [mobileEditQuickTx, setMobileEditQuickTx] =
+    useState<Transaction | null>(null);
   useEffect(
     () => registerServiceWorker((apply) => setSwUpdate(() => apply)),
     [],
@@ -1534,6 +1543,8 @@ function App() {
       deleteOpen ||
       modal ||
       quickAdd ||
+      mobileEditQuickTx ||
+      mobileSelectedTx ||
       bulkItems ||
       budgetModal ||
       goalModal ||
@@ -1556,6 +1567,8 @@ function App() {
     hasOpenModal,
     onCloseTopModal: () => {
       if (quickAdd) setQuickAdd(null);
+      else if (mobileEditQuickTx) setMobileEditQuickTx(null);
+      else if (mobileSelectedTx) setMobileSelectedTx(null);
       else if (smsAutoCaptureOpen) setSmsAutoCaptureOpen(false);
       else if (captureAlertsOpen) setCaptureAlertsOpen(false);
       else if (rulesOpen) setRulesOpen(false);
@@ -1585,7 +1598,14 @@ function App() {
   if (checking)
     return <div className="loading">{uiText("Opening Fuloos…")}</div>;
   if (!session && !demo)
-    return (
+    return apkMobile ? (
+      <MobileAuth
+        onDemo={startDemo}
+        externalError={error}
+        initialMfa={pendingMfa}
+        onClearInitialMfa={() => setPendingMfa(null)}
+      />
+    ) : (
       <Auth
         onDemo={startDemo}
         externalError={error}
@@ -1615,342 +1635,126 @@ function App() {
         }}
       />
     );
-  return (
-    <div className="shell">
-      <Sidebar
-        page={page}
-        demo={demo}
-        session={session}
-        onNavigate={navigatePage}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onSignOutDemo={(empty) => {
-          setDemo(false);
-          setLedger(empty);
-        }}
-      />
-      <MobileNav
-        page={page}
-        demo={demo}
-        session={session}
-        pendingAlertCount={pendingCapturedAlerts(ledger.captured_alerts).length}
-        linkedSmsCount={smsLinks.length}
-        onNavigate={navigatePage}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onOpenRules={() => setRulesOpen(true)}
-        onOpenCaptureAlerts={() => setCaptureAlertsOpen(true)}
-        onOpenSmsAutoCapture={() => openSmsAutoCapture()}
-        onSignOutDemo={(empty) => {
-          setDemo(false);
-          setLedger(empty);
-        }}
-      />
-      <main>
-        <AppTopbar
-          page={page}
-          demo={demo}
-          session={session}
-          onOpenSettings={() => setSettingsOpen(true)}
-        />
-        <div className="content">
-          <PwaBanners
-            online={online}
-            demo={demo}
-            updateAvailable={Boolean(swUpdate)}
-            onApplyUpdate={() => swUpdate?.()}
-            canInstall={canInstall}
-            onInstall={() => void promptInstall()}
-          />
-          <AppPageHeader
-            page={page}
-            demo={demo}
-            loading={loading}
+  const secondaryPages = (
+    <>
+      {page === "Recurring" && (
+        <Suspense
+          fallback={<div className="loading-inline">{uiText("Loading…")}</div>}
+        >
+          <RecurringPage
+            ledger={ledger}
+            concealed={concealed}
             busy={busy}
-            error={error}
-            month={month}
-            rangeFrom={rangeFrom}
-            span={span}
-            activeMonths={activeMonths}
-            onExitDemo={() => {
-              setDemo(false);
-              setLedger(emptyLedger);
-            }}
-            onPrimaryAction={() => {
-              if (page === "Recurring") {
-                setRecurringModal({ open: true });
-              } else if (page === "Budgets") {
-                setBudgetModal({ draft: { start_month: month } });
-              } else if (page === "Goals") {
-                setGoalModal({ open: true });
-              } else if (page === "Net Worth") {
-                setNetWorthModal({ open: true });
-              } else {
-                setModal({
-                  kind:
-                    page === "Accounts"
-                      ? "account"
-                      : page === "Categories"
-                        ? "category"
-                        : "transaction",
-                });
-              }
-            }}
-            onRetry={() => void load()}
-            onPeriodChange={(next) => {
-              setView(next.span);
-              setMonth(next.month);
-              if (next.from) setRangeFrom(next.from);
-            }}
+            initialTab={recurringTab}
+            initialFilter={recurringFilter}
+            onAddSchedule={() => setRecurringModal({ open: true })}
+            onEditSchedule={(item) => setRecurringModal({ open: true, item })}
+            onTogglePause={(item) => void togglePauseRecurring(item)}
+            onDeleteSchedule={(item) => void remove("recurring", item.id)}
+            onConfirmOccurrence={(schedule, occurrenceDate) =>
+              setConfirmOcc({ schedule, occurrenceDate })
+            }
+            onUnlinkOccurrence={(occurrenceId) =>
+              void unlinkOccurrence(occurrenceId)
+            }
+            onRelinkOccurrence={(existing, schedule, occurrenceDate) =>
+              setConfirmOcc({
+                schedule,
+                occurrenceDate,
+                existingConfirmation: existing,
+              })
+            }
+            onAcceptPattern={(pattern) => void acceptDetectedPattern(pattern)}
+            onEditPattern={(pattern) => editDetectedPattern(pattern)}
+            onDismissPattern={(patternKey) => void dismissPattern(patternKey)}
+            onConfirmMatchCandidate={(candidate) =>
+              void confirmLinkOccurrence(
+                candidate.schedule,
+                candidate.occurrenceDate,
+                candidate.transaction.id,
+                undefined,
+                "manual",
+                candidate.summaryReason,
+              )
+            }
+            onDismissMatchCandidate={(matchKey) =>
+              void dismissMatchCandidate(matchKey)
+            }
+            onUpdatePreferences={(prefs) => void savePreferences(prefs)}
+            onRestoreDismissed={() => void restoreDismissed()}
+            onRunReconciliation={() => void runAutoReconciliation()}
           />
-          {!demo && (
-            <SchemaBanner
-              status={schemaStatus}
-              dismissed={schemaDismissed}
-              onDismiss={() => setSchemaDismissed(true)}
-              backendKind={backend?.kind}
-            />
-          )}
-          {page === "Overview" && (
-            <OverviewPage
-              ledger={ledger}
-              net={net}
-              summary={summary}
-              rangeLabel={rangeLabel}
-              hidden={hidden}
-              setHidden={setHidden}
-              concealed={concealed}
-              spending={spending}
-              monthly={monthly}
-              month={month}
-              busy={busy}
-              onNavigate={setPage}
-              onSelectAccount={setAccountFilter}
-              onOpenModal={setModal}
-              onOpenRecurring={(tab = "schedules", filter = "all") => {
-                setRecurringTab(tab);
-                setRecurringFilter(filter);
-                setPage("Recurring");
-              }}
-              onConfirmOccurrence={(schedule, occurrenceDate) =>
-                setConfirmOcc({ schedule, occurrenceDate })
-              }
-              onAddGoal={() => setGoalModal({ open: true })}
-              onContributeGoal={(goal) => setGoalContributeTarget(goal)}
-            />
-          )}
-          {page === "Recurring" && (
-            <Suspense
-              fallback={
-                <div className="loading-inline">{uiText("Loading…")}</div>
-              }
-            >
-              <RecurringPage
-                ledger={ledger}
-                concealed={concealed}
-                busy={busy}
-                initialTab={recurringTab}
-                initialFilter={recurringFilter}
-                onAddSchedule={() => setRecurringModal({ open: true })}
-                onEditSchedule={(item) =>
-                  setRecurringModal({ open: true, item })
-                }
-                onTogglePause={(item) => void togglePauseRecurring(item)}
-                onDeleteSchedule={(item) => void remove("recurring", item.id)}
-                onConfirmOccurrence={(schedule, occurrenceDate) =>
-                  setConfirmOcc({ schedule, occurrenceDate })
-                }
-                onUnlinkOccurrence={(occurrenceId) =>
-                  void unlinkOccurrence(occurrenceId)
-                }
-                onRelinkOccurrence={(existing, schedule, occurrenceDate) =>
-                  setConfirmOcc({
-                    schedule,
-                    occurrenceDate,
-                    existingConfirmation: existing,
-                  })
-                }
-                onAcceptPattern={(pattern) =>
-                  void acceptDetectedPattern(pattern)
-                }
-                onEditPattern={(pattern) => editDetectedPattern(pattern)}
-                onDismissPattern={(patternKey) =>
-                  void dismissPattern(patternKey)
-                }
-                onConfirmMatchCandidate={(candidate) =>
-                  void confirmLinkOccurrence(
-                    candidate.schedule,
-                    candidate.occurrenceDate,
-                    candidate.transaction.id,
-                    undefined,
-                    "manual",
-                    candidate.summaryReason,
-                  )
-                }
-                onDismissMatchCandidate={(matchKey) =>
-                  void dismissMatchCandidate(matchKey)
-                }
-                onUpdatePreferences={(prefs) => void savePreferences(prefs)}
-                onRestoreDismissed={() => void restoreDismissed()}
-                onRunReconciliation={() => void runAutoReconciliation()}
-              />
-            </Suspense>
-          )}
-          {page === "Budgets" && (
-            <Suspense
-              fallback={
-                <div className="loading-inline">{uiText("Loading…")}</div>
-              }
-            >
-              <BudgetsPage
-                ledger={ledger}
-                month={month}
-                onMonthChange={(next) => {
-                  // Keep a custom range's length when Budgets moves the shared month.
-                  if (span === "custom")
-                    setRangeFrom((from) =>
-                      shiftMonth(from, monthsBetween(month, next) - 1),
-                    );
-                  setMonth(next);
-                }}
-                concealed={concealed}
-                busy={busy}
-                onAdd={(draft) => setBudgetModal({ draft })}
-                onEdit={(item) => setBudgetModal({ item })}
-                onDelete={(item) => void remove("budgets", item.id)}
-              />
-            </Suspense>
-          )}
-          {page === "Goals" && (
-            <Suspense
-              fallback={
-                <div className="loading-inline">{uiText("Loading…")}</div>
-              }
-            >
-              <GoalsPage
-                ledger={ledger}
-                concealed={concealed}
-                busy={busy}
-                onAddGoal={() => setGoalModal({ open: true })}
-                onEditGoal={(item) => setGoalModal({ open: true, item })}
-                onDeleteGoal={deleteGoal}
-                onContributeGoal={(goal) => setGoalContributeTarget(goal)}
-                onDeleteContribution={deleteGoalContribution}
-              />
-            </Suspense>
-          )}
-          {page === "Net Worth" && (
-            <Suspense
-              fallback={
-                <div className="loading-inline">{uiText("Loading…")}</div>
-              }
-            >
-              <NetWorthPage
-                ledger={ledger}
-                concealed={concealed}
-                busy={busy}
-                onAddItem={() => setNetWorthModal({ open: true })}
-                onEditItem={(item) => setNetWorthModal({ open: true, item })}
-                onDeleteItem={(item) => void deleteNetWorthItem(item)}
-                onUpdateValuation={setNetWorthValuationTarget}
-                onDeleteSnapshot={(snap) => void deleteNetWorthSnapshot(snap)}
-                onNavigateAccounts={() => setPage("Accounts")}
-              />
-            </Suspense>
-          )}
-          {page === "Reports" && (
-            <Suspense
-              fallback={
-                <div className="loading-inline">{uiText("Loading…")}</div>
-              }
-            >
-              <ReportsPage
-                ledger={ledger}
-                budgetRangeStart={budgetRangeStart}
-                month={month}
-                view={view}
-                rangeLabel={rangeLabel}
-                summary={summary}
-                spending={spending}
-                concealed={concealed}
-                onManageBudgets={() => setPage("Budgets")}
-              />
-            </Suspense>
-          )}
-          {page === "Accounts" && (
-            <AccountsPage
-              ledger={ledger}
-              net={net}
-              density={density}
-              busy={busy}
-              concealed={concealed}
-              balanceNote={balanceNote}
-              onSelectAccount={(accountId) => {
-                setPage("Transactions");
-                setAccountFilter(accountId);
-              }}
-              onOpenModal={setModal}
-              onDeleteAccount={setAccountToDelete}
-              smsLinks={smsLinks}
-              onOpenSmsAutoCapture={(accountId) => {
-                setSmsAutoCaptureAccountId(accountId ?? undefined);
-                setSmsAutoCaptureOpen(true);
-              }}
-            />
-          )}
-          {page === "Categories" && (
-            <CategoriesPage
-              ledger={ledger}
-              density={density}
-              busy={busy}
-              categoryCounts={categoryCounts}
-              selectedCategories={selectedCategories}
-              setSelectedCategories={setSelectedCategories}
-              toggleCategory={toggleCategory}
-              onDeleteCategories={setCategoriesToDelete}
-              onOpenModal={setModal}
-              onOpenRules={() => setRulesOpen(true)}
-            />
-          )}
-          {page === "Transactions" && (
-            <TransactionsPanel
-              ledger={ledger}
-              from={
-                view === "all" ? undefined : start.toISOString().slice(0, 10)
-              }
-              to={view === "all" ? undefined : end.toISOString().slice(0, 10)}
-              hidden={hidden}
-              busy={busy}
-              loading={loading}
-              search={search}
-              onSearch={setSearch}
-              accountFilter={accountFilter}
-              onAccountFilter={setAccountFilter}
-              kindFilter={kindFilter}
-              onKindFilter={setKindFilter}
-              selected={selected}
-              onSelectionChange={setSelected}
-              onImport={() => setImportOpen(true)}
-              onImportSms={() => setSmsOpen(true)}
-              onImportPdf={() => setPdfOpen(true)}
-              pendingAlertCount={
-                pendingCapturedAlerts(ledger.captured_alerts).length
-              }
-              onOpenCaptureAlerts={() => setCaptureAlertsOpen(true)}
-              onEditSelected={setBulkItems}
-              onDeleteSelected={(items) =>
-                setTransactionsToDelete(items.map((t) => t.id))
-              }
-              onEdit={(t) => setModal({ kind: "transaction", item: t })}
-              onDelete={(t) => void remove("transactions", t.id)}
-              onCategorize={(t, categoryId) => void categorize(t, categoryId)}
-            />
-          )}
-          <footer>
-            <Leaf size={14} />
-            <span>{t("footer.tagline")}</span>
-            <span className="footer-brand">{t("footer.brand")}</span>
-          </footer>
-        </div>
-      </main>
+        </Suspense>
+      )}
+      {page === "Goals" && (
+        <Suspense
+          fallback={<div className="loading-inline">{uiText("Loading…")}</div>}
+        >
+          <GoalsPage
+            ledger={ledger}
+            concealed={concealed}
+            busy={busy}
+            onAddGoal={() => setGoalModal({ open: true })}
+            onEditGoal={(item) => setGoalModal({ open: true, item })}
+            onDeleteGoal={deleteGoal}
+            onContributeGoal={(goal) => setGoalContributeTarget(goal)}
+            onDeleteContribution={deleteGoalContribution}
+          />
+        </Suspense>
+      )}
+      {page === "Net Worth" && (
+        <Suspense
+          fallback={<div className="loading-inline">{uiText("Loading…")}</div>}
+        >
+          <NetWorthPage
+            ledger={ledger}
+            concealed={concealed}
+            busy={busy}
+            onAddItem={() => setNetWorthModal({ open: true })}
+            onEditItem={(item) => setNetWorthModal({ open: true, item })}
+            onDeleteItem={(item) => void deleteNetWorthItem(item)}
+            onUpdateValuation={setNetWorthValuationTarget}
+            onDeleteSnapshot={(snap) => void deleteNetWorthSnapshot(snap)}
+            onNavigateAccounts={() => setPage("Accounts")}
+          />
+        </Suspense>
+      )}
+      {page === "Reports" && (
+        <Suspense
+          fallback={<div className="loading-inline">{uiText("Loading…")}</div>}
+        >
+          <ReportsPage
+            ledger={ledger}
+            budgetRangeStart={budgetRangeStart}
+            month={month}
+            view={view}
+            rangeLabel={rangeLabel}
+            summary={summary}
+            spending={spending}
+            concealed={concealed}
+            onManageBudgets={() => setPage("Budgets")}
+          />
+        </Suspense>
+      )}
+      {page === "Categories" && (
+        <CategoriesPage
+          ledger={ledger}
+          density={density}
+          busy={busy}
+          categoryCounts={categoryCounts}
+          selectedCategories={selectedCategories}
+          setSelectedCategories={setSelectedCategories}
+          toggleCategory={toggleCategory}
+          onDeleteCategories={setCategoriesToDelete}
+          onOpenModal={setModal}
+          onOpenRules={() => setRulesOpen(true)}
+        />
+      )}
+    </>
+  );
+
+  const sharedModals = (
+    <>
       <QueueDock queue={queue} />
       <AppModals
         demo={demo}
@@ -2075,6 +1879,310 @@ function App() {
           onSave={updateNetWorthValuation}
         />
       )}
+    </>
+  );
+
+  if (apkMobile) {
+    return (
+      <>
+        <MobileAppShell
+          page={page}
+          ledger={ledger}
+          session={session}
+          demo={demo}
+          online={online}
+          month={month}
+          net={net}
+          summary={summary}
+          monthly={monthly}
+          hidden={hidden}
+          busy={busy}
+          error={error}
+          search={search}
+          kindFilter={kindFilter}
+          accountFilter={accountFilter}
+          lockConfig={lockConfig}
+          smsLinks={smsLinks}
+          quickAdd={quickAdd}
+          editingQuickTx={mobileEditQuickTx}
+          selectedTx={mobileSelectedTx}
+          onSelectTx={setMobileSelectedTx}
+          onNavigate={navigatePage}
+          onToggleHidden={() => setHidden((v) => !v)}
+          onChangeMonth={(next) => {
+            setView("month");
+            setMonth(next);
+          }}
+          onSearch={setSearch}
+          onKindFilter={setKindFilter}
+          onAccountFilter={setAccountFilter}
+          onOpenQuickAdd={(draft) => {
+            setMobileEditQuickTx(null);
+            setQuickAdd(draft ?? {});
+          }}
+          onCloseQuickAdd={() => {
+            setQuickAdd(null);
+            setMobileEditQuickTx(null);
+          }}
+          onQuickEditTx={(tx) => {
+            setQuickAdd(null);
+            setMobileEditQuickTx(tx);
+          }}
+          onOpenFullTxEditor={(tx) =>
+            setModal({ kind: "transaction", item: tx })
+          }
+          onDeleteTx={(tx) => void remove("transactions", tx.id)}
+          onSaveTransaction={save}
+          onAddAccount={() => setModal({ kind: "account" })}
+          onEditAccount={(acc) => setModal({ kind: "account", item: acc })}
+          onDeleteAccount={setAccountToDelete}
+          onAddBudget={(categoryId) =>
+            setBudgetModal({
+              draft: {
+                start_month: month,
+                ...(categoryId ? { category_id: categoryId } : {}),
+              },
+            })
+          }
+          onEditBudget={(item) => setBudgetModal({ item })}
+          onOpenSmsAutoCapture={(accountId) => openSmsAutoCapture(accountId)}
+          onOpenCaptureAlerts={() => setCaptureAlertsOpen(true)}
+          onOpenRules={() => setRulesOpen(true)}
+          onOpenImport={() => setImportOpen(true)}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onSignOut={() => {
+            if (demo) {
+              setDemo(false);
+              setLedger(emptyLedger);
+            } else {
+              backend?.signOut();
+            }
+          }}
+          onRetry={() => void load()}
+          onPrimarySubpageAction={() => {
+            if (page === "Recurring") setRecurringModal({ open: true });
+            else if (page === "Goals") setGoalModal({ open: true });
+            else if (page === "Net Worth") setNetWorthModal({ open: true });
+            else if (page === "Categories") setModal({ kind: "category" });
+          }}
+          secondaryContent={secondaryPages}
+        />
+        {sharedModals}
+      </>
+    );
+  }
+
+  return (
+    <div className="shell">
+      <Sidebar
+        page={page}
+        demo={demo}
+        session={session}
+        onNavigate={navigatePage}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onSignOutDemo={(empty) => {
+          setDemo(false);
+          setLedger(empty);
+        }}
+      />
+      <MobileNav
+        page={page}
+        demo={demo}
+        session={session}
+        pendingAlertCount={pendingCapturedAlerts(ledger.captured_alerts).length}
+        linkedSmsCount={smsLinks.length}
+        onNavigate={navigatePage}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenRules={() => setRulesOpen(true)}
+        onOpenCaptureAlerts={() => setCaptureAlertsOpen(true)}
+        onOpenSmsAutoCapture={() => openSmsAutoCapture()}
+        onSignOutDemo={(empty) => {
+          setDemo(false);
+          setLedger(empty);
+        }}
+      />
+      <main>
+        <AppTopbar
+          page={page}
+          demo={demo}
+          session={session}
+          onOpenSettings={() => setSettingsOpen(true)}
+        />
+        <div className="content">
+          <PwaBanners
+            online={online}
+            demo={demo}
+            updateAvailable={Boolean(swUpdate)}
+            onApplyUpdate={() => swUpdate?.()}
+            canInstall={canInstall}
+            onInstall={() => void promptInstall()}
+          />
+          <AppPageHeader
+            page={page}
+            demo={demo}
+            loading={loading}
+            busy={busy}
+            error={error}
+            month={month}
+            rangeFrom={rangeFrom}
+            span={span}
+            activeMonths={activeMonths}
+            onExitDemo={() => {
+              setDemo(false);
+              setLedger(emptyLedger);
+            }}
+            onPrimaryAction={() => {
+              if (page === "Recurring") {
+                setRecurringModal({ open: true });
+              } else if (page === "Budgets") {
+                setBudgetModal({ draft: { start_month: month } });
+              } else if (page === "Goals") {
+                setGoalModal({ open: true });
+              } else if (page === "Net Worth") {
+                setNetWorthModal({ open: true });
+              } else {
+                setModal({
+                  kind:
+                    page === "Accounts"
+                      ? "account"
+                      : page === "Categories"
+                        ? "category"
+                        : "transaction",
+                });
+              }
+            }}
+            onRetry={() => void load()}
+            onPeriodChange={(next) => {
+              setView(next.span);
+              setMonth(next.month);
+              if (next.from) setRangeFrom(next.from);
+            }}
+          />
+          {!demo && (
+            <SchemaBanner
+              status={schemaStatus}
+              dismissed={schemaDismissed}
+              onDismiss={() => setSchemaDismissed(true)}
+              backendKind={backend?.kind}
+            />
+          )}
+          {page === "Overview" && (
+            <OverviewPage
+              ledger={ledger}
+              net={net}
+              summary={summary}
+              rangeLabel={rangeLabel}
+              hidden={hidden}
+              setHidden={setHidden}
+              concealed={concealed}
+              spending={spending}
+              monthly={monthly}
+              month={month}
+              busy={busy}
+              onNavigate={setPage}
+              onSelectAccount={setAccountFilter}
+              onOpenModal={setModal}
+              onOpenRecurring={(tab = "schedules", filter = "all") => {
+                setRecurringTab(tab);
+                setRecurringFilter(filter);
+                setPage("Recurring");
+              }}
+              onConfirmOccurrence={(schedule, occurrenceDate) =>
+                setConfirmOcc({ schedule, occurrenceDate })
+              }
+              onAddGoal={() => setGoalModal({ open: true })}
+              onContributeGoal={(goal) => setGoalContributeTarget(goal)}
+            />
+          )}
+          {page === "Budgets" && (
+            <Suspense
+              fallback={
+                <div className="loading-inline">{uiText("Loading…")}</div>
+              }
+            >
+              <BudgetsPage
+                ledger={ledger}
+                month={month}
+                onMonthChange={(next) => {
+                  // Keep a custom range's length when Budgets moves the shared month.
+                  if (span === "custom")
+                    setRangeFrom((from) =>
+                      shiftMonth(from, monthsBetween(month, next) - 1),
+                    );
+                  setMonth(next);
+                }}
+                concealed={concealed}
+                busy={busy}
+                onAdd={(draft) => setBudgetModal({ draft })}
+                onEdit={(item) => setBudgetModal({ item })}
+                onDelete={(item) => void remove("budgets", item.id)}
+              />
+            </Suspense>
+          )}
+          {secondaryPages}
+          {page === "Accounts" && (
+            <AccountsPage
+              ledger={ledger}
+              net={net}
+              density={density}
+              busy={busy}
+              concealed={concealed}
+              balanceNote={balanceNote}
+              onSelectAccount={(accountId) => {
+                setPage("Transactions");
+                setAccountFilter(accountId);
+              }}
+              onOpenModal={setModal}
+              onDeleteAccount={setAccountToDelete}
+              smsLinks={smsLinks}
+              onOpenSmsAutoCapture={(accountId) => {
+                setSmsAutoCaptureAccountId(accountId ?? undefined);
+                setSmsAutoCaptureOpen(true);
+              }}
+            />
+          )}
+          {page === "Transactions" && (
+            <TransactionsPanel
+              ledger={ledger}
+              from={
+                view === "all" ? undefined : start.toISOString().slice(0, 10)
+              }
+              to={view === "all" ? undefined : end.toISOString().slice(0, 10)}
+              hidden={hidden}
+              busy={busy}
+              loading={loading}
+              search={search}
+              onSearch={setSearch}
+              accountFilter={accountFilter}
+              onAccountFilter={setAccountFilter}
+              kindFilter={kindFilter}
+              onKindFilter={setKindFilter}
+              selected={selected}
+              onSelectionChange={setSelected}
+              onImport={() => setImportOpen(true)}
+              onImportSms={() => setSmsOpen(true)}
+              onImportPdf={() => setPdfOpen(true)}
+              pendingAlertCount={
+                pendingCapturedAlerts(ledger.captured_alerts).length
+              }
+              onOpenCaptureAlerts={() => setCaptureAlertsOpen(true)}
+              onEditSelected={setBulkItems}
+              onDeleteSelected={(items) =>
+                setTransactionsToDelete(items.map((t) => t.id))
+              }
+              onEdit={(t) => setModal({ kind: "transaction", item: t })}
+              onDelete={(t) => void remove("transactions", t.id)}
+              onCategorize={(t, categoryId) => void categorize(t, categoryId)}
+            />
+          )}
+          <footer>
+            <Leaf size={14} />
+            <span>{t("footer.tagline")}</span>
+            <span className="footer-brand">{t("footer.brand")}</span>
+          </footer>
+        </div>
+      </main>
+      {sharedModals}
       <QuickAddFab disabled={busy} onClick={() => setQuickAdd({})} />
       {quickAdd && (
         <QuickAddModal
