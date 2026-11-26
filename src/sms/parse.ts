@@ -12,7 +12,6 @@ import {
   dateInText,
   extractBalanceAfter,
   extractBilledAmount,
-  extractCurrencyAmount,
   normalizeSmsDigits,
   smsAmountToMinor,
   splitMerchant,
@@ -39,6 +38,7 @@ import {
   type ParseContext,
   type ParsedSmsV1,
 } from "./types.ts";
+import { parseSmsUniversal } from "./universal.ts";
 import { parseStrictIsoDateUtc, validateParsedSmsV1 } from "./validate.ts";
 
 const COMMON_OTP_RE = new RegExp(T.COMMON_RULES[0][1], T.COMMON_RULES[0][2]);
@@ -438,22 +438,13 @@ export function parseSmsV1(text: string, ctx: ParseContext): ParsedSmsV1 {
     }
   }
 
-  // Layer 3: Universal field extractor (Phase 2) or Phase 1 basic fallback
-  if (registeredUniversalParser) {
-    const universalHit = registeredUniversalParser(rawText, ctx, bank, receivedDate);
-    if (universalHit) {
-      const checked = validateParsedSmsV1(rawText, universalHit);
-      if (checked.valid) {
-        return checked.parsed;
-      }
-    }
-  } else {
-    const basicHit = tryBasicPhase1Fallback(rawText, ctx, bank, receivedDate);
-    if (basicHit) {
-      const checked = validateParsedSmsV1(rawText, basicHit);
-      if (checked.valid) {
-        return checked.parsed;
-      }
+  // Layer 3: Universal field extractor (Phase 2)
+  const universalFn = registeredUniversalParser ?? parseSmsUniversal;
+  const universalHit = universalFn(rawText, ctx, bank, receivedDate);
+  if (universalHit) {
+    const checked = validateParsedSmsV1(rawText, universalHit);
+    if (checked.valid) {
+      return checked.parsed;
     }
   }
 
@@ -475,84 +466,4 @@ export function parseSmsV1(text: string, ctx: ParseContext): ParsedSmsV1 {
     ? ["low_confidence_parse"]
     : [];
   return makeNonTx("unknown", rawText, ctx, bank, receivedDate, "none", 0, warnings);
-}
-
-/** Basic Phase 1 fallback for unknown senders until Phase 2's universal extractor is wired. */
-function tryBasicPhase1Fallback(
-  text: string,
-  ctx: ParseContext,
-  bank: BankInfo,
-  receivedDate: string,
-): ParsedSmsV1 | null {
-  const norm = normalizeSmsDigits(text).replace(/\n/g, " ").trim();
-  const nonBal = stripBalanceAndLimitClauses(norm);
-  const extracted = extractCurrencyAmount(nonBal);
-  if (!extracted || extracted.amountMinor <= 0) return null;
-
-  let direction: "debit" | "credit" | null = null;
-  let txnType: ParsedSmsV1["txn_type"] = "other";
-  if (/\b(?:credited|deposited|salary|refund|refunded|reversed|received)\b/i.test(nonBal)) {
-    direction = "credit";
-    txnType = /\bsalary\b/i.test(nonBal)
-      ? "salary"
-      : /\b(?:refund|refunded|reversed)\b/i.test(nonBal)
-        ? "refund"
-        : "transfer_in";
-  } else if (
-    /\b(?:debited|deducted|purchase|spent|charged|paid|withdrawn|withdrawal|pos|used\s+for|transferred)\b/i.test(
-      nonBal,
-    )
-  ) {
-    direction = "debit";
-    txnType = /\b(?:atm|cash\s+withdrawal|withdrawn)\b/i.test(nonBal)
-      ? "cash_withdrawal"
-      : /\b(?:purchase|spent|used\s+for|pos)\b/i.test(nonBal)
-        ? "purchase"
-        : /\btransfer/i.test(nonBal)
-          ? "transfer_out"
-          : "other";
-  }
-  if (!direction) return null;
-
-  const cp = extractCounterpartyFromText(norm, bank.id);
-  const billed = extractBilledAmount(norm, extracted.currency);
-  const balNum = extractBalanceAfter(norm);
-  const accCurr = String(ctx.account_currency || "AED").trim().toUpperCase();
-  const dateInSms = dateInText(norm);
-  const warnings = extracted.unknownCode ? ["unknown_currency_code"] : [];
-
-  return {
-    schema: "fuloos.sms/1",
-    kind: "transaction",
-    direction,
-    txn_type: txnType,
-    amount: makeMoney(extracted.amountMinor, extracted.currency),
-    billed_amount:
-      billed && billed.amountMinor > 0
-        ? makeMoney(billed.amountMinor, billed.currency)
-        : null,
-    balance_after: Number.isFinite(balNum)
-      ? buildBalanceMoney(norm, balNum, accCurr)
-      : null,
-    date: dateInSms ?? receivedDate,
-    time: extractTimeInText(norm),
-    date_source: dateInSms ? "text" : "received",
-    counterparty: cp,
-    instrument: extractInstrument(norm, null),
-    bank,
-    sms: {
-      sender: ctx.sender,
-      received_at: ctx.received_at,
-      hash: ctx.sms_hash ?? "",
-    },
-    parsed_by: "fallback@1",
-    confidence: {
-      overall: 0.75,
-      amount: 0.9,
-      direction: 0.85,
-      date: dateInSms ? 1.0 : 0.8,
-      counterparty: cp.clean ? 0.85 : 0.6,
-    },
-    warnings,
-  };
 }

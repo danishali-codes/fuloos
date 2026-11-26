@@ -310,3 +310,76 @@ test("linked sender message with money + verb never silently skips, non-money no
   );
 });
 
+test("Phase 2 universal extractor alone: >=95% amount & direction, >=85% counterparty on golden transactions", () => {
+  const txFixtures = FIXTURES.filter((f) => f.expected.kind === "transaction");
+  const cpFixtures = txFixtures.filter((f) => Boolean(f.expected.counterparty));
+
+  let amountOk = 0;
+  let directionOk = 0;
+  let counterpartyOk = 0;
+  const misses: string[] = [];
+
+  for (const fx of txFixtures) {
+    const parsed = parseSmsV1(fx.body, {
+      sender: fx.sender,
+      received_at: fx.received_at,
+      sms_hash: `univ-${fx.id}`,
+      account_currency: "AED",
+      disable_bank_templates: true,
+    });
+
+    assert.ok(
+      parsed.parsed_by === "universal@1" || parsed.kind !== "transaction",
+      `Expected universal@1 for ${fx.id}, got ${parsed.parsed_by}`,
+    );
+    assert.ok(
+      parsed.confidence.overall <= 0.9,
+      `Universal confidence must be capped at <= 0.9 for ${fx.id}, got ${parsed.confidence.overall}`,
+    );
+
+    const amtMatch =
+      parsed.kind === "transaction" &&
+      parsed.amount !== null &&
+      fx.expected.amount !== null &&
+      parsed.amount.minor === fx.expected.amount.minor &&
+      parsed.amount.currency === fx.expected.amount.currency &&
+      parsed.amount.exponent === fx.expected.amount.exponent;
+    if (amtMatch) amountOk++;
+    else misses.push(`${fx.id}: amount got ${JSON.stringify(parsed.amount)} expected ${JSON.stringify(fx.expected.amount)}`);
+
+    const dirMatch =
+      parsed.kind === "transaction" &&
+      parsed.direction === fx.expected.direction;
+    if (dirMatch) directionOk++;
+    else misses.push(`${fx.id}: direction got ${parsed.direction} expected ${fx.expected.direction}`);
+
+    if (fx.expected.counterparty) {
+      if (counterpartyMatches(parsed.counterparty.clean, fx.expected.counterparty)) {
+        counterpartyOk++;
+      } else {
+        misses.push(
+          `${fx.id}: counterparty got ${JSON.stringify(parsed.counterparty.clean)} expected ${JSON.stringify(fx.expected.counterparty)}`,
+        );
+      }
+    }
+  }
+
+  const amtRate = amountOk / txFixtures.length;
+  const dirRate = directionOk / txFixtures.length;
+  const cpRate = counterpartyOk / cpFixtures.length;
+
+  assert.ok(
+    amtRate >= 0.95,
+    `Universal amount accuracy ${(amtRate * 100).toFixed(1)}% (${amountOk}/${txFixtures.length}) < 95%\n${misses.join("\n")}`,
+  );
+  assert.ok(
+    dirRate >= 0.95,
+    `Universal direction accuracy ${(dirRate * 100).toFixed(1)}% (${directionOk}/${txFixtures.length}) < 95%\n${misses.join("\n")}`,
+  );
+  assert.ok(
+    cpRate >= 0.85,
+    `Universal counterparty accuracy ${(cpRate * 100).toFixed(1)}% (${counterpartyOk}/${cpFixtures.length}) < 85%\n${misses.join("\n")}`,
+  );
+});
+
+
