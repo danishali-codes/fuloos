@@ -248,7 +248,11 @@ export function MobileTxDetailSheet({
             disabled={busy}
             onClick={() => {
               onClose();
-              onQuickEdit(tx);
+              // Split and foreign-currency rows carry fields the calculator
+              // sheet cannot edit; changing only the amount would leave their
+              // splits / original amount out of sync, so use the full editor.
+              if (tx.splits?.length || tx.original_currency) onFullEdit(tx);
+              else onQuickEdit(tx);
             }}
           >
             <Pencil size={15} /> {uiText("Quick Edit")}
