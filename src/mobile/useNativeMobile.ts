@@ -150,7 +150,7 @@ export function useNativeMobile({
       );
       if (platformBridge.getPlatform() === "android") {
         void StatusBar.setBackgroundColor({
-          color: dark ? "#161f1c" : "#fcfcfa",
+          color: dark ? "#0f1914" : "#f5f7f3",
         }).catch(() => {});
       }
     };
@@ -167,9 +167,21 @@ export function useNativeMobile({
   useEffect(() => {
     if (!platformBridge.isNativePlatform()) return;
     let handle: { remove: () => Promise<void> } | null = null;
+    const secondaryPages = new Set([
+      "Budgets",
+      "Recurring",
+      "Goals",
+      "Net Worth",
+      "Reports",
+      "Categories",
+    ]);
     void CapApp.addListener("backButton", () => {
       if (hasOpenModal) {
         onCloseTopModal();
+        return;
+      }
+      if (secondaryPages.has(page)) {
+        onNavigate("More");
         return;
       }
       if (page !== "Overview") {

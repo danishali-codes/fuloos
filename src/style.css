@@ -12,4 +12,5 @@
 @import "./styles/debt-tools.css";
 @import "./styles/household.css";
 @import "./styles/mobile.css";
+@import "./mobile-ui/mobile-ui.css";
 @import "./styles/rtl.css";
