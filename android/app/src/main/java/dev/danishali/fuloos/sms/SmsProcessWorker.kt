@@ -58,7 +58,7 @@ class SmsProcessWorker(
         val timestampMs = inputData.getLong(KEY_TIMESTAMP_MS, System.currentTimeMillis())
         if (sender.isBlank() || body.isBlank()) return Result.success()
 
-        val ctxJson = db.buildEffectiveEngineContextJson(ownerKey)
+        var ctxJson = db.buildEffectiveEngineContextJson(ownerKey)
         if (ctxJson.isNullOrBlank()) {
             Log.w(TAG, "Skipping background SMS: engine context not synced yet")
             return Result.success()
@@ -70,7 +70,23 @@ class SmsProcessWorker(
             put("timestampMs", timestampMs)
         }
 
-        val decision = engine.processSingleSms(rawSms.toString(), ctxJson) ?: return Result.retry()
+        var decision = engine.processSingleSms(rawSms.toString(), ctxJson) ?: return Result.retry()
+        val needsFx = decision.optJSONObject("needsFxRate")
+        if (needsFx != null) {
+            val from = needsFx.optNonNullString("from")
+            val to = needsFx.optNonNullString("to")
+            val date = needsFx.optNonNullString("date")
+            if (from.isNotEmpty() && to.isNotEmpty() && date.isNotEmpty()) {
+                val resolved = pb.fetchFxRate(from, to, date)
+                if (resolved != null) {
+                    val refreshedCtx = db.buildEffectiveEngineContextJson(ownerKey)
+                    if (!refreshedCtx.isNullOrBlank()) {
+                        ctxJson = refreshedCtx
+                        decision = engine.processSingleSms(rawSms.toString(), ctxJson) ?: decision
+                    }
+                }
+            }
+        }
         return if (applyDecision(decision, ctxJson, ownerKey) == DecisionOutcome.FAILED_RETRYABLE) {
             Result.retry()
         } else {
@@ -86,7 +102,7 @@ class SmsProcessWorker(
         ) == PackageManager.PERMISSION_GRANTED
         if (!hasReadSms) return Result.success()
 
-        val ctxJson = db.buildEffectiveEngineContextJson(ownerKey) ?: return Result.success()
+        var ctxJson = db.buildEffectiveEngineContextJson(ownerKey) ?: return Result.success()
         val (senders, sinceTs) = db.getEnabledSendersAndWatermark(ownerKey)
         if (senders.isEmpty()) return Result.success()
 
@@ -120,10 +136,38 @@ class SmsProcessWorker(
                 if (msgTs > maxScannedTs) maxScannedTs = msgTs
             }
 
-            val decisions = engine.processBatch(messages.toString(), ctxJson)
+            var decisions = engine.processBatch(messages.toString(), ctxJson)
             if (decisions == null) {
                 needsRetry = true
                 break
+            }
+
+            // Prefetch any missing historical FX rates once per unique (from, to, date)
+            // and re-evaluate the batch so conversions use the exact same JS engine logic.
+            val missingPairs = linkedSetOf<Triple<String, String, String>>()
+            for (i in 0 until decisions.length()) {
+                val need = decisions.optJSONObject(i)?.optJSONObject("needsFxRate") ?: continue
+                val from = need.optNonNullString("from")
+                val to = need.optNonNullString("to")
+                val date = need.optNonNullString("date")
+                if (from.isNotEmpty() && to.isNotEmpty() && date.isNotEmpty()) {
+                    missingPairs.add(Triple(from, to, date))
+                }
+            }
+            if (missingPairs.isNotEmpty()) {
+                var fetchedAny = false
+                for ((from, to, date) in missingPairs) {
+                    if (pb.fetchFxRate(from, to, date) != null) {
+                        fetchedAny = true
+                    }
+                }
+                if (fetchedAny) {
+                    val refreshedCtx = db.buildEffectiveEngineContextJson(ownerKey)
+                    if (!refreshedCtx.isNullOrBlank()) {
+                        ctxJson = refreshedCtx
+                        decisions = engine.processBatch(messages.toString(), ctxJson) ?: decisions
+                    }
+                }
             }
 
             for (i in 0 until decisions.length()) {
@@ -226,6 +270,8 @@ class SmsProcessWorker(
         val txJson = decision.optJSONObject("transaction") ?: return DecisionOutcome.COVERED
         val lookups = parseLookups(ctxJson)
         val accountName = lookups.accounts[accountId]
+        val accountCurrency = decision.optNonNullString("accountCurrency")
+            .ifBlank { lookups.accountCurrencies[accountId] ?: "AED" }
         val cardLast4 = decision.optNonNullString("cardLast4").ifBlank { null }
 
         if (action == "auto_add") {
@@ -242,11 +288,11 @@ class SmsProcessWorker(
                     queuedWriteId = apiResult.queueId
                 }
                 is BackgroundSyncClient.ApiResult.AuthExpired -> {
-                    Log.w(TAG, "PocketBase auth expired; leaving SMS hash unprocessed for later catch-up")
+                    Log.w(TAG, "Auth expired; leaving SMS hash unprocessed for later catch-up")
                     return DecisionOutcome.FAILED_HOLD
                 }
                 is BackgroundSyncClient.ApiResult.Failure -> {
-                    Log.w(TAG, "PocketBase auto_add write failed (${apiResult.status}): ${apiResult.message}")
+                    Log.w(TAG, "auto_add write failed (${apiResult.status}): ${apiResult.message}")
                     return if (isRetryableStatus(apiResult.status)) {
                         DecisionOutcome.FAILED_RETRYABLE
                     } else {
@@ -269,18 +315,44 @@ class SmsProcessWorker(
             )
 
             val catId = txJson.optNonNullString("category_id")
-            SmsNotificationHelper.postAutoAddedNotification(
-                context = applicationContext,
-                transactionId = txId,
-                payee = txJson.optNonNullString("payee"),
-                amountFils = txJson.optLong("amount", 0L),
-                categoryName = lookups.categories[catId],
-                accountName = accountName,
-                cardLast4 = cardLast4,
-                queuedWriteId = queuedWriteId,
-                smsHash = smsHash,
-                ownerKey = ownerKey,
-            )
+            val fxStatus = txJson.optNonNullString("fx_status")
+            val origCurr = txJson.optNonNullString("original_currency").ifBlank { accountCurrency }
+            val origAmount = txJson.optLong("original_amount", txJson.optLong("amount", 0L))
+            val estAmount = txJson.optLong("amount", 0L)
+            val fxRate = txJson.optDouble("fx_rate", 1.0)
+
+            if (fxStatus == "estimated" && shouldConfirmForeignAmount(estAmount, lookups)) {
+                SmsNotificationHelper.postConfirmForeignAmountNotification(
+                    context = applicationContext,
+                    transactionId = txId,
+                    payee = txJson.optNonNullString("payee"),
+                    originalAmountMinor = origAmount,
+                    originalCurrency = origCurr,
+                    estimatedAmountMinor = estAmount,
+                    accountCurrency = accountCurrency,
+                    fxRate = fxRate,
+                    accountName = accountName,
+                    cardLast4 = cardLast4,
+                    smsHash = smsHash,
+                    ownerKey = ownerKey,
+                )
+            } else {
+                SmsNotificationHelper.postAutoAddedNotification(
+                    context = applicationContext,
+                    transactionId = txId,
+                    payee = txJson.optNonNullString("payee"),
+                    amountFils = estAmount,
+                    categoryName = lookups.categories[catId],
+                    accountName = accountName,
+                    cardLast4 = cardLast4,
+                    queuedWriteId = queuedWriteId,
+                    smsHash = smsHash,
+                    ownerKey = ownerKey,
+                    currency = accountCurrency,
+                    originalAmountMinor = origAmount,
+                    originalCurrency = origCurr,
+                )
+            }
             FuloosSmsPlugin.notifySmsProcessed(
                 action = "auto_add",
                 transactionId = txId.ifBlank { null },
@@ -302,11 +374,11 @@ class SmsProcessWorker(
                         alertId = alertRes.recordId?.ifBlank { null }
                     }
                     is BackgroundSyncClient.ApiResult.AuthExpired -> {
-                        Log.w(TAG, "PocketBase auth expired while syncing captured alert draft")
+                        Log.w(TAG, "Auth expired while syncing captured alert draft")
                         return DecisionOutcome.FAILED_HOLD
                     }
                     is BackgroundSyncClient.ApiResult.Failure -> {
-                        Log.w(TAG, "PocketBase captured alert sync failed (${alertRes.status}): ${alertRes.message}")
+                        Log.w(TAG, "Captured alert sync failed (${alertRes.status}): ${alertRes.message}")
                         return if (isRetryableStatus(alertRes.status)) {
                             DecisionOutcome.FAILED_RETRYABLE
                         } else {
@@ -340,6 +412,7 @@ class SmsProcessWorker(
                 cardLast4 = cardLast4,
                 topSuggestions = topSuggestions,
                 ownerKey = ownerKey,
+                accountCurrency = accountCurrency,
             )
             FuloosSmsPlugin.notifySmsProcessed(
                 action = "needs_review",
@@ -352,6 +425,14 @@ class SmsProcessWorker(
         return DecisionOutcome.COVERED
     }
 
+    private fun shouldConfirmForeignAmount(amountMinor: Long, lookups: ContextLookups): Boolean {
+        return when (lookups.confirmForeignMode) {
+            "never" -> false
+            "above_threshold" -> amountMinor >= lookups.confirmForeignThreshold
+            else -> true
+        }
+    }
+
     private fun isRetryableStatus(status: Int): Boolean {
         return status == 0 || status == 408 || status == 429 || status >= 500
     }
@@ -362,12 +443,18 @@ class SmsProcessWorker(
 
     private data class ContextLookups(
         val accounts: Map<String, String>,
+        val accountCurrencies: Map<String, String>,
         val categories: Map<String, String>,
+        val confirmForeignMode: String = "always",
+        val confirmForeignThreshold: Long = 5000L,
     )
 
     private fun parseLookups(ctxJson: String): ContextLookups {
         val accounts = mutableMapOf<String, String>()
+        val accountCurrencies = mutableMapOf<String, String>()
         val categories = mutableMapOf<String, String>()
+        var confirmMode = "always"
+        var confirmThreshold = 5000L
         try {
             val obj = JSONObject(ctxJson)
             val accArr = obj.optJSONArray("accounts")
@@ -376,7 +463,11 @@ class SmsProcessWorker(
                     val a = accArr.optJSONObject(i) ?: continue
                     val id = a.optString("id", "")
                     val name = a.optString("name", "")
-                    if (id.isNotEmpty() && name.isNotEmpty()) accounts[id] = name
+                    val curr = a.optNonNullString("currency", "AED").ifBlank { "AED" }.uppercase()
+                    if (id.isNotEmpty()) {
+                        if (name.isNotEmpty()) accounts[id] = name
+                        accountCurrencies[id] = curr
+                    }
                 }
             }
             val catArr = obj.optJSONArray("categories")
@@ -388,10 +479,15 @@ class SmsProcessWorker(
                     if (id.isNotEmpty() && name.isNotEmpty()) categories[id] = name
                 }
             }
+            val settings = obj.optJSONObject("userSettings")
+            if (settings != null) {
+                confirmMode = settings.optNonNullString("confirm_foreign_amounts", "always").ifBlank { "always" }
+                confirmThreshold = settings.optLong("confirm_foreign_threshold", 5000L)
+            }
         } catch (_: Exception) {
             // Fallback to empty lookups
         }
-        return ContextLookups(accounts, categories)
+        return ContextLookups(accounts, accountCurrencies, categories, confirmMode, confirmThreshold)
     }
 
     companion object {

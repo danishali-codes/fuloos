@@ -39,6 +39,14 @@ class BackgroundSyncClient(
         data class Failure(val status: Int, val message: String) : ApiResult<Nothing>()
     }
 
+    data class FxRateResponse(
+        val from: String,
+        val to: String,
+        val rate: Double,
+        val rateDate: String,
+        val provider: String,
+    )
+
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
@@ -63,6 +71,152 @@ class BackgroundSyncClient(
             queueOnNetworkFailure = queueOnNetworkFailure,
             queuedRecordId = recordId,
         )
+    }
+
+    /**
+     * Patches a transaction (for example confirming the actual account-charged amount
+     * from an Android notification reply). Serialized with the offline queue so a PATCH
+     * never overtakes an earlier queued POST for the same transaction id.
+     */
+    fun patchTransaction(
+        transactionId: String,
+        patchJson: JSONObject,
+        queueOnNetworkFailure: Boolean = true,
+    ): ApiResult<String> {
+        if (transactionId.isBlank()) {
+            return ApiResult.Failure(400, "Missing transaction id")
+        }
+        synchronized(queueLock) {
+            val session = activeSession() ?: return ApiResult.AuthExpired(401)
+            flushOfflineQueueLocked(session)
+            val path = recordPath(session, "fuloos_transactions", transactionId)
+            val body = patchJson.toString()
+            if (queueOnNetworkFailure && db.getOfflineQueue(session.ownerKey, 1).isNotEmpty()) {
+                val qId = db.enqueueOfflineWrite(session.ownerKey, "PATCH", path, body)
+                return ApiResult.QueuedOffline(qId, transactionId)
+            }
+            return executeWrite(
+                session = session,
+                method = "PATCH",
+                path = path,
+                bodyJson = body,
+                queueOnNetworkFailure = queueOnNetworkFailure,
+                queuedRecordId = transactionId,
+            )
+        }
+    }
+
+    /**
+     * Resolves an approximate historical exchange rate for (from, to, date).
+     * Privacy: transmits ONLY `from`, `to`, and `date` — never SMS text, merchant,
+     * amount, account, or user metadata.
+     */
+    fun fetchFxRate(from: String, to: String, date: String): FxRateResponse? {
+        val fromCode = from.trim().uppercase()
+        val toCode = to.trim().uppercase()
+        val cleanDate = date.trim()
+        if (fromCode.length != 3 || toCode.length != 3 || cleanDate.length != 10) return null
+        if (fromCode == toCode) {
+            return FxRateResponse(fromCode, toCode, 1.0, cleanDate, "identity")
+        }
+
+        db.getFxRate(fromCode, toCode, cleanDate)?.let { cached ->
+            return FxRateResponse(cached.base, cached.quote, cached.rate, cached.rateDate, cached.provider)
+        }
+
+        // 1. Primary: Supabase fx-rate Edge Function (shared public cache)
+        val session = activeSession()
+        if (session != null && session.isSupabase) {
+            val edge = fetchFromSupabaseEdge(session, fromCode, toCode, cleanDate)
+            if (edge != null) {
+                db.putFxRate(fromCode, toCode, edge.rateDate, edge.rate, edge.provider)
+                return edge
+            }
+        }
+
+        // 2. Fallback: direct public fawazahmed0 currency API (jsDelivr CDN + pages.dev)
+        val direct = fetchFromFawazPublic(fromCode, toCode, cleanDate)
+        if (direct != null) {
+            db.putFxRate(fromCode, toCode, direct.rateDate, direct.rate, direct.provider)
+            return direct
+        }
+
+        // 3. Offline fallback: latest cached rate on or before date (stays estimated)
+        db.getLatestFxRate(fromCode, toCode, cleanDate)?.let { latest ->
+            return FxRateResponse(latest.base, latest.quote, latest.rate, latest.rateDate, latest.provider)
+        }
+        return null
+    }
+
+    private fun fetchFromSupabaseEdge(
+        session: SecureAuthStore.AuthSession,
+        fromCode: String,
+        toCode: String,
+        cleanDate: String,
+    ): FxRateResponse? {
+        val body = JSONObject()
+            .put("from", fromCode)
+            .put("to", toCode)
+            .put("date", cleanDate)
+            .toString()
+        val request = Request.Builder()
+            .url("${session.baseUrl}/functions/v1/fx-rate")
+            .header("Authorization", "Bearer ${session.token}")
+            .header("apikey", session.anonKey)
+            .header("Accept", "application/json")
+            .post(body.toRequestBody(JSON_MEDIA_TYPE))
+            .build()
+        return try {
+            client.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) return null
+                val raw = resp.body?.string().orEmpty()
+                val obj = JSONObject(raw)
+                val rate = obj.optDouble("rate", Double.NaN)
+                if (!rate.isFinite() || rate <= 0.0) return null
+                val rateDate = obj.optNonNullString("rate_date", cleanDate).ifBlank { cleanDate }
+                val provider = obj.optNonNullString("provider", "fx-rate").ifBlank { "fx-rate" }
+                FxRateResponse(fromCode, toCode, rate, rateDate, provider)
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun fetchFromFawazPublic(
+        fromCode: String,
+        toCode: String,
+        cleanDate: String,
+    ): FxRateResponse? {
+        val baseLower = fromCode.lowercase()
+        val quoteLower = toCode.lowercase()
+        val urls = listOf(
+            "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@$cleanDate/v1/currencies/$baseLower.json",
+            "https://$cleanDate.currency-api.pages.dev/v1/currencies/$baseLower.json",
+            "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/$baseLower.json",
+        )
+        for (url in urls) {
+            try {
+                val request = Request.Builder()
+                    .url(url)
+                    .header("Accept", "application/json")
+                    .get()
+                    .build()
+                client.newCall(request).execute().use { resp ->
+                    if (!resp.isSuccessful) return@use
+                    val raw = resp.body?.string().orEmpty()
+                    val obj = JSONObject(raw)
+                    val ratesObj = obj.optJSONObject(baseLower) ?: return@use
+                    val rate = ratesObj.optDouble(quoteLower, Double.NaN)
+                    if (rate.isFinite() && rate > 0.0) {
+                        val rateDate = obj.optNonNullString("date", cleanDate).ifBlank { cleanDate }
+                        return FxRateResponse(fromCode, toCode, rate, rateDate, "fawazahmed0")
+                    }
+                }
+            } catch (_: Exception) {
+                // Try next host
+            }
+        }
+        return null
     }
 
     fun deleteTransaction(
@@ -292,15 +446,33 @@ class BackgroundSyncClient(
             put("notes", txJson.optNonNullString("notes").take(500))
             put("tags", tags)
             put("splits", splits)
-            val origCurr = txJson.optNonNullString("original_currency")
-            if (origCurr.isNotEmpty() && origCurr != "AED") {
+            val origCurr = txJson.optNonNullString("original_currency").uppercase()
+            if (origCurr.isNotEmpty()) {
                 put("original_currency", origCurr)
-                if (txJson.has("original_amount") && !txJson.isNull("original_amount")) {
-                    put("original_amount", txJson.optLong("original_amount", 0L))
+            }
+            if (txJson.has("original_amount") && !txJson.isNull("original_amount")) {
+                put("original_amount", txJson.optLong("original_amount", txJson.optLong("amount", 0L)))
+            }
+            if (txJson.has("to_amount") && !txJson.isNull("to_amount")) {
+                put("to_amount", txJson.optLong("to_amount", 0L))
+            }
+            if (txJson.has("fx_rate") && !txJson.isNull("fx_rate")) {
+                val r = txJson.optDouble("fx_rate", Double.NaN)
+                if (r.isFinite() && r > 0.0) {
+                    put("fx_rate", r)
                 }
-                if (txJson.has("fx_rate") && !txJson.isNull("fx_rate")) {
-                    put("fx_rate", txJson.optDouble("fx_rate", 1.0))
-                }
+            }
+            val fxRateDate = txJson.optNonNullString("fx_rate_date")
+            if (fxRateDate.isNotEmpty()) {
+                put("fx_rate_date", fxRateDate)
+            }
+            val fxSource = txJson.optNonNullString("fx_source")
+            if (fxSource.isNotEmpty()) {
+                put("fx_source", fxSource)
+            }
+            val fxStatus = txJson.optNonNullString("fx_status")
+            if (fxStatus.isNotEmpty()) {
+                put("fx_status", fxStatus)
             }
             // Postgres foreign keys need NULL, not "", for "no account / category".
             if (session.isSupabase) nullIfBlank(this, TX_NULLABLE_FIELDS)
@@ -485,7 +657,15 @@ class BackgroundSyncClient(
     companion object {
         private const val TAG = "FuloosBgClient"
         private const val REFRESH_MARGIN_SECONDS = 45L
-        private val TX_NULLABLE_FIELDS = arrayOf("account_id", "to_account_id", "category_id", "original_currency")
+        private val TX_NULLABLE_FIELDS = arrayOf(
+            "account_id",
+            "to_account_id",
+            "category_id",
+            "original_currency",
+            "fx_rate_date",
+            "fx_source",
+            "fx_status",
+        )
         private val ALERT_NULLABLE_FIELDS = arrayOf("account_id", "suggested_category_id", "parsed_date", "sms_sender", "card_last4")
         private const val PB_ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
