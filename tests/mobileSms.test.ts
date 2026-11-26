@@ -585,3 +585,164 @@ test("collectExistingDedupeKeys: deduplicates existing ledger transactions and p
   assert.equal(collectExistingDedupeKeys(largeLedger, [], undefined, 5000).length, 5000);
 });
 
+test("smsPipeline: multi-currency golden tests (GBP+limit, EUR, INR, JPY, KWD, unknown, billed AED, balance-only, offline)", () => {
+  const ledger = demoLedger();
+  const aedAcc = ledger.accounts[0]!;
+  const link = makeLink("link-mc", aedAcc.id, ["SAMPLEBANK"], {
+    card_last4: "0000",
+    auto_add_mode: "auto_high_confidence",
+    confidence_threshold: 0.6,
+  });
+
+  const baseFxRates = {
+    "GBP|AED|2026-03-10": { rate: 4.65, rateDate: "2026-03-10", provider: "fawazahmed0" },
+    "EUR|AED|2026-03-10": { rate: 4.02, rateDate: "2026-03-10", provider: "fawazahmed0" },
+    "INR|AED|2026-03-10": { rate: 0.043, rateDate: "2026-03-10", provider: "fawazahmed0" },
+    "JPY|AED|2026-03-10": { rate: 0.024, rateDate: "2026-03-10", provider: "fawazahmed0" },
+    "KWD|AED|2026-03-10": { rate: 11.96, rateDate: "2026-03-10", provider: "fawazahmed0" },
+  };
+  const ts = Date.UTC(2026, 2, 10, 10, 0, 0);
+  const ctx = buildTestContext([link], { fxRates: baseFxRates });
+
+  // 1. Acceptance check: GBP 12.00 + Avl Cr. Limit AED 7,000.00 -> GBP 1200, AED 5580 estimated, NEVER AED 7000
+  const gbpRes = processSingleSms(
+    {
+      id: "mc-1",
+      sender: "SAMPLEBANK",
+      timestampMs: ts,
+      body: "Purchase of GBP 12.00 with Credit Card ending 0000 at SAMPLE STORE LONDON. Avl Cr. Limit is AED 7,000.00",
+    },
+    ctx,
+  );
+  assert.notEqual(gbpRes.action, "skip");
+  assert.equal(gbpRes.transaction?.original_currency, "GBP");
+  assert.equal(gbpRes.transaction?.original_amount, 1200);
+  assert.equal(gbpRes.transaction?.amount, 5580);
+  assert.equal(gbpRes.transaction?.fx_rate, 4.65);
+  assert.equal(gbpRes.transaction?.fx_source, "api_estimate");
+  assert.equal(gbpRes.transaction?.fx_status, "estimated");
+
+  // 2. EUR via symbol and generic fallback
+  const eurRes = processSingleSms(
+    {
+      id: "mc-2",
+      sender: "SAMPLEBANK",
+      timestampMs: ts,
+      body: "Card ending 0000 spent €25.00 at SAMPLE BISTRO PARIS. Avl Cr. Limit is AED 7,000.00",
+    },
+    ctx,
+  );
+  assert.equal(eurRes.transaction?.original_currency, "EUR");
+  assert.equal(eurRes.transaction?.original_amount, 2500);
+  assert.equal(eurRes.transaction?.amount, 10050);
+  assert.equal(eurRes.transaction?.fx_status, "estimated");
+
+  // 3. INR
+  const inrRes = processSingleSms(
+    {
+      id: "mc-3",
+      sender: "SAMPLEBANK",
+      timestampMs: ts,
+      body: "Purchase of INR 1,000.00 with Credit Card ending 0000 at SAMPLE MARKET MUMBAI. Avl Bal is AED 4,000.00",
+    },
+    ctx,
+  );
+  assert.equal(inrRes.transaction?.original_currency, "INR");
+  assert.equal(inrRes.transaction?.original_amount, 100000);
+  assert.equal(inrRes.transaction?.amount, 4300);
+
+  // 4. JPY (0 decimals): JPY 1,500 -> original_amount = 1500
+  const jpyRes = processSingleSms(
+    {
+      id: "mc-4",
+      sender: "SAMPLEBANK",
+      timestampMs: ts,
+      body: "Purchase of JPY 1,500 with Credit Card ending 0000 at SAMPLE RAMEN TOKYO. Avl Bal is AED 4,000.00",
+    },
+    ctx,
+  );
+  assert.equal(jpyRes.transaction?.original_currency, "JPY");
+  assert.equal(jpyRes.transaction?.original_amount, 1500);
+  assert.equal(jpyRes.transaction?.amount, 3600);
+
+  // 5. KWD (3 decimals): KWD 2.500 -> original_amount = 2500
+  const kwdRes = processSingleSms(
+    {
+      id: "mc-5",
+      sender: "SAMPLEBANK",
+      timestampMs: ts,
+      body: "Purchase of KWD 2.500 with Credit Card ending 0000 at SAMPLE BAKERY. Avl Bal is AED 4,000.00",
+    },
+    ctx,
+  );
+  assert.equal(kwdRes.transaction?.original_currency, "KWD");
+  assert.equal(kwdRes.transaction?.original_amount, 2500);
+  assert.equal(kwdRes.transaction?.amount, 2990);
+
+  // 6. Unknown 3-letter code -> keeps transaction, exponent 2, warns unknown_currency_code, routes to needs_review
+  const unknownRes = processSingleSms(
+    {
+      id: "mc-6",
+      sender: "SAMPLEBANK",
+      timestampMs: ts,
+      body: "Purchase of ZZZ 42.50 with Credit Card ending 0000 at SAMPLE VENDOR. Avl Bal is AED 4,000.00",
+    },
+    ctx,
+  );
+  assert.equal(unknownRes.action, "needs_review");
+  assert.equal(unknownRes.transaction?.original_currency, "ZZZ");
+  assert.equal(unknownRes.transaction?.original_amount, 4250);
+  assert.equal(unknownRes.transaction?.fx_status, "estimated");
+  assert.ok(unknownRes.warnings?.includes("unknown_currency_code"));
+
+  // 7. Dual foreign + billed AED amount -> bank_sms + exact, implied rate 4.675
+  const billedRes = processSingleSms(
+    {
+      id: "mc-7",
+      sender: "SAMPLEBANK",
+      timestampMs: ts,
+      body: "Purchase of GBP 12.00 (AED 56.10 billed) with Credit Card ending 0000 at SAMPLE STORE LONDON. Avl Cr. Limit is AED 7,000.00",
+    },
+    ctx,
+  );
+  assert.equal(billedRes.transaction?.original_currency, "GBP");
+  assert.equal(billedRes.transaction?.original_amount, 1200);
+  assert.equal(billedRes.transaction?.amount, 5610);
+  assert.equal(billedRes.transaction?.fx_rate, 4.675);
+  assert.equal(billedRes.transaction?.fx_source, "bank_sms");
+  assert.equal(billedRes.transaction?.fx_status, "exact");
+
+  // 8. Balance / credit limit only SMS -> skipped, NEVER becomes a transaction amount
+  const limitOnlyRes = processSingleSms(
+    {
+      id: "mc-8",
+      sender: "SAMPLEBANK",
+      timestampMs: ts,
+      body: "Card ending 0000 alert: Avl Cr. Limit is AED 7,000.00. Available balance is AED 3,500.00.",
+    },
+    ctx,
+  );
+  assert.equal(limitOnlyRes.action, "skip");
+  assert.equal(limitOnlyRes.transaction, undefined);
+
+  // 9. Offline with no cached FX rate -> saved as needs_review with rate_unavailable, NEVER skipped
+  const offlineCtx = buildTestContext([link], { fxRates: {} });
+  const offlineRes = processSingleSms(
+    {
+      id: "mc-9",
+      sender: "SAMPLEBANK",
+      timestampMs: ts,
+      body: "Purchase of GBP 12.00 with Credit Card ending 0000 at TALABAT. Avl Cr. Limit is AED 7,000.00",
+    },
+    offlineCtx,
+  );
+  assert.equal(offlineRes.action, "needs_review");
+  assert.equal(offlineRes.transaction?.original_currency, "GBP");
+  assert.equal(offlineRes.transaction?.original_amount, 1200);
+  assert.equal(offlineRes.transaction?.amount, 0);
+  assert.equal(offlineRes.transaction?.fx_status, "estimated");
+  assert.ok(offlineRes.warnings?.includes("rate_unavailable"));
+  assert.deepEqual(offlineRes.needsFxRate, { from: "GBP", to: "AED", date: "2026-03-10" });
+});
+
+

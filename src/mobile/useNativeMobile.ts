@@ -3,6 +3,7 @@ import { App as CapApp } from "@capacitor/app";
 import { StatusBar, Style } from "@capacitor/status-bar";
 import type { Session } from "../client";
 import type { Ledger } from "../domain";
+import { fxRateService } from "../fxRates";
 import { loadLedgerModel } from "../ledger/loader";
 import { loadMap } from "../ledger/mapping";
 import type { LearningStore } from "../ledger/learningStore";
@@ -99,6 +100,7 @@ export function useNativeMobile({
             name: a.name,
             type: a.type,
             opening_date: a.opening_date,
+            currency: a.currency,
           })),
           categories: ledger.categories.map((c) => ({
             id: c.id,
@@ -117,6 +119,8 @@ export function useNativeMobile({
             undefined,
             5000,
           ),
+          fxRates: fxRateService.exportCacheSnapshot(),
+          userSettings: ledger.user_settings,
         };
         await platformBridge.syncEngineContext(ctx, ownerKey);
       } catch {
@@ -137,6 +141,7 @@ export function useNativeMobile({
     ledger.rules,
     ledger.transactions,
     ledger.captured_alerts,
+    ledger.user_settings,
     learningStore,
   ]);
 

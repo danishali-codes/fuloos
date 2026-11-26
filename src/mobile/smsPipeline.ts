@@ -1,12 +1,25 @@
 import type { ImportTransaction } from "../csv.ts";
 import { transactionKey } from "../csv.ts";
 import {
+  computeImpliedRate,
+  convertMinor,
+  DEFAULT_CURRENCY,
+  formatCurrencyInput,
+  getCurrencyDecimals,
+  getPeggedFallbackRate,
+  isSupportedCurrency,
+  normalizeCurrencyCode,
+  type FxSource,
+  type FxStatus,
+} from "../currency.ts";
+import {
   uaeToday,
   type Account,
   type CaptureCategorySuggestion,
   type CapturedAlert,
   type Category,
   type TransactionRule,
+  type UserSettings,
 } from "../domain.ts";
 import {
   CANONICAL,
@@ -28,8 +41,13 @@ import {
   bankFromSender,
   cleanName,
   dateInText,
+  extractBalanceAfter,
+  extractBilledAmount,
+  extractCurrencyAmount,
   maskForDisplay,
+  normalizeSmsDigits,
   parseSms,
+  stripBalanceAndLimitClauses,
   type ParsedSms,
   type SmsType,
 } from "../ledger/sms.ts";
@@ -51,9 +69,15 @@ export interface RawNativeSms {
   timestampMs: number;
 }
 
+export interface CachedRateSnapshotEntry {
+  rate: number;
+  rateDate: string;
+  provider?: string;
+}
+
 export interface SmsEngineContext {
   links: SmsAccountLink[];
-  accounts: Pick<Account, "id" | "name" | "type" | "opening_date">[];
+  accounts: Pick<Account, "id" | "name" | "type" | "opening_date" | "currency">[];
   categories: Pick<Category, "id" | "name" | "color" | "emoji">[];
   rules: TransactionRule[];
   learningSettings: LearningSettings | null;
@@ -62,6 +86,10 @@ export interface SmsEngineContext {
   baseModel: LoadedModel | null;
   /** Optional existing ledger transaction keys (from transactionKey()) for duplicate detection. */
   existingKeys?: string[];
+  /** Optional cached FX rates keyed by `"BASE|QUOTE|YYYY-MM-DD"`. */
+  fxRates?: Record<string, CachedRateSnapshotEntry>;
+  /** Optional user currency & confirmation settings. */
+  userSettings?: UserSettings;
 }
 
 export type SmsDecisionAction = "auto_add" | "needs_review" | "skip";
@@ -75,6 +103,7 @@ export interface SmsDecision {
   sender: string;
   linkId?: string;
   accountId?: string;
+  accountCurrency?: string;
   bank?: string | null;
   cardLast4?: string | null;
   merchantClean?: string | null;
@@ -85,6 +114,9 @@ export interface SmsDecision {
   decidedBy: string;
   topSuggestions: CaptureCategorySuggestion[];
   balanceAfter?: number | null;
+  warnings?: string[];
+  /** Present when the headless engine lacked a cached FX rate and native Kotlin should resolve it. */
+  needsFxRate?: { from: string; to: string; date: string };
 }
 
 export interface BackfillMerchantGroup {
@@ -130,15 +162,6 @@ const PAYEE_FOR_TYPE: Partial<Record<SmsType, string>> = {
   loan_repayment: "Loan instalment",
   other_debit: "Bank debit",
   refund: "Refund",
-};
-
-const EXTRA_AED_RATES: Record<string, number> = {
-  AED: 1,
-  USD: 3.6725,
-  SAR: 0.9793333333333333,
-  QAR: 1.0089285714285714,
-  BHD: 9.767287234042552,
-  OMR: 9.551365409622885,
 };
 
 /** Pure JS SHA-256 hex digest (zero Node/WebCrypto dependency so it runs in Android Jetpack JavaScriptEngine). */
@@ -258,12 +281,87 @@ export function computeSmsHash(raw: RawNativeSms): string {
   );
 }
 
-/** Fallback parser for UAE banks not in rules.generated.ts (e.g. ENBD / generic debit/credit alerts). */
+/**
+ * Looks up a cached FX rate (`1 from = X to`) from the engine context snapshot.
+ * Checks exact `(from, to, date)` first, then latest on or before `date`,
+ * then latest overall (plus inverse pair).
+ */
+export function lookupCachedFxRate(
+  fxRates: Record<string, CachedRateSnapshotEntry> | undefined,
+  from: string,
+  to: string,
+  date: string,
+): { rate: number; rateDate: string; provider: string } | null {
+  if (!fxRates) return null;
+  const fromCode = normalizeCurrencyCode(from);
+  const toCode = normalizeCurrencyCode(to);
+  if (fromCode === toCode) return { rate: 1, rateDate: date, provider: "identity" };
+
+  const exact = fxRates[`${fromCode}|${toCode}|${date}`];
+  if (exact && Number.isFinite(exact.rate) && exact.rate > 0) {
+    return {
+      rate: exact.rate,
+      rateDate: exact.rateDate || date,
+      provider: exact.provider || "cache",
+    };
+  }
+
+  let bestDirectBefore: CachedRateSnapshotEntry | null = null;
+  let bestDirectAny: CachedRateSnapshotEntry | null = null;
+  let bestInvBefore: CachedRateSnapshotEntry | null = null;
+  let bestInvAny: CachedRateSnapshotEntry | null = null;
+
+  for (const [key, entry] of Object.entries(fxRates)) {
+    if (!entry || !Number.isFinite(entry.rate) || entry.rate <= 0) continue;
+    const parts = key.split("|");
+    if (parts.length < 3) continue;
+    const [base, quote, keyDate] = parts;
+    const effDate = entry.rateDate || keyDate;
+    if (base === fromCode && quote === toCode) {
+      if (!bestDirectAny || effDate > bestDirectAny.rateDate) {
+        bestDirectAny = { ...entry, rateDate: effDate };
+      }
+      if (effDate <= date && (!bestDirectBefore || effDate > bestDirectBefore.rateDate)) {
+        bestDirectBefore = { ...entry, rateDate: effDate };
+      }
+    } else if (base === toCode && quote === fromCode) {
+      if (!bestInvAny || effDate > bestInvAny.rateDate) {
+        bestInvAny = { ...entry, rateDate: effDate };
+      }
+      if (effDate <= date && (!bestInvBefore || effDate > bestInvBefore.rateDate)) {
+        bestInvBefore = { ...entry, rateDate: effDate };
+      }
+    }
+  }
+
+  const direct = bestDirectBefore ?? bestDirectAny;
+  if (direct) {
+    return {
+      rate: direct.rate,
+      rateDate: direct.rateDate,
+      provider: direct.provider || "cache",
+    };
+  }
+  const inv = bestInvBefore ?? bestInvAny;
+  if (inv && inv.rate > 0) {
+    return {
+      rate: 1 / inv.rate,
+      rateDate: inv.rateDate,
+      provider: inv.provider || "cache",
+    };
+  }
+  return null;
+}
+
+/**
+ * Fallback parser for bank SMS templates not in rules.generated.ts (e.g. ENBD / generic debit/credit alerts).
+ * Preserves any currency code/symbol in minor units and strictly ignores balance / credit-limit clauses.
+ */
 function parseGenericUaeFallback(
   body: string,
   bank: string | null,
 ): ParsedSms | null {
-  const flat = body.replace(/\n+/g, " ").trim();
+  const flat = normalizeSmsDigits(body).replace(/\n+/g, " ").trim();
   if (
     /\bOTP\b|one[- ]time[- ]password|verification\s+code|authentication\s+code|security\s+code/i.test(
       flat,
@@ -279,63 +377,57 @@ function parseGenericUaeFallback(
     return null;
   }
 
+  // Strip balance / credit limit clauses before extracting ANY transaction amount
+  const nonBalance = stripBalanceAndLimitClauses(flat);
+
   let direction: "debit" | "credit" | "none" = "none";
   let txnType: SmsType = "notice";
-  let currency: string | null = null;
-  let amount = NaN;
   let merchantRaw: string | null = null;
+
+  const extracted = extractCurrencyAmount(nonBalance);
+  if (!extracted) return null;
+
+  const currency = extracted.currency;
+  const amount = extracted.amount;
+  const amountMinor = extracted.amountMinor;
 
   let m: RegExpExecArray | null = null;
   if (
     (m =
-      /(?:Credit|Debit)\s+Card(?:\s+ending(?:\s+with)?\s+\d+|\s+no\.?\s*\S+)?\s+(?:was\s+used\s+for|has\s+been\s+charged(?:\s+for)?|transaction\s+of)\s+([A-Z]{3})\s+([\d,]+(?:\.\d+)?)\s+(?:at|to)\s+(.+?)(?:\s+on\s+\d|\s*\.\s*Avl|\s*\.|$)/i.exec(
-        flat,
+      /(?:Credit|Debit)\s+Card(?:\s+ending(?:\s+with)?\s+\d+|\s+no\.?\s*\S+)?\s+(?:was\s+used\s+for|has\s+been\s+charged(?:\s+for)?|transaction\s+of)\s+.+?\s+(?:at|to)\s+(.+?)(?:\s+on\s+\d|\s*\.\s*(?:Avl|Avail|Bal|Billed)|\s*\.|$)/i.exec(
+        nonBalance,
       ))
   ) {
     direction = "debit";
     txnType = "purchase";
-    currency = m[1].toUpperCase();
-    amount = parseFloat(m[2].replace(/,/g, ""));
-    merchantRaw = m[3].trim();
+    merchantRaw = m[1].trim();
   } else if (
-    (m =
-      /([A-Z]{3})\s+([\d,]+(?:\.\d+)?)\s+has\s+been\s+(?:credited|deposited|transferred\s+to\s+your)/i.exec(
-        flat,
-      ))
+    /\bhas\s+been\s+(?:credited|deposited|transferred\s+to\s+your)\b/i.test(
+      nonBalance,
+    )
   ) {
     direction = "credit";
-    txnType = /salary/i.test(flat)
+    txnType = /salary/i.test(nonBalance)
       ? "income"
-      : /refund/i.test(flat)
+      : /refund/i.test(nonBalance)
         ? "refund"
         : "transfer_in";
-    currency = m[1].toUpperCase();
-    amount = parseFloat(m[2].replace(/,/g, ""));
-  } else if (
-    (m =
-      /([A-Z]{3})\s+([\d,]+(?:\.\d+)?)\s+has\s+been\s+(?:debited|deducted)/i.exec(
-        flat,
-      ))
-  ) {
+  } else if (/\bhas\s+been\s+(?:debited|deducted)\b/i.test(nonBalance)) {
     direction = "debit";
     txnType = "other_debit";
-    currency = m[1].toUpperCase();
-    amount = parseFloat(m[2].replace(/,/g, ""));
-    const atM = /\bat\s+([^.\n]+)/i.exec(flat);
+    const atM = /\bat\s+([^.\n]+)/i.exec(nonBalance);
     if (atM) merchantRaw = atM[1].trim();
   } else {
-    const amtM = /\b(AED|USD|SAR|QAR|BHD|OMR)\s*([\d,]+(?:\.\d{1,2})?)\b/i.exec(
-      flat,
-    );
-    if (!amtM) return null;
-    currency = amtM[1].toUpperCase();
-    amount = parseFloat(amtM[2].replace(/,/g, ""));
-    if (/\b(?:credited|deposited|salary|refund|received)\b/i.test(flat)) {
+    if (/\b(?:credited|deposited|salary|refund|received)\b/i.test(nonBalance)) {
       direction = "credit";
-      txnType = /salary/i.test(flat) ? "income" : "transfer_in";
+      txnType = /salary/i.test(nonBalance)
+        ? "income"
+        : /refund/i.test(nonBalance)
+          ? "refund"
+          : "transfer_in";
     } else if (
-      /\b(?:debited|deducted|purchase|spent|charged|paid|withdrawal|pos)\b/i.test(
-        flat,
+      /\b(?:debited|deducted|purchase|spent|charged|paid|withdrawal|pos|used\s+for)\b/i.test(
+        nonBalance,
       )
     ) {
       direction = "debit";
@@ -344,32 +436,28 @@ function parseGenericUaeFallback(
       return null;
     }
     const atM =
-      /\bat\s+([A-Za-z0-9][A-Za-z0-9\s&*.'/-]{1,60}?)(?:,\s*[A-Za-z\s-]+|\s+on\s+\d|\s*\.\s*(?:Avl|Avail|Bal)|\s*\.|$)/i.exec(
-        flat,
+      /\bat\s+([A-Za-z0-9][A-Za-z0-9\s&*.'/-]{1,60}?)(?:,\s*[A-Za-z\s-]+|\s+on\s+\d|\s*\.\s*(?:Avl|Avail|Bal|Billed)|\s*\.|$)/i.exec(
+        nonBalance,
       );
     if (atM) merchantRaw = atM[1].trim();
   }
 
-  const rate = currency ? EXTRA_AED_RATES[currency] : undefined;
-  const amountAed =
-    rate != null && Number.isFinite(amount) ? amount * rate : NaN;
-  if (!Number.isFinite(amountAed)) return null;
-
-  const balM =
-    /(?:Avl\.?\s*Bal(?:ance)?|Available\s+Bal(?:ance)?|Balance)\s*(?:is\s*)?(?:AED\s*)?([\d,]+(?:\.\d{1,2})?)/i.exec(
-      flat,
-    );
-  const balanceAfter = balM ? parseFloat(balM[1].replace(/,/g, "")) : NaN;
+  const billed = extractBilledAmount(flat, currency);
+  const balanceAfter = extractBalanceAfter(flat);
   const cardLast4 = extractCardLast4(flat, null);
   const clean = cleanName(merchantRaw);
+  const warnings = extracted.unknownCode ? ["unknown_currency_code"] : [];
 
   return {
     bank,
     txn_type: txnType,
     direction,
     amount,
+    amount_minor: amountMinor,
     currency,
-    amount_aed: amountAed,
+    billed_amount: billed?.amount ?? null,
+    billed_amount_minor: billed?.amountMinor ?? null,
+    billed_currency: billed?.currency ?? null,
     card_last4: cardLast4,
     merchant_raw: merchantRaw,
     merchant: merchantRaw,
@@ -378,8 +466,9 @@ function parseGenericUaeFallback(
     country: null,
     balance_after: balanceAfter,
     is_bnpl: false,
-    is_foreign: Boolean(currency && currency !== "AED"),
+    is_foreign: Boolean(currency && currency !== DEFAULT_CURRENCY),
     date_in_text: dateInText(flat),
+    warnings,
   };
 }
 
@@ -536,7 +625,11 @@ export function processSingleSms(
     detectBankForSenderOrText(raw.sender, raw.body);
 
   let parsed = parseSms(raw.body, bank);
-  if (parsed.txn_type === "notice" || !Number.isFinite(parsed.amount_aed)) {
+  if (
+    parsed.txn_type === "notice" ||
+    parsed.amount_minor === null ||
+    !parsed.currency
+  ) {
     const fallback = parseGenericUaeFallback(raw.body, bank);
     if (fallback) parsed = fallback;
   }
@@ -544,6 +637,8 @@ export function processSingleSms(
   const finalCard = extractCardLast4(raw.body, parsed.card_last4);
   const link =
     matchSmsToLink(raw.sender, finalCard, ctx.links) ?? preliminaryLink;
+  const linkedAccount = ctx.accounts.find((a) => a.id === link.account_id);
+  const accCurrency = normalizeCurrencyCode(linkedAccount?.currency);
 
   if (SKIP_TYPES[parsed.txn_type]) {
     return {
@@ -555,6 +650,7 @@ export function processSingleSms(
       sender: raw.sender,
       linkId: link.id,
       accountId: link.account_id,
+      accountCurrency: accCurrency,
       bank,
       cardLast4: finalCard,
       maskedPreview,
@@ -565,7 +661,11 @@ export function processSingleSms(
     };
   }
 
-  if (parsed.direction === "none" || !Number.isFinite(parsed.amount_aed)) {
+  if (
+    parsed.direction === "none" ||
+    parsed.amount_minor === null ||
+    !parsed.currency
+  ) {
     return {
       action: "skip",
       skipReason: "Not a valid debit or credit transaction.",
@@ -575,6 +675,7 @@ export function processSingleSms(
       sender: raw.sender,
       linkId: link.id,
       accountId: link.account_id,
+      accountCurrency: accCurrency,
       bank,
       cardLast4: finalCard,
       maskedPreview,
@@ -585,8 +686,9 @@ export function processSingleSms(
     };
   }
 
-  const amountFils = Math.round(parsed.amount_aed * 100);
-  if (amountFils <= 0) {
+  const origCurrency = normalizeCurrencyCode(parsed.currency);
+  const origMinor = parsed.amount_minor;
+  if (origMinor <= 0) {
     return {
       action: "skip",
       skipReason: "Zero-amount message skipped.",
@@ -596,6 +698,7 @@ export function processSingleSms(
       sender: raw.sender,
       linkId: link.id,
       accountId: link.account_id,
+      accountCurrency: accCurrency,
       bank,
       cardLast4: finalCard,
       maskedPreview,
@@ -614,9 +717,115 @@ export function processSingleSms(
   const type: "expense" | "income" =
     parsed.direction === "debit" ? "expense" : "income";
 
+  const warnings: string[] = [...parsed.warnings];
+  const isKnownCurrency = isSupportedCurrency(origCurrency);
+  if (!isKnownCurrency && !warnings.includes("unknown_currency_code")) {
+    warnings.push("unknown_currency_code");
+  }
+
+  let accountAmountMinor = 0;
+  let fxRate: number | undefined;
+  let fxRateDate: string = date;
+  let fxSource: FxSource | undefined;
+  let fxStatus: FxStatus = "exact";
+  let needsFxRate: { from: string; to: string; date: string } | undefined;
+
+  if (origCurrency === accCurrency) {
+    accountAmountMinor = origMinor;
+    fxRate = 1;
+    fxRateDate = date;
+    fxSource = "same_currency";
+    fxStatus = "exact";
+  } else if (
+    parsed.billed_currency === accCurrency &&
+    parsed.billed_amount_minor !== null &&
+    parsed.billed_amount_minor > 0
+  ) {
+    accountAmountMinor = parsed.billed_amount_minor;
+    fxRate = computeImpliedRate(
+      origMinor,
+      origCurrency,
+      accountAmountMinor,
+      accCurrency,
+    );
+    fxRateDate = date;
+    fxSource = "bank_sms";
+    fxStatus = "exact";
+  } else {
+    const cached = isKnownCurrency
+      ? lookupCachedFxRate(ctx.fxRates, origCurrency, accCurrency, date)
+      : null;
+    if (cached) {
+      accountAmountMinor = convertMinor(
+        origMinor,
+        origCurrency,
+        accCurrency,
+        cached.rate,
+      );
+      fxRate = cached.rate;
+      fxRateDate = cached.rateDate;
+      fxSource = "api_estimate";
+      fxStatus = "estimated";
+      // If cached rate is from a different date (e.g. stale cache), let Kotlin try fetching exact date
+      if (cached.rateDate !== date) {
+        needsFxRate = { from: origCurrency, to: accCurrency, date };
+      }
+    } else {
+      const pegged = isKnownCurrency
+        ? getPeggedFallbackRate(origCurrency, accCurrency)
+        : null;
+      if (pegged !== null) {
+        accountAmountMinor = convertMinor(
+          origMinor,
+          origCurrency,
+          accCurrency,
+          pegged,
+        );
+        fxRate = pegged;
+        fxRateDate = date;
+        fxSource = "manual_rate";
+        fxStatus = "estimated";
+        needsFxRate = { from: origCurrency, to: accCurrency, date };
+      } else {
+        accountAmountMinor = 0;
+        fxRate = undefined;
+        fxRateDate = date;
+        fxSource = undefined;
+        fxStatus = "estimated";
+        warnings.push("rate_unavailable");
+        if (isKnownCurrency) {
+          needsFxRate = { from: origCurrency, to: accCurrency, date };
+        }
+      }
+    }
+  }
+
+  // Compute AED-equivalent major units for the categoriser model so ML features keep their meaning
+  let amountForMlAed: number;
+  if (accCurrency === DEFAULT_CURRENCY && accountAmountMinor > 0) {
+    amountForMlAed = accountAmountMinor / 100;
+  } else if (origCurrency === DEFAULT_CURRENCY) {
+    amountForMlAed = origMinor / 100;
+  } else {
+    const aedRate =
+      lookupCachedFxRate(ctx.fxRates, origCurrency, DEFAULT_CURRENCY, date)?.rate ??
+      getPeggedFallbackRate(origCurrency, DEFAULT_CURRENCY);
+    if (aedRate !== null && aedRate > 0) {
+      amountForMlAed =
+        (origMinor / 10 ** getCurrencyDecimals(origCurrency)) * aedRate;
+    } else {
+      amountForMlAed = origMinor / 10 ** getCurrencyDecimals(origCurrency);
+    }
+  }
+
+  const origFormatted = formatCurrencyInput(origMinor, origCurrency);
   const foreignNote =
-    parsed.currency && parsed.currency !== "AED"
-      ? ` · ${parsed.amount.toFixed(2)} ${parsed.currency} at fixed reference rate`
+    origCurrency !== accCurrency
+      ? fxSource === "bank_sms"
+        ? ` · ${origCurrency} ${origFormatted} (bank billed)`
+        : warnings.includes("rate_unavailable")
+          ? ` · ${origCurrency} ${origFormatted} (rate pending)`
+          : ` · ${origCurrency} ${origFormatted} (estimated)`
       : "";
   const cardNote = finalCard ? ` · Card ••${finalCard}` : "";
   const notes = `From ${bank ?? normalizeSender(raw.sender)} SMS${cardNote}${foreignNote}`;
@@ -638,7 +847,7 @@ export function processSingleSms(
         ctx.rules,
         {
           type,
-          amount: amountFils,
+          amount: accountAmountMinor,
           category_id: null,
           payee,
           notes,
@@ -662,7 +871,7 @@ export function processSingleSms(
       ctx.baseModel,
       ctx.categoryMap,
       parsed.merchant_clean,
-      parsed.amount_aed,
+      amountForMlAed,
     );
     if (!categoryId) {
       categoryId =
@@ -677,7 +886,7 @@ export function processSingleSms(
     }
     topSuggestions = buildTopSuggestions(
       parsed.merchant_clean,
-      parsed.amount_aed,
+      amountForMlAed,
       categoryId,
       confidence,
       ctx,
@@ -691,13 +900,23 @@ export function processSingleSms(
     to_account_id: null,
     category_id: categoryId,
     type,
-    amount: amountFils,
+    amount: accountAmountMinor,
     payee,
     notes,
+    original_amount: origMinor,
+    original_currency: origCurrency,
+    ...(fxRate !== undefined ? { fx_rate: fxRate } : {}),
+    fx_rate_date: fxRateDate,
+    ...(fxSource ? { fx_source: fxSource } : {}),
+    fx_status: fxStatus,
     ...(tags.length ? { tags } : {}),
   };
 
-  const txKey = transactionKey(transaction);
+  const baseTxKey = transactionKey(transaction);
+  const txKey =
+    accountAmountMinor === 0 && origMinor > 0
+      ? `${baseTxKey}|${origCurrency}|${origMinor}`
+      : baseTxKey;
   const duplicate = prepared.existingKeys.has(txKey);
   if (!duplicate) {
     prepared.existingKeys.add(txKey);
@@ -706,13 +925,22 @@ export function processSingleSms(
   const threshold = link.confidence_threshold ?? DEFAULT_REVIEW_THRESHOLD;
   const isHighConfidence =
     type === "income" || (Boolean(categoryId) && confidence >= threshold);
+  const cannotFullyPrice =
+    warnings.includes("unknown_currency_code") ||
+    warnings.includes("rate_unavailable");
 
   let action: SmsDecisionAction = "needs_review";
   if (duplicate) {
     action = "skip";
-  } else if (link.auto_add_mode === "auto_high_confidence" && isHighConfidence) {
+  } else if (
+    !cannotFullyPrice &&
+    link.auto_add_mode === "auto_high_confidence" &&
+    isHighConfidence
+  ) {
     action = "auto_add";
   }
+
+  const accFactor = 10 ** getCurrencyDecimals(accCurrency);
 
   return {
     action,
@@ -723,6 +951,7 @@ export function processSingleSms(
     sender: raw.sender,
     linkId: link.id,
     accountId: link.account_id,
+    accountCurrency: accCurrency,
     bank,
     cardLast4: finalCard,
     merchantClean: parsed.merchant_clean,
@@ -733,8 +962,10 @@ export function processSingleSms(
     decidedBy,
     topSuggestions,
     balanceAfter: Number.isFinite(parsed.balance_after)
-      ? Math.round(parsed.balance_after * 100)
+      ? Math.round(parsed.balance_after * accFactor)
       : null,
+    ...(warnings.length ? { warnings } : {}),
+    ...(needsFxRate ? { needsFxRate } : {}),
   };
 }
 
@@ -876,5 +1107,14 @@ export function buildCapturedAlertDraft(
     top_suggestions: decision.topSuggestions,
     sms_sender: normalizeSender(decision.sender).slice(0, 64),
     card_last4: decision.cardLast4 ?? "",
+    ...(tx?.original_currency ? { parsed_currency: tx.original_currency } : {}),
+    ...(tx?.original_amount !== undefined
+      ? { parsed_original_amount: tx.original_amount }
+      : {}),
+    ...(tx?.fx_rate !== undefined ? { parsed_fx_rate: tx.fx_rate } : {}),
+    ...(tx?.fx_rate_date ? { parsed_fx_rate_date: tx.fx_rate_date } : {}),
+    ...(tx?.fx_source ? { parsed_fx_source: tx.fx_source } : {}),
+    ...(tx?.fx_status ? { parsed_fx_status: tx.fx_status } : {}),
+    ...(decision.warnings?.length ? { warnings: decision.warnings } : {}),
   };
 }

@@ -9,11 +9,19 @@ import {
 } from "./domain.ts";
 import type { UserSuggestion } from "./ledger/learning.ts";
 import {
+  DEFAULT_CURRENCY,
+  getPeggedFallbackRate,
+  convertMinor,
+  normalizeCurrencyCode,
+} from "./currency.ts";
+import {
   bankForMessage,
   cleanName,
   dateInText,
   detectBank,
+  extractCurrencyAmount,
   parseSms,
+  stripBalanceAndLimitClauses,
 } from "./ledger/sms.ts";
 import { displayPayee } from "./ledger/smsImport.ts";
 import { applyRules } from "./rules.ts";
@@ -57,7 +65,7 @@ export function matchAccountHint(
   return accounts[0].id;
 }
 
-/** Parse a clipboard/share-sheet UAE bank alert text into an unsaved CapturedAlert draft. */
+/** Parse a clipboard/share-sheet bank alert text into an unsaved CapturedAlert draft. */
 export function parseClipboardOrShareAlert(
   rawText: string,
   options: {
@@ -79,9 +87,45 @@ export function parseClipboardOrShareAlert(
   if (parsed.direction === "debit") parsedType = "expense";
   else if (parsed.direction === "credit") parsedType = "income";
 
-  let parsedAmount = Number.isFinite(parsed.amount_aed)
-    ? Math.max(0, Math.round(parsed.amount_aed * 100))
-    : 0;
+  let parsedCurrency = parsed.currency
+    ? normalizeCurrencyCode(parsed.currency)
+    : undefined;
+  let parsedOriginalAmount = parsed.amount_minor ?? undefined;
+  let parsedAmount = 0;
+  let parsedFxRate: number | undefined;
+  let parsedFxStatus: CapturedAlert["parsed_fx_status"] = "exact";
+  let parsedFxSource: CapturedAlert["parsed_fx_source"] = "same_currency";
+
+  if (parsedOriginalAmount && parsedCurrency) {
+    if (parsedCurrency === DEFAULT_CURRENCY) {
+      parsedAmount = parsedOriginalAmount;
+      parsedFxRate = 1;
+    } else if (
+      parsed.billed_currency === DEFAULT_CURRENCY &&
+      parsed.billed_amount_minor
+    ) {
+      parsedAmount = parsed.billed_amount_minor;
+      parsedFxSource = "bank_sms";
+      parsedFxStatus = "exact";
+    } else {
+      const pegged = getPeggedFallbackRate(parsedCurrency, DEFAULT_CURRENCY);
+      if (pegged !== null) {
+        parsedAmount = convertMinor(
+          parsedOriginalAmount,
+          parsedCurrency,
+          DEFAULT_CURRENCY,
+          pegged,
+        );
+        parsedFxRate = pegged;
+        parsedFxSource = "manual_rate";
+        parsedFxStatus = "estimated";
+      } else {
+        parsedAmount = 0;
+        parsedFxSource = undefined;
+        parsedFxStatus = "estimated";
+      }
+    }
+  }
 
   let parsedPayee =
     displayPayee(parsed.merchant_clean) ||
@@ -89,29 +133,51 @@ export function parseClipboardOrShareAlert(
     "";
 
   // Fallback for ENBD / generic alerts not matched by sms.ts rules
-  if (parsedType === "unknown" || parsedAmount === 0) {
-    const amtMatch =
-      /\bAED\s*([\d,]+(?:\.\d{1,2})?)\b/i.exec(text) ||
-      /\b([\d,]+(?:\.\d{1,2})?)\s*AED\b/i.exec(text);
-    if (amtMatch) {
-      const val = parseFloat(amtMatch[1].replace(/,/g, ""));
-      if (Number.isFinite(val) && val > 0) {
-        parsedAmount = Math.round(val * 100);
+  if (parsedType === "unknown" || (parsedAmount === 0 && !parsedOriginalAmount)) {
+    const nonBalance = stripBalanceAndLimitClauses(text.replace(/\n+/g, " "));
+    const extracted = extractCurrencyAmount(nonBalance);
+    if (extracted) {
+      parsedCurrency = extracted.currency;
+      parsedOriginalAmount = extracted.amountMinor;
+      if (extracted.currency === DEFAULT_CURRENCY) {
+        parsedAmount = extracted.amountMinor;
+        parsedFxRate = 1;
+        parsedFxSource = "same_currency";
+        parsedFxStatus = "exact";
+      } else {
+        const pegged = getPeggedFallbackRate(extracted.currency, DEFAULT_CURRENCY);
+        if (pegged !== null) {
+          parsedAmount = convertMinor(
+            extracted.amountMinor,
+            extracted.currency,
+            DEFAULT_CURRENCY,
+            pegged,
+          );
+          parsedFxRate = pegged;
+          parsedFxSource = "manual_rate";
+          parsedFxStatus = "estimated";
+        } else {
+          parsedFxSource = undefined;
+          parsedFxStatus = "estimated";
+        }
       }
     }
     if (parsedType === "unknown") {
-      if (/\b(?:credited|deposited|salary|refund|received)\b/i.test(text)) {
+      if (/\b(?:credited|deposited|salary|refund|received)\b/i.test(nonBalance)) {
         parsedType = "income";
       } else if (
-        /\b(?:debited|purchase|spent|charged|paid|withdrawal|pos)\b/i.test(text)
+        /\b(?:debited|purchase|spent|charged|paid|withdrawal|pos)\b/i.test(
+          nonBalance,
+        )
       ) {
         parsedType = "expense";
       }
     }
     if (!parsedPayee) {
-      const atMatch = /\bat\s+([A-Za-z0-9][A-Za-z0-9\s&*.'-]{1,60}?)(?:\s+on\s+\d|\s*\.|$)/i.exec(
-        text.replace(/\n+/g, " "),
-      );
+      const atMatch =
+        /\bat\s+([A-Za-z0-9][A-Za-z0-9\s&*.'-]{1,60}?)(?:\s+on\s+\d|\s*\.|$)/i.exec(
+          nonBalance,
+        );
       if (atMatch) {
         parsedPayee = displayPayee(cleanName(atMatch[1])) || atMatch[1].trim();
       }
@@ -142,6 +208,14 @@ export function parseClipboardOrShareAlert(
     account_hint: accountHint.slice(0, 64),
     status: "pending",
     created_at_iso: new Date().toISOString(),
+    ...(parsedCurrency ? { parsed_currency: parsedCurrency } : {}),
+    ...(parsedOriginalAmount !== undefined
+      ? { parsed_original_amount: parsedOriginalAmount }
+      : {}),
+    ...(parsedFxRate !== undefined ? { parsed_fx_rate: parsedFxRate } : {}),
+    ...(parsedFxSource ? { parsed_fx_source: parsedFxSource } : {}),
+    ...(parsedCurrency ? { parsed_fx_status: parsedFxStatus } : {}),
+    ...(parsed.warnings.length ? { warnings: parsed.warnings } : {}),
   };
 }
 
