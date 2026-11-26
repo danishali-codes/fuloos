@@ -83,9 +83,10 @@ export function useNativeMobile({
 
     void (async () => {
       try {
-        const [modelState, learnData] = await Promise.all([
+        const [modelState, learnData, learnedTemplates] = await Promise.all([
           loadLedgerModel(),
           learningStore.load(categoryIds).catch(() => null),
+          platformBridge.getLearnedTemplates(ownerKey).catch(() => []),
         ]);
         if (!active) return;
         const baseMap = loadMap(owner, ledger.categories).map;
@@ -121,6 +122,7 @@ export function useNativeMobile({
           ),
           fxRates: fxRateService.exportCacheSnapshot(),
           userSettings: ledger.user_settings,
+          learnedTemplates,
         };
         await platformBridge.syncEngineContext(ctx, ownerKey);
       } catch {

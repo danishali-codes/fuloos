@@ -304,6 +304,11 @@ class SmsProcessWorker(
         }
 
         val txJson = decision.optJSONObject("transaction") ?: return DecisionOutcome.COVERED
+        val parsedBy = decision.optNonNullString("parsedBy")
+        if (parsedBy.startsWith("learned:")) {
+            val tplId = parsedBy.removePrefix("learned:").trim()
+            if (tplId.isNotEmpty()) db.recordTemplateHit(tplId, ownerKey)
+        }
         val lookups = parseLookups(ctxJson)
         val accountName = lookups.accounts[accountId]
         val accountCurrency = decision.optNonNullString("accountCurrency")

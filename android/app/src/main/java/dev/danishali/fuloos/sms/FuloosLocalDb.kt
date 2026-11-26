@@ -145,6 +145,34 @@ class FuloosLocalDb private constructor(context: Context) :
             ON unparsed_sms (owner_key, dismissed, created_at DESC)
             """.trimIndent(),
         )
+        // Local-only learned SMS formats (wording-only skeletons with typed slots, zero PII).
+        // Never synced to Supabase or any remote server.
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS learned_templates (
+                id TEXT NOT NULL,
+                owner_key TEXT NOT NULL,
+                template_version INTEGER NOT NULL DEFAULT 1,
+                sender_norm TEXT NOT NULL,
+                skeleton_hash TEXT NOT NULL,
+                pattern_json TEXT NOT NULL,
+                field_map_json TEXT NOT NULL,
+                direction TEXT NOT NULL,
+                txn_type TEXT NOT NULL,
+                bank_id TEXT,
+                created_at TEXT NOT NULL,
+                hits INTEGER NOT NULL DEFAULT 0,
+                last_hit_at TEXT,
+                PRIMARY KEY (owner_key, id)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE INDEX IF NOT EXISTS idx_learned_templates_owner_sender
+            ON learned_templates (owner_key, sender_norm, hits DESC)
+            """.trimIndent(),
+        )
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -155,7 +183,8 @@ class FuloosLocalDb private constructor(context: Context) :
             db.execSQL("DROP TABLE IF EXISTS offline_queue")
             db.execSQL("DELETE FROM engine_cache")
         }
-        // v2 -> v3 adds fx_rates; v3 -> v4 adds unparsed_sms non-destructively via CREATE TABLE IF NOT EXISTS.
+        // v2 -> v3 adds fx_rates; v3 -> v4 adds unparsed_sms; v4 -> v5 adds learned_templates
+        // non-destructively via CREATE TABLE IF NOT EXISTS.
         onCreate(db)
     }
 
@@ -635,10 +664,109 @@ class FuloosLocalDb private constructor(context: Context) :
         ) > 0
     }
 
+    @Synchronized
+    fun getLearnedTemplatesJson(ownerKey: String = getActiveOwnerKey()): JSONArray {
+        val arr = JSONArray()
+        if (ownerKey.isBlank()) return arr
+        readableDatabase.rawQuery(
+            """
+            SELECT id, template_version, sender_norm, skeleton_hash, pattern_json,
+                   field_map_json, direction, txn_type, bank_id, created_at, hits, last_hit_at
+            FROM learned_templates
+            WHERE owner_key = ?
+            ORDER BY hits DESC, created_at DESC
+            """.trimIndent(),
+            arrayOf(ownerKey),
+        ).use { c ->
+            while (c.moveToNext()) {
+                try {
+                    val obj = JSONObject().apply {
+                        put("id", c.getString(0))
+                        put("template_version", c.getInt(1))
+                        put("sender_norm", c.getString(2))
+                        put("skeleton_hash", c.getString(3))
+                        put("pattern", JSONObject(c.getString(4)))
+                        put("field_map", JSONObject(c.getString(5)))
+                        put("direction", c.getString(6))
+                        put("txn_type", c.getString(7))
+                        put("bank_id", if (c.isNull(8)) JSONObject.NULL else c.getString(8))
+                        put("created_at", c.getString(9))
+                        put("hits", c.getInt(10))
+                        put("last_hit_at", if (c.isNull(11)) JSONObject.NULL else c.getString(11))
+                    }
+                    arr.put(obj)
+                } catch (_: Exception) {
+                    // Skip malformed template row
+                }
+            }
+        }
+        return arr
+    }
+
+    @Synchronized
+    fun saveLearnedTemplate(template: JSONObject, ownerKey: String = getActiveOwnerKey()): Boolean {
+        if (ownerKey.isBlank()) return false
+        val id = template.optString("id", "").trim()
+        val senderNorm = template.optString("sender_norm", "").trim()
+        val skeletonHash = template.optString("skeleton_hash", "").trim()
+        val patternObj = template.optJSONObject("pattern") ?: return false
+        val fieldMapObj = template.optJSONObject("field_map") ?: return false
+        val direction = template.optString("direction", "").trim()
+        val txnType = template.optString("txn_type", "other").trim()
+        if (id.isEmpty() || skeletonHash.isEmpty() || direction.isEmpty()) return false
+
+        val bankIdRaw = if (template.isNull("bank_id")) null else template.optString("bank_id", "").trim().ifBlank { null }
+        val lastHitRaw = if (template.isNull("last_hit_at")) null else template.optString("last_hit_at", "").trim().ifBlank { null }
+        val createdAt = template.optString("created_at", "").trim()
+            .ifBlank { java.time.Instant.now().toString() }
+
+        val cv = ContentValues().apply {
+            put("id", id)
+            put("owner_key", ownerKey)
+            put("template_version", template.optInt("template_version", 1))
+            put("sender_norm", senderNorm)
+            put("skeleton_hash", skeletonHash)
+            put("pattern_json", patternObj.toString())
+            put("field_map_json", fieldMapObj.toString())
+            put("direction", direction)
+            put("txn_type", txnType)
+            if (bankIdRaw != null) put("bank_id", bankIdRaw) else putNull("bank_id")
+            put("created_at", createdAt)
+            put("hits", template.optInt("hits", 0))
+            if (lastHitRaw != null) put("last_hit_at", lastHitRaw) else putNull("last_hit_at")
+        }
+        writableDatabase.insertWithOnConflict("learned_templates", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
+        return true
+    }
+
+    @Synchronized
+    fun deleteLearnedTemplate(id: String, ownerKey: String = getActiveOwnerKey()): Boolean {
+        if (ownerKey.isBlank() || id.isBlank()) return false
+        return writableDatabase.delete(
+            "learned_templates",
+            "owner_key = ? AND id = ?",
+            arrayOf(ownerKey, id),
+        ) > 0
+    }
+
+    @Synchronized
+    fun recordTemplateHit(id: String, ownerKey: String = getActiveOwnerKey()) {
+        if (ownerKey.isBlank() || id.isBlank()) return
+        val nowIso = java.time.Instant.now().toString()
+        writableDatabase.execSQL(
+            """
+            UPDATE learned_templates
+            SET hits = hits + 1, last_hit_at = ?
+            WHERE owner_key = ? AND id = ?
+            """.trimIndent(),
+            arrayOf(nowIso, ownerKey, id),
+        )
+    }
+
     /**
-     * Merges the latest saved links and locally cached FX rates into the cached
-     * engine context so background workers always evaluate with up-to-date routing
-     * and offline-available exchange rates.
+     * Merges the latest saved links, locally cached FX rates, and learned SMS
+     * templates into the cached engine context so background workers always
+     * evaluate with up-to-date routing, exchange rates, and taught formats.
      */
     @Synchronized
     fun buildEffectiveEngineContextJson(ownerKey: String = getActiveOwnerKey()): String? {
@@ -655,6 +783,7 @@ class FuloosLocalDb private constructor(context: Context) :
                 mergedFx.put(k, localFx.get(k))
             }
             ctx.put("fxRates", mergedFx)
+            ctx.put("learnedTemplates", getLearnedTemplatesJson(ownerKey))
             ctx.toString()
         } catch (_: Exception) {
             rawCtx
@@ -685,7 +814,7 @@ class FuloosLocalDb private constructor(context: Context) :
 
     companion object {
         private const val DB_NAME = "fuloos_sms_local.db"
-        private const val DB_VERSION = 4
+        private const val DB_VERSION = 5
         private const val KEY_ACTIVE_OWNER = "active_owner_key"
         private const val KEY_SMS_LINKS = "sms_links"
         private const val KEY_ENGINE_CONTEXT = "engine_context"

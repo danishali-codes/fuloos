@@ -4,6 +4,7 @@ import {
   Check,
   ClipboardPaste,
   Copy,
+  GraduationCap,
   KeyRound,
   Mail,
   RefreshCw,
@@ -11,6 +12,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import type { TeachSmsTarget } from "./TeachSmsModal";
 import {
   alertToImportTransaction,
   buildCaptureWebhookUrl,
@@ -64,6 +66,7 @@ export function CaptureAlertsModal({
   onLoadToken,
   onRotateToken,
   onUpdateTokenSettings,
+  onTeachFromCorrection,
 }: {
   demo: boolean;
   pbUrl: string;
@@ -90,6 +93,7 @@ export function CaptureAlertsModal({
     id: string,
     patch: { enabled?: boolean; default_account_id?: string | null },
   ) => Promise<CaptureTokenInfo>;
+  onTeachFromCorrection?: (target: TeachSmsTarget) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [modelState, setModelState] = useState<ModelState>({
@@ -102,6 +106,9 @@ export function CaptureAlertsModal({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [statusMsg, setStatusMsg] = useState("");
+  const [rememberPrompt, setRememberPrompt] = useState<TeachSmsTarget | null>(
+    null,
+  );
 
   // Clipboard / Quick-paste state
   const [pasteText, setPasteText] = useState("");
@@ -236,10 +243,23 @@ export function CaptureAlertsModal({
         payee: d.payee,
       };
       const tx = alertToImportTransaction(alert, ledger, overrides, suggest);
+      const userCorrected =
+        (d.amountText !== undefined && amount !== alert.parsed_amount) ||
+        (d.type !== undefined &&
+          d.type !== (alert.parsed_type === "income" ? "income" : "expense")) ||
+        (d.payee !== undefined &&
+          d.payee.trim() !== (alert.parsed_payee || "").trim());
       await onImportAlert(alert, tx);
       setStatusMsg(
         `Imported ${money(tx.amount)} (${tx.payee || "transaction"}).`,
       );
+      if (userCorrected && onTeachFromCorrection && alert.raw_text?.trim()) {
+        setRememberPrompt({
+          sender: alert.sms_sender || alert.subject || "BANK",
+          body: alert.raw_text.trim(),
+          received_at: alert.created_at_iso,
+        });
+      }
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -375,6 +395,44 @@ export function CaptureAlertsModal({
           <p role="status" className="muted small">
             {statusMsg}
           </p>
+        )}
+        {rememberPrompt && onTeachFromCorrection && (
+          <div
+            className="notice"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "10px",
+              flexWrap: "wrap",
+              marginBottom: "12px",
+            }}
+          >
+            <span style={{ fontSize: "0.86rem" }}>
+              {uiText("Remember this for similar messages?")}
+            </span>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                type="button"
+                className="secondary compact-btn"
+                onClick={() => setRememberPrompt(null)}
+              >
+                {uiText("Not now")}
+              </button>
+              <button
+                type="button"
+                className="primary compact-btn"
+                onClick={() => {
+                  const target = rememberPrompt;
+                  setRememberPrompt(null);
+                  onClose();
+                  onTeachFromCorrection(target);
+                }}
+              >
+                <GraduationCap size={14} /> {uiText("Teach format")}
+              </button>
+            </div>
+          </div>
         )}
 
         <section

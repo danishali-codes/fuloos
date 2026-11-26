@@ -36,6 +36,7 @@ import { ConfirmOccurrenceModal, RecurringEditorModal } from "./RecurringView";
 import { HouseholdSettings } from "./HouseholdSettings";
 import { NotificationSettings } from "./NotificationSettings";
 import { SettingsDialog } from "./Settings";
+import { TeachSmsModal, type TeachSmsTarget } from "./TeachSmsModal";
 import { UnparsedSmsModal } from "./UnparsedSmsModal";
 import { planTransactionDeletion } from "./transactionDeletion";
 import type {
@@ -43,6 +44,7 @@ import type {
   UnparsedSmsItem,
 } from "./mobile/platformBridge";
 import type { SmsAccountLink } from "./mobile/smsLinks";
+import type { LearnedTemplate } from "./sms/types";
 
 const CsvImport = lazy(() =>
   import("./CsvImport").then((m) => ({ default: m.CsvImport })),
@@ -86,6 +88,9 @@ export function AppModals({
   unparsedSmsItems = [],
   onDismissUnparsedSms,
   onTeachUnparsedSms,
+  teachSmsTarget = null,
+  setTeachSmsTarget,
+  onSaveLearnedTemplate,
   onRunInboxDryRun,
   smsSettingsSection,
   deleteOpen,
@@ -176,6 +181,12 @@ export function AppModals({
   unparsedSmsItems?: UnparsedSmsItem[];
   onDismissUnparsedSms?: (item: UnparsedSmsItem) => void;
   onTeachUnparsedSms?: (item: UnparsedSmsItem) => void;
+  teachSmsTarget?: TeachSmsTarget | null;
+  setTeachSmsTarget?: (target: TeachSmsTarget | null) => void;
+  onSaveLearnedTemplate?: (
+    template: LearnedTemplate,
+    target: TeachSmsTarget,
+  ) => Promise<void> | void;
   onRunInboxDryRun?: () => Promise<{ supported: boolean; senders: InboxDryRunSenderStats[] }>;
   smsSettingsSection?: ReactNode;
   deleteOpen: boolean;
@@ -570,6 +581,9 @@ export function AppModals({
             onImportAlert={onImportCapturedAlert}
             onDismissAlert={onDismissCapturedAlert}
             onAddAlert={onAddCapturedAlert}
+            onTeachFromCorrection={
+              setTeachSmsTarget ? (target) => setTeachSmsTarget(target) : undefined
+            }
             onLoadToken={
               !demo && backend ? () => backend!.loadCaptureToken() : undefined
             }
@@ -694,6 +708,16 @@ export function AppModals({
           onTeach={onTeachUnparsedSms}
           onClose={() => {
             if (!busy) setUnparsedSmsOpen(false);
+          }}
+        />
+      )}
+      {teachSmsTarget && setTeachSmsTarget && onSaveLearnedTemplate && (
+        <TeachSmsModal
+          target={teachSmsTarget}
+          busy={busy}
+          onSave={onSaveLearnedTemplate}
+          onClose={() => {
+            if (!busy) setTeachSmsTarget(null);
           }}
         />
       )}

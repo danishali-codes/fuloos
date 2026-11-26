@@ -11,6 +11,13 @@ import {
   type DiscoveredSmsSender,
   type SmsAccountLink,
 } from "./smsLinks.ts";
+import {
+  deleteWebLearnedTemplate,
+  listWebLearnedTemplates,
+  recordWebLearnedTemplateHit,
+  saveWebLearnedTemplate,
+} from "../sms/learnedStore.ts";
+import type { LearnedTemplate } from "../sms/types.ts";
 import type { RawNativeSms, SmsEngineContext } from "./smsPipeline.ts";
 
 export type PlatformKind = "android" | "ios" | "web";
@@ -121,6 +128,21 @@ interface FuloosSmsPluginInterface {
   }): Promise<{ items: UnparsedSmsItem[] }>;
   dismissUnparsedSms(options: {
     id: number;
+    ownerKey?: string;
+  }): Promise<{ ok: boolean }>;
+  getLearnedTemplates(options?: {
+    ownerKey?: string;
+  }): Promise<{ templates: LearnedTemplate[] }>;
+  saveLearnedTemplate(options: {
+    template: LearnedTemplate;
+    ownerKey?: string;
+  }): Promise<{ ok: boolean }>;
+  deleteLearnedTemplate(options: {
+    id: string;
+    ownerKey?: string;
+  }): Promise<{ ok: boolean }>;
+  recordTemplateHit(options: {
+    id: string;
     ownerKey?: string;
   }): Promise<{ ok: boolean }>;
   runInboxDryRun(options?: {
@@ -621,6 +643,67 @@ export const platformBridge = {
         { sender: "DIB", total: 8, parsed: 6, review: 1, unparsed: 1, skipped: 0 },
       ],
     };
+  },
+
+  async getLearnedTemplates(ownerKey?: string): Promise<LearnedTemplate[]> {
+    if (isNativePlatform() && getPlatform() === "android") {
+      try {
+        const res = await FuloosSmsNative.getLearnedTemplates({ ownerKey });
+        return Array.isArray(res.templates) ? res.templates : [];
+      } catch {
+        return [];
+      }
+    }
+    return listWebLearnedTemplates(ownerKey || "default");
+  },
+
+  async saveLearnedTemplate(
+    template: LearnedTemplate,
+    ownerKey?: string,
+  ): Promise<boolean> {
+    if (isNativePlatform() && getPlatform() === "android") {
+      try {
+        const res = await FuloosSmsNative.saveLearnedTemplate({
+          template,
+          ownerKey,
+        });
+        return Boolean(res.ok);
+      } catch {
+        return false;
+      }
+    }
+    await saveWebLearnedTemplate(ownerKey || "default", template);
+    return true;
+  },
+
+  async deleteLearnedTemplate(
+    id: string,
+    ownerKey?: string,
+  ): Promise<boolean> {
+    if (isNativePlatform() && getPlatform() === "android") {
+      try {
+        const res = await FuloosSmsNative.deleteLearnedTemplate({
+          id,
+          ownerKey,
+        });
+        return Boolean(res.ok);
+      } catch {
+        return false;
+      }
+    }
+    return deleteWebLearnedTemplate(ownerKey || "default", id);
+  },
+
+  async recordTemplateHit(id: string, ownerKey?: string): Promise<void> {
+    if (isNativePlatform() && getPlatform() === "android") {
+      try {
+        await FuloosSmsNative.recordTemplateHit({ id, ownerKey });
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    await recordWebLearnedTemplateHit(ownerKey || "default", id);
   },
 
   async onSmsProcessed(

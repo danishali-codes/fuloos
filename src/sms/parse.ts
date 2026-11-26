@@ -38,6 +38,7 @@ import {
   type ParseContext,
   type ParsedSmsV1,
 } from "./types.ts";
+import { matchLearnedTemplates } from "./learned.ts";
 import { parseSmsUniversal } from "./universal.ts";
 import { parseStrictIsoDateUtc, validateParsedSmsV1 } from "./validate.ts";
 
@@ -410,12 +411,9 @@ export function parseSmsV1(text: string, ctx: ParseContext): ParsedSmsV1 {
   }
 
   // Layer 1: Learned templates (Phase 3)
-  if (
-    !ctx.disable_learned_templates &&
-    registeredLearnedMatcher &&
-    ctx.learned_templates?.length
-  ) {
-    const learnedHit = registeredLearnedMatcher(
+  if (!ctx.disable_learned_templates && ctx.learned_templates?.length) {
+    const learnedFn = registeredLearnedMatcher ?? matchLearnedTemplates;
+    const learnedHit = learnedFn(
       rawText,
       ctx,
       bank,

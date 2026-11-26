@@ -444,6 +444,41 @@ class FuloosSmsPlugin : Plugin() {
         call.resolve(JSObject().put("ok", ok))
     }
 
+    @PluginMethod
+    fun getLearnedTemplates(call: PluginCall) {
+        val ownerKey = resolveOwnerKey(call)
+        val arr = db.getLearnedTemplatesJson(ownerKey)
+        call.resolve(JSObject().put("templates", JSArray(arr.toString())))
+    }
+
+    @PluginMethod
+    fun saveLearnedTemplate(call: PluginCall) {
+        val ownerKey = resolveOwnerKey(call)
+        val tplObj = call.getObject("template")
+        val ok = if (tplObj != null) {
+            db.saveLearnedTemplate(JSONObject(tplObj.toString()), ownerKey)
+        } else {
+            false
+        }
+        call.resolve(JSObject().put("ok", ok))
+    }
+
+    @PluginMethod
+    fun deleteLearnedTemplate(call: PluginCall) {
+        val ownerKey = resolveOwnerKey(call)
+        val id = call.getString("id")?.trim().orEmpty()
+        val ok = if (id.isNotEmpty()) db.deleteLearnedTemplate(id, ownerKey) else false
+        call.resolve(JSObject().put("ok", ok))
+    }
+
+    @PluginMethod
+    fun recordTemplateHit(call: PluginCall) {
+        val ownerKey = resolveOwnerKey(call)
+        val id = call.getString("id")?.trim().orEmpty()
+        if (id.isNotEmpty()) db.recordTemplateHit(id, ownerKey)
+        call.resolve(JSObject().put("ok", id.isNotEmpty()))
+    }
+
     /**
      * Debug-only dry run: reads up to 500 recent SMS from linked senders on-device,
      * evaluates them through HeadlessSmsEngine, and returns ONLY aggregate counts
