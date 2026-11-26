@@ -1,0 +1,1147 @@
+[
+  {
+    "id": "liv-01-debit-purchase",
+    "bank": "Liv",
+    "sender": "Liv",
+    "received_at": "2026-11-03T09:15:00Z",
+    "body": "Purchase of AED 45.00 with Debit Card ending 1234 at SAMPLE CAFE, DUBAI. Avl Bal is AED 3,200.50",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "purchase",
+      "amount": { "minor": 4500, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-03",
+      "bank": "Liv",
+      "card_last4": "1234",
+      "counterparty": "SAMPLE CAFE"
+    }
+  },
+  {
+    "id": "liv-02-credit-purchase-gbp-limit-only-aed",
+    "bank": "Liv",
+    "sender": "Liv",
+    "received_at": "2026-11-04T11:30:00Z",
+    "body": "Purchase of GBP 12.00 with Credit Card ending 0000 at SAMPLE STORE LONDON. Avl Cr. Limit is AED 7,000.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "purchase",
+      "amount": { "minor": 1200, "currency": "GBP", "exponent": 2 },
+      "date": "2026-11-04",
+      "bank": "Liv",
+      "card_last4": "0000",
+      "counterparty": "SAMPLE STORE LONDON"
+    }
+  },
+  {
+    "id": "liv-03-refund",
+    "bank": "Liv",
+    "sender": "Liv",
+    "received_at": "2026-11-05T14:10:00Z",
+    "body": "Purchase amount of AED 120.00 at SAMPLE STORE on your Debit Card ending 1234 has been refunded.",
+    "expected": {
+      "kind": "transaction",
+      "direction": "credit",
+      "txn_type": "refund",
+      "amount": { "minor": 12000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-05",
+      "bank": "Liv",
+      "card_last4": "1234",
+      "counterparty": "SAMPLE STORE"
+    }
+  },
+  {
+    "id": "liv-04-atm-withdrawal",
+    "bank": "Liv",
+    "sender": "Liv",
+    "received_at": "2026-11-06T16:00:00Z",
+    "body": "Cash Withdrawal of AED 500.00 with Debit Card ending 1234 at SAMPLE MALL ATM, DUBAI. Avl Bal is AED 2,700.50",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "cash_withdrawal",
+      "amount": { "minor": 50000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-06",
+      "bank": "Liv",
+      "card_last4": "1234",
+      "counterparty": "SAMPLE MALL ATM"
+    }
+  },
+  {
+    "id": "liv-05-bill-payment",
+    "bank": "Liv",
+    "sender": "Liv",
+    "received_at": "2026-11-07T08:00:00Z",
+    "body": "AED 315.40 has been debited from your account no. 0123456789 DEWA NO. 9988776655.",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "bill_payment",
+      "amount": { "minor": 31540, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-07",
+      "bank": "Liv",
+      "counterparty": "DEWA"
+    }
+  },
+  {
+    "id": "liv-06-salary",
+    "bank": "Liv",
+    "sender": "Liv",
+    "received_at": "2026-11-01T07:00:00Z",
+    "body": "Salary of AED 18,000.00 has been credited to your account no. 0123456789.",
+    "expected": {
+      "kind": "transaction",
+      "direction": "credit",
+      "txn_type": "salary",
+      "amount": { "minor": 1800000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-01",
+      "bank": "Liv"
+    }
+  },
+  {
+    "id": "liv-07-transfer-out",
+    "bank": "Liv",
+    "sender": "Liv",
+    "received_at": "2026-11-08T12:00:00Z",
+    "body": "AED 1,250.00 has been debited from your account no. 0123456789 LOCAL TRANSFER to SAMPLE LANDLORD.",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "transfer_out",
+      "amount": { "minor": 125000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-08",
+      "bank": "Liv",
+      "counterparty": "SAMPLE LANDLORD"
+    }
+  },
+  {
+    "id": "liv-08-transfer-in",
+    "bank": "Liv",
+    "sender": "Liv",
+    "received_at": "2026-11-09T12:00:00Z",
+    "body": "AED 400.00 has been credited to your account no. 0123456789 from SAMPLE FRIEND.",
+    "expected": {
+      "kind": "transaction",
+      "direction": "credit",
+      "txn_type": "transfer_in",
+      "amount": { "minor": 40000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-09",
+      "bank": "Liv",
+      "counterparty": "SAMPLE FRIEND"
+    }
+  },
+  {
+    "id": "liv-09-fee",
+    "bank": "Liv",
+    "sender": "Liv",
+    "received_at": "2026-11-10T09:00:00Z",
+    "body": "AED 15.75 has been debited from your account no. 0123456789 Account Maintenance Fees.",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "fee",
+      "amount": { "minor": 1575, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-10",
+      "bank": "Liv"
+    }
+  },
+  {
+    "id": "liv-10-account-debit",
+    "bank": "Liv",
+    "sender": "Liv",
+    "received_at": "2026-11-11T09:00:00Z",
+    "body": "AED 89.00 has been debited from your account no. 0123456789 towards SAMPLE GYM MEMBERSHIP.",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "other",
+      "amount": { "minor": 8900, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-11",
+      "bank": "Liv",
+      "counterparty": "SAMPLE GYM MEMBERSHIP"
+    }
+  },
+  {
+    "id": "liv-11-otp",
+    "bank": "Liv",
+    "sender": "Liv",
+    "received_at": "2026-11-11T10:00:00Z",
+    "body": "Use OTP 482910 to complete your transaction at SAMPLE STORE for AED 150.00. Do not share.",
+    "expected": {
+      "kind": "otp",
+      "direction": null,
+      "txn_type": null,
+      "amount": null,
+      "bank": "Liv"
+    }
+  },
+  {
+    "id": "liv-12-declined",
+    "bank": "Liv",
+    "sender": "Liv",
+    "received_at": "2026-11-11T11:00:00Z",
+    "body": "Purchase of AED 990.00 with Debit Card ending 1234 at SAMPLE ELECTRONICS was declined due to insufficient funds.",
+    "expected": {
+      "kind": "declined",
+      "direction": null,
+      "txn_type": null,
+      "amount": null,
+      "bank": "Liv"
+    }
+  },
+  {
+    "id": "liv-13-promo",
+    "bank": "Liv",
+    "sender": "Liv",
+    "received_at": "2026-11-11T12:00:00Z",
+    "body": "Exclusive offer! Enjoy 25% off dining with your Liv card this weekend and win cashback prizes.",
+    "expected": {
+      "kind": "promo",
+      "direction": null,
+      "txn_type": null,
+      "amount": null,
+      "bank": "Liv"
+    }
+  },
+  {
+    "id": "liv-14-balance-notice",
+    "bank": "Liv",
+    "sender": "Liv",
+    "received_at": "2026-11-11T13:00:00Z",
+    "body": "Your current account balance is AED 4,510.25 as of 11/11/2026.",
+    "expected": {
+      "kind": "balance_notice",
+      "direction": null,
+      "txn_type": null,
+      "amount": null,
+      "bank": "Liv"
+    }
+  },
+  {
+    "id": "adcb-01-debit-xxx-mask",
+    "bank": "ADCB",
+    "sender": "ADCB",
+    "received_at": "2026-11-03T06:21:05Z",
+    "body": "Your Debit Card XXX1234 was used for AED45.00 on 03/11/2026 10:21:05 at SAMPLE CAFE,DUBAI-AE. Avl.Bal is AED 1,500.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "purchase",
+      "amount": { "minor": 4500, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-03",
+      "bank": "ADCB",
+      "card_last4": "1234",
+      "counterparty": "SAMPLE CAFE"
+    }
+  },
+  {
+    "id": "adcb-02-debit-star-mask",
+    "bank": "ADCB",
+    "sender": "ADCB",
+    "received_at": "2026-11-03T13:00:00Z",
+    "body": "Debit Card ****4321 was used for AED 128.50 on 03/11/2026 16:40:00 at SAMPLE MART, ABU DHABI-AE. Avl.Bal is AED 6,420.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "purchase",
+      "amount": { "minor": 12850, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-03",
+      "bank": "ADCB",
+      "card_last4": "4321",
+      "counterparty": "SAMPLE MART"
+    }
+  },
+  {
+    "id": "adcb-03-credit-purchase",
+    "bank": "ADCB",
+    "sender": "ADCB",
+    "received_at": "2026-11-04T09:10:00Z",
+    "body": "Cr.Card ****5678 was used for AED 210.00 on 04/11/2026 13:05:12 at SAMPLE PHARMACY, DUBAI-AE. Avl. Cr.limit is AED 14,790.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "purchase",
+      "amount": { "minor": 21000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-04",
+      "bank": "ADCB",
+      "card_last4": "5678",
+      "counterparty": "SAMPLE PHARMACY"
+    }
+  },
+  {
+    "id": "adcb-04-credit-foreign-eur",
+    "bank": "ADCB",
+    "sender": "ADCB",
+    "received_at": "2026-11-05T10:00:00Z",
+    "body": "Cr.Card ****5678 was used for EUR 18.50 on 05/11/2026 13:55:00 at SAMPLE BISTRO, PARIS-FR. Avl. Cr.limit is AED 14,716.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "purchase",
+      "amount": { "minor": 1850, "currency": "EUR", "exponent": 2 },
+      "date": "2026-11-05",
+      "bank": "ADCB",
+      "card_last4": "5678",
+      "counterparty": "SAMPLE BISTRO"
+    }
+  },
+  {
+    "id": "adcb-05-credit-foreign-jpy",
+    "bank": "ADCB",
+    "sender": "ADCB",
+    "received_at": "2026-11-06T08:00:00Z",
+    "body": "Cr.Card ****5678 was used for JPY 1,500 on 06/11/2026 11:30:00 at SAMPLE RAMEN, TOKYO-JP. Avl. Cr.limit is AED 14,678.50",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "purchase",
+      "amount": { "minor": 1500, "currency": "JPY", "exponent": 0 },
+      "date": "2026-11-06",
+      "bank": "ADCB",
+      "card_last4": "5678",
+      "counterparty": "SAMPLE RAMEN"
+    }
+  },
+  {
+    "id": "adcb-06-refund",
+    "bank": "ADCB",
+    "sender": "ADCB",
+    "received_at": "2026-11-07T08:00:00Z",
+    "body": "An amount of AED 75.00 has been reversed to your Credit Card ****5678 on 07/11/2026 by SAMPLE STORE.",
+    "expected": {
+      "kind": "transaction",
+      "direction": "credit",
+      "txn_type": "refund",
+      "amount": { "minor": 7500, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-07",
+      "bank": "ADCB",
+      "card_last4": "5678",
+      "counterparty": "SAMPLE STORE"
+    }
+  },
+  {
+    "id": "adcb-07-bill-payment",
+    "bank": "ADCB",
+    "sender": "ADCB",
+    "received_at": "2026-11-08T08:00:00Z",
+    "body": "AED 199.00 debited from Acc/Cr.Card ****5678 for SAMPLE TELECOM on 08/11/2026.",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "bill_payment",
+      "amount": { "minor": 19900, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-08",
+      "bank": "ADCB",
+      "card_last4": "5678",
+      "counterparty": "SAMPLE TELECOM"
+    }
+  },
+  {
+    "id": "adcb-08-card-repayment-received",
+    "bank": "ADCB",
+    "sender": "ADCB",
+    "received_at": "2026-11-09T08:00:00Z",
+    "body": "Your payment of AED 2,500.00 has been received against Credit Card ****5678 on 09/11/2026.",
+    "expected": {
+      "kind": "transaction",
+      "direction": "credit",
+      "txn_type": "card_repayment",
+      "amount": { "minor": 250000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-09",
+      "bank": "ADCB",
+      "card_last4": "5678"
+    }
+  },
+  {
+    "id": "adcb-09-loan-repayment",
+    "bank": "ADCB",
+    "sender": "ADCB",
+    "received_at": "2026-11-10T08:00:00Z",
+    "body": "Installment Payment Plan EMI of AED 650.00 has been debited on 10/11/2026.",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "loan_repayment",
+      "amount": { "minor": 65000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-10",
+      "bank": "ADCB"
+    }
+  },
+  {
+    "id": "adcb-10-account-credit-salary",
+    "bank": "ADCB",
+    "sender": "ADCB",
+    "received_at": "2026-11-01T06:30:00Z",
+    "body": "Your account XXX9012 has been credited with AED 21,500.00 on 01/11/2026 for Salary from SAMPLE CORP. Avl.Bal is AED 35,200.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "credit",
+      "txn_type": "salary",
+      "amount": { "minor": 2150000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-01",
+      "bank": "ADCB",
+      "counterparty": "SAMPLE CORP"
+    }
+  },
+  {
+    "id": "adcb-11-atm",
+    "bank": "ADCB",
+    "sender": "ADCB",
+    "received_at": "2026-11-11T10:00:00Z",
+    "body": "Your Debit Card XXX1234 was used for cash withdrawal of AED 300.00 on 11/11/2026 14:00:00 at SAMPLE ATM, DUBAI-AE. Avl.Bal is AED 1,200.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "cash_withdrawal",
+      "amount": { "minor": 30000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-11",
+      "bank": "ADCB",
+      "card_last4": "1234",
+      "counterparty": "SAMPLE ATM"
+    }
+  },
+  {
+    "id": "adcb-12-otp",
+    "bank": "ADCB",
+    "sender": "ADCB",
+    "received_at": "2026-11-11T10:05:00Z",
+    "body": "Your ADCB OTP is 773120 for online purchase of AED 320.00 at SAMPLE STORE. Valid for 5 minutes.",
+    "expected": {
+      "kind": "otp",
+      "direction": null,
+      "txn_type": null,
+      "amount": null,
+      "bank": "ADCB"
+    }
+  },
+  {
+    "id": "adcb-13-declined",
+    "bank": "ADCB",
+    "sender": "ADCB",
+    "received_at": "2026-11-11T10:15:00Z",
+    "body": "Your transaction of AED 850.00 on Credit Card ****5678 at SAMPLE STORE could not be processed due to insufficient limit.",
+    "expected": {
+      "kind": "declined",
+      "direction": null,
+      "txn_type": null,
+      "amount": null,
+      "bank": "ADCB"
+    }
+  },
+  {
+    "id": "adcb-14-promo",
+    "bank": "ADCB",
+    "sender": "ADCB",
+    "received_at": "2026-11-11T11:00:00Z",
+    "body": "Special Offer: Get 20% off flights with your ADCB TouchPoints card. Offer valid until 30 Nov.",
+    "expected": {
+      "kind": "promo",
+      "direction": null,
+      "txn_type": null,
+      "amount": null,
+      "bank": "ADCB"
+    }
+  },
+  {
+    "id": "adcb-15-balance-notice",
+    "bank": "ADCB",
+    "sender": "ADCB",
+    "received_at": "2026-11-11T12:00:00Z",
+    "body": "Dear Customer, your ADCB A/C XXX9012 Available Balance is AED 12,345.67.",
+    "expected": {
+      "kind": "balance_notice",
+      "direction": null,
+      "txn_type": null,
+      "amount": null,
+      "bank": "ADCB"
+    }
+  },
+  {
+    "id": "dib-01-account-debit",
+    "bank": "DIB",
+    "sender": "DIB",
+    "received_at": "2026-11-03T09:00:00Z",
+    "body": "Your A/C No. 0XX-XXXXXXX-01 has been debited with AED 245.50 on 03-NOV-2026 towards SAMPLE UTILITY BILL. Avl Bal is AED 8,120.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "bill_payment",
+      "amount": { "minor": 24550, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-03",
+      "bank": "DIB",
+      "counterparty": "SAMPLE UTILITY BILL"
+    }
+  },
+  {
+    "id": "dib-02-account-credit-salary",
+    "bank": "DIB",
+    "sender": "DIB",
+    "received_at": "2026-11-01T07:30:00Z",
+    "body": "Your A/C No. 0XX-XXXXXXX-01 has been credited with AED 19,500.00 on 01-NOV-2026 towards Salary from SAMPLE EMPLOYER. Avl Bal is AED 27,620.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "credit",
+      "txn_type": "salary",
+      "amount": { "minor": 1950000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-01",
+      "bank": "DIB",
+      "counterparty": "SAMPLE EMPLOYER"
+    }
+  },
+  {
+    "id": "dib-03-transfer-out",
+    "bank": "DIB",
+    "sender": "DIB",
+    "received_at": "2026-11-04T11:00:00Z",
+    "body": "Your A/C No. 0XX-XXXXXXX-01 has been debited with AED 1,500.00 on 04-NOV-2026 for Funds Transfer to SAMPLE BENEFICIARY. Avl Bal is AED 26,120.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "transfer_out",
+      "amount": { "minor": 150000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-04",
+      "bank": "DIB",
+      "counterparty": "SAMPLE BENEFICIARY"
+    }
+  },
+  {
+    "id": "dib-04-transfer-in",
+    "bank": "DIB",
+    "sender": "DIB",
+    "received_at": "2026-11-05T11:00:00Z",
+    "body": "Your A/C No. 0XX-XXXXXXX-01 has been credited with AED 620.00 on 05-NOV-2026 by SAMPLE SENDER. Avl Bal is AED 26,740.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "credit",
+      "txn_type": "transfer_in",
+      "amount": { "minor": 62000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-05",
+      "bank": "DIB",
+      "counterparty": "SAMPLE SENDER"
+    }
+  },
+  {
+    "id": "dib-05-card-payment",
+    "bank": "DIB",
+    "sender": "DIB",
+    "received_at": "2026-11-06T11:00:00Z",
+    "body": "Your A/C No. 0XX-XXXXXXX-01 has been debited with AED 3,200.00 on 06-NOV-2026 towards Credit Card Payment. Avl Bal is AED 23,540.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "card_repayment",
+      "amount": { "minor": 320000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-06",
+      "bank": "DIB"
+    }
+  },
+  {
+    "id": "dib-06-finance-repayment",
+    "bank": "DIB",
+    "sender": "DIB",
+    "received_at": "2026-11-07T08:00:00Z",
+    "body": "Your A/C No. 0XX-XXXXXXX-01 has been debited with AED 2,150.00 on 07-NOV-2026 towards Auto Finance Installment. Avl Bal is AED 21,390.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "loan_repayment",
+      "amount": { "minor": 215000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-07",
+      "bank": "DIB"
+    }
+  },
+  {
+    "id": "dib-07-atm-withdrawal",
+    "bank": "DIB",
+    "sender": "DIB",
+    "received_at": "2026-11-08T14:00:00Z",
+    "body": "Cash Withdrawal of AED 400.00 on your DIB Debit Card XXXX7890 at SAMPLE PLAZA ATM on 08-NOV-2026. Avl Bal is AED 20,990.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "cash_withdrawal",
+      "amount": { "minor": 40000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-08",
+      "bank": "DIB",
+      "card_last4": "7890",
+      "counterparty": "SAMPLE PLAZA ATM"
+    }
+  },
+  {
+    "id": "dib-08-debit-card-purchase",
+    "bank": "DIB",
+    "sender": "DIB",
+    "received_at": "2026-11-09T15:00:00Z",
+    "body": "Your DIB Debit Card XXXX7890 was used for AED 64.25 at SAMPLE BAKERY, DUBAI on 09-NOV-2026. Avl Bal is AED 20,925.75",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "purchase",
+      "amount": { "minor": 6425, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-09",
+      "bank": "DIB",
+      "card_last4": "7890",
+      "counterparty": "SAMPLE BAKERY"
+    }
+  },
+  {
+    "id": "dib-09-credit-card-foreign-kwd",
+    "bank": "DIB",
+    "sender": "DIB",
+    "received_at": "2026-11-10T10:00:00Z",
+    "body": "Your DIB Credit Card XXXX3456 was used for KWD 2.500 at SAMPLE COFFEE KUWAIT on 10-NOV-2026. Avl Cr. Limit is AED 15,000.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "purchase",
+      "amount": { "minor": 2500, "currency": "KWD", "exponent": 3 },
+      "date": "2026-11-10",
+      "bank": "DIB",
+      "card_last4": "3456",
+      "counterparty": "SAMPLE COFFEE KUWAIT"
+    }
+  },
+  {
+    "id": "dib-10-fee",
+    "bank": "DIB",
+    "sender": "DIB",
+    "received_at": "2026-11-10T12:00:00Z",
+    "body": "Your A/C No. 0XX-XXXXXXX-01 has been debited with AED 26.25 on 10-NOV-2026 towards Account Charges and VAT. Avl Bal is AED 20,899.50",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "fee",
+      "amount": { "minor": 2625, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-10",
+      "bank": "DIB"
+    }
+  },
+  {
+    "id": "dib-11-refund",
+    "bank": "DIB",
+    "sender": "DIB",
+    "received_at": "2026-11-11T10:00:00Z",
+    "body": "AED 95.00 has been refunded to your DIB Credit Card XXXX3456 at SAMPLE STORE on 11-NOV-2026.",
+    "expected": {
+      "kind": "transaction",
+      "direction": "credit",
+      "txn_type": "refund",
+      "amount": { "minor": 9500, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-11",
+      "bank": "DIB",
+      "card_last4": "3456",
+      "counterparty": "SAMPLE STORE"
+    }
+  },
+  {
+    "id": "dib-12-otp",
+    "bank": "DIB",
+    "sender": "DIB",
+    "received_at": "2026-11-11T11:00:00Z",
+    "body": "Dear Customer, your DIB One-Time Password (OTP) is 551902. Never share your OTP with anyone.",
+    "expected": {
+      "kind": "otp",
+      "direction": null,
+      "txn_type": null,
+      "amount": null,
+      "bank": "DIB"
+    }
+  },
+  {
+    "id": "dib-13-declined",
+    "bank": "DIB",
+    "sender": "DIB",
+    "received_at": "2026-11-11T12:00:00Z",
+    "body": "Transaction of AED 1,200.00 on your DIB Card XXXX7890 at SAMPLE STORE was declined due to insufficient balance.",
+    "expected": {
+      "kind": "declined",
+      "direction": null,
+      "txn_type": null,
+      "amount": null,
+      "bank": "DIB"
+    }
+  },
+  {
+    "id": "dib-14-promo",
+    "bank": "DIB",
+    "sender": "DIB",
+    "received_at": "2026-11-11T13:00:00Z",
+    "body": "Win big with DIB! Stand a chance to win 100,000 Wala'a Rewards and enjoy 15% off at partner malls.",
+    "expected": {
+      "kind": "promo",
+      "direction": null,
+      "txn_type": null,
+      "amount": null,
+      "bank": "DIB"
+    }
+  },
+  {
+    "id": "dib-15-balance-notice",
+    "bank": "DIB",
+    "sender": "DIB",
+    "received_at": "2026-11-11T14:00:00Z",
+    "body": "Your DIB A/C No. 0XX-XXXXXXX-01 Available Balance as of 11-NOV-2026 is AED 20,899.50.",
+    "expected": {
+      "kind": "balance_notice",
+      "direction": null,
+      "txn_type": null,
+      "amount": null,
+      "bank": "DIB"
+    }
+  },
+  {
+    "id": "fab-01-credit-purchase",
+    "bank": "FAB",
+    "sender": "FAB",
+    "received_at": "2026-11-03T10:00:00Z",
+    "body": "Credit Card Purchase Card No XXXXXXXXXXXX2468 AED 135.00 SAMPLE SUPERMARKET DUBAI AE 03/11/26 14:00 Available Balance AED 9,865.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "purchase",
+      "amount": { "minor": 13500, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-03",
+      "bank": "FAB",
+      "card_last4": "2468",
+      "counterparty": "SAMPLE SUPERMARKET"
+    }
+  },
+  {
+    "id": "fab-02-debit-purchase",
+    "bank": "FAB",
+    "sender": "FAB",
+    "received_at": "2026-11-04T10:00:00Z",
+    "body": "Debit Card Purchase Card No XXXXXXXXXXXX1357 AED 52.00 SAMPLE COFFEE SHOP DUBAI AE 04/11/26 12:15 Available Balance AED 4,948.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "purchase",
+      "amount": { "minor": 5200, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-04",
+      "bank": "FAB",
+      "card_last4": "1357",
+      "counterparty": "SAMPLE COFFEE SHOP"
+    }
+  },
+  {
+    "id": "fab-03-foreign-inr",
+    "bank": "FAB",
+    "sender": "FAB",
+    "received_at": "2026-11-05T10:00:00Z",
+    "body": "Credit Card Purchase Card No XXXXXXXXXXXX2468 INR 2,450.00 SAMPLE BOOKS MUMBAI IN 05/11/26 15:30 Available Balance AED 9,750.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "purchase",
+      "amount": { "minor": 245000, "currency": "INR", "exponent": 2 },
+      "date": "2026-11-05",
+      "bank": "FAB",
+      "card_last4": "2468",
+      "counterparty": "SAMPLE BOOKS"
+    }
+  },
+  {
+    "id": "fab-04-atm-withdrawal",
+    "bank": "FAB",
+    "sender": "FAB",
+    "received_at": "2026-11-06T10:00:00Z",
+    "body": "ATM Cash withdrawal on Card XXXXXXXXXXXX1357 AED 600.00 at SAMPLE MALL ATM on 06/11/2026. Avl Bal AED 4,348.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "cash_withdrawal",
+      "amount": { "minor": 60000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-06",
+      "bank": "FAB",
+      "card_last4": "1357",
+      "counterparty": "SAMPLE MALL ATM"
+    }
+  },
+  {
+    "id": "fab-05-bill-payment",
+    "bank": "FAB",
+    "sender": "FAB",
+    "received_at": "2026-11-07T10:00:00Z",
+    "body": "Your payment instructions of AED 280.00 to Etisalat has been processed successfully on 07/11/2026.",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "bill_payment",
+      "amount": { "minor": 28000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-07",
+      "bank": "FAB",
+      "counterparty": "Etisalat"
+    }
+  },
+  {
+    "id": "fab-06-transfer-out",
+    "bank": "FAB",
+    "sender": "FAB",
+    "received_at": "2026-11-08T10:00:00Z",
+    "body": "Your funds transfer request of AED 900.00 to SAMPLE PARTNER has been processed successfully on 08/11/2026.",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "transfer_out",
+      "amount": { "minor": 90000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-08",
+      "bank": "FAB",
+      "counterparty": "SAMPLE PARTNER"
+    }
+  },
+  {
+    "id": "fab-07-account-credit",
+    "bank": "FAB",
+    "sender": "FAB",
+    "received_at": "2026-11-09T10:00:00Z",
+    "body": "An amount of AED 1,100.00 has been credited to your FAB account from SAMPLE CLIENT on 09/11/2026.",
+    "expected": {
+      "kind": "transaction",
+      "direction": "credit",
+      "txn_type": "transfer_in",
+      "amount": { "minor": 110000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-09",
+      "bank": "FAB",
+      "counterparty": "SAMPLE CLIENT"
+    }
+  },
+  {
+    "id": "fab-08-salary",
+    "bank": "FAB",
+    "sender": "FAB",
+    "received_at": "2026-11-01T08:00:00Z",
+    "body": "Salary of AED 16,200.00 has been credited to your FAB account on 01/11/2026. Available Balance AED 21,200.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "credit",
+      "txn_type": "salary",
+      "amount": { "minor": 1620000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-01",
+      "bank": "FAB"
+    }
+  },
+  {
+    "id": "fab-09-refund",
+    "bank": "FAB",
+    "sender": "FAB",
+    "received_at": "2026-11-10T10:00:00Z",
+    "body": "Refund of AED 84.50 on your FAB Card XXXXXXXXXXXX2468 at SAMPLE STORE on 10/11/2026.",
+    "expected": {
+      "kind": "transaction",
+      "direction": "credit",
+      "txn_type": "refund",
+      "amount": { "minor": 8450, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-10",
+      "bank": "FAB",
+      "card_last4": "2468",
+      "counterparty": "SAMPLE STORE"
+    }
+  },
+  {
+    "id": "fab-10-fee",
+    "bank": "FAB",
+    "sender": "FAB",
+    "received_at": "2026-11-10T11:00:00Z",
+    "body": "AED 21.00 has been debited from your FAB account for Service Fee and VAT on 10/11/2026.",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "fee",
+      "amount": { "minor": 2100, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-10",
+      "bank": "FAB"
+    }
+  },
+  {
+    "id": "fab-11-otp",
+    "bank": "FAB",
+    "sender": "FAB",
+    "received_at": "2026-11-11T10:00:00Z",
+    "body": "FAB verification code: 839201. Use this code to authorize your online payment of AED 450.00.",
+    "expected": {
+      "kind": "otp",
+      "direction": null,
+      "txn_type": null,
+      "amount": null,
+      "bank": "FAB"
+    }
+  },
+  {
+    "id": "fab-12-declined",
+    "bank": "FAB",
+    "sender": "FAB",
+    "received_at": "2026-11-11T11:00:00Z",
+    "body": "Credit Card Purchase Card No XXXXXXXXXXXX2468 AED 2,500.00 SAMPLE STORE was declined.",
+    "expected": {
+      "kind": "declined",
+      "direction": null,
+      "txn_type": null,
+      "amount": null,
+      "bank": "FAB"
+    }
+  },
+  {
+    "id": "fab-13-promo",
+    "bank": "FAB",
+    "sender": "FAB",
+    "received_at": "2026-11-11T12:00:00Z",
+    "body": "Limited-time offer! Enjoy 30% off theme parks with your FAB credit card.",
+    "expected": {
+      "kind": "promo",
+      "direction": null,
+      "txn_type": null,
+      "amount": null,
+      "bank": "FAB"
+    }
+  },
+  {
+    "id": "fab-14-balance-notice",
+    "bank": "FAB",
+    "sender": "FAB",
+    "received_at": "2026-11-11T13:00:00Z",
+    "body": "Your FAB Account Available Balance is AED 19,450.00 as on 11/11/2026.",
+    "expected": {
+      "kind": "balance_notice",
+      "direction": null,
+      "txn_type": null,
+      "amount": null,
+      "bank": "FAB"
+    }
+  },
+  {
+    "id": "enbd-01-credit-purchase",
+    "bank": "ENBD",
+    "sender": "EmiratesNBD",
+    "received_at": "2026-11-03T12:00:00Z",
+    "body": "Purchase of AED 175.00 with Credit Card ending 6789 at SAMPLE MARKET, DUBAI. Avl Cr. Limit is AED 18,825.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "purchase",
+      "amount": { "minor": 17500, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-03",
+      "bank": "ENBD",
+      "card_last4": "6789",
+      "counterparty": "SAMPLE MARKET"
+    }
+  },
+  {
+    "id": "enbd-02-debit-purchase",
+    "bank": "ENBD",
+    "sender": "ENBD",
+    "received_at": "2026-11-04T12:00:00Z",
+    "body": "Purchase of AED 38.50 with Debit Card ending 9876 at SAMPLE ROASTERY, DUBAI. Avl Bal is AED 5,410.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "purchase",
+      "amount": { "minor": 3850, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-04",
+      "bank": "ENBD",
+      "card_last4": "9876",
+      "counterparty": "SAMPLE ROASTERY"
+    }
+  },
+  {
+    "id": "enbd-03-foreign-usd-with-billed-aed",
+    "bank": "ENBD",
+    "sender": "EmiratesNBD",
+    "received_at": "2026-11-05T12:00:00Z",
+    "body": "Purchase of USD 10.00 (AED 36.73) with Credit Card ending 6789 at SAMPLE CLOUD SERVICE. Avl Cr. Limit is AED 18,788.27",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "purchase",
+      "amount": { "minor": 1000, "currency": "USD", "exponent": 2 },
+      "billed_amount": { "minor": 3673, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-05",
+      "bank": "ENBD",
+      "card_last4": "6789",
+      "counterparty": "SAMPLE CLOUD SERVICE"
+    }
+  },
+  {
+    "id": "enbd-04-account-debit",
+    "bank": "ENBD",
+    "sender": "ENBD",
+    "received_at": "2026-11-06T12:00:00Z",
+    "body": "AED 420.00 has been debited from your account XXX4567 on 06/11/2026 towards SAMPLE INSURANCE. Avl Bal is AED 4,990.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "other",
+      "amount": { "minor": 42000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-06",
+      "bank": "ENBD",
+      "counterparty": "SAMPLE INSURANCE"
+    }
+  },
+  {
+    "id": "enbd-05-account-credit-salary",
+    "bank": "ENBD",
+    "sender": "EmiratesNBD",
+    "received_at": "2026-11-01T08:00:00Z",
+    "body": "Salary of AED 22,000.00 has been credited to your account XXX4567 on 01/11/2026. Avl Bal is AED 27,410.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "credit",
+      "txn_type": "salary",
+      "amount": { "minor": 2200000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-01",
+      "bank": "ENBD"
+    }
+  },
+  {
+    "id": "enbd-06-transfer-out",
+    "bank": "ENBD",
+    "sender": "ENBD",
+    "received_at": "2026-11-07T12:00:00Z",
+    "body": "AED 750.00 has been transferred from your account XXX4567 to SAMPLE FAMILY on 07/11/2026. Avl Bal is AED 4,240.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "transfer_out",
+      "amount": { "minor": 75000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-07",
+      "bank": "ENBD",
+      "counterparty": "SAMPLE FAMILY"
+    }
+  },
+  {
+    "id": "enbd-07-transfer-in",
+    "bank": "ENBD",
+    "sender": "ENBD",
+    "received_at": "2026-11-08T12:00:00Z",
+    "body": "AED 530.00 has been credited to your account XXX4567 from SAMPLE COLLEAGUE on 08/11/2026. Avl Bal is AED 4,770.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "credit",
+      "txn_type": "transfer_in",
+      "amount": { "minor": 53000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-08",
+      "bank": "ENBD",
+      "counterparty": "SAMPLE COLLEAGUE"
+    }
+  },
+  {
+    "id": "enbd-08-atm",
+    "bank": "ENBD",
+    "sender": "EmiratesNBD",
+    "received_at": "2026-11-09T12:00:00Z",
+    "body": "Cash Withdrawal of AED 800.00 with Debit Card ending 9876 at SAMPLE TOWER ATM, DUBAI on 09/11/2026. Avl Bal is AED 3,970.00",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "cash_withdrawal",
+      "amount": { "minor": 80000, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-09",
+      "bank": "ENBD",
+      "card_last4": "9876",
+      "counterparty": "SAMPLE TOWER ATM"
+    }
+  },
+  {
+    "id": "enbd-09-refund",
+    "bank": "ENBD",
+    "sender": "EmiratesNBD",
+    "received_at": "2026-11-10T12:00:00Z",
+    "body": "Refund of AED 145.00 at SAMPLE APPAREL on your Credit Card ending 6789 has been processed on 10/11/2026.",
+    "expected": {
+      "kind": "transaction",
+      "direction": "credit",
+      "txn_type": "refund",
+      "amount": { "minor": 14500, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-10",
+      "bank": "ENBD",
+      "card_last4": "6789",
+      "counterparty": "SAMPLE APPAREL"
+    }
+  },
+  {
+    "id": "enbd-10-bill-payment",
+    "bank": "ENBD",
+    "sender": "ENBD",
+    "received_at": "2026-11-10T14:00:00Z",
+    "body": "Bill payment of AED 265.00 to DEWA has been debited from your account XXX4567 on 10/11/2026.",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "bill_payment",
+      "amount": { "minor": 26500, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-10",
+      "bank": "ENBD",
+      "counterparty": "DEWA"
+    }
+  },
+  {
+    "id": "enbd-11-fee",
+    "bank": "ENBD",
+    "sender": "ENBD",
+    "received_at": "2026-11-10T15:00:00Z",
+    "body": "AED 52.50 has been debited from your account XXX4567 for Card Annual Fee and VAT on 10/11/2026.",
+    "expected": {
+      "kind": "transaction",
+      "direction": "debit",
+      "txn_type": "fee",
+      "amount": { "minor": 5250, "currency": "AED", "exponent": 2 },
+      "date": "2026-11-10",
+      "bank": "ENBD"
+    }
+  },
+  {
+    "id": "enbd-12-otp",
+    "bank": "ENBD",
+    "sender": "EmiratesNBD",
+    "received_at": "2026-11-11T10:00:00Z",
+    "body": "Your Emirates NBD Smart Pass / OTP is 904112 to complete your transaction at SAMPLE AIRLINES.",
+    "expected": {
+      "kind": "otp",
+      "direction": null,
+      "txn_type": null,
+      "amount": null,
+      "bank": "ENBD"
+    }
+  },
+  {
+    "id": "enbd-13-declined",
+    "bank": "ENBD",
+    "sender": "ENBD",
+    "received_at": "2026-11-11T11:00:00Z",
+    "body": "Purchase of AED 4,500.00 with Credit Card ending 6789 at SAMPLE LUXURY was declined.",
+    "expected": {
+      "kind": "declined",
+      "direction": null,
+      "txn_type": null,
+      "amount": null,
+      "bank": "ENBD"
+    }
+  },
+  {
+    "id": "enbd-14-promo",
+    "bank": "ENBD",
+    "sender": "EmiratesNBD",
+    "received_at": "2026-11-11T12:00:00Z",
+    "body": "Emirates NBD Offer: Spend and win! Get 10% off hotels when booking with your Skywards card.",
+    "expected": {
+      "kind": "promo",
+      "direction": null,
+      "txn_type": null,
+      "amount": null,
+      "bank": "ENBD"
+    }
+  },
+  {
+    "id": "enbd-15-balance-notice",
+    "bank": "ENBD",
+    "sender": "ENBD",
+    "received_at": "2026-11-11T13:00:00Z",
+    "body": "Available balance in your Emirates NBD account XXX4567 is AED 3,652.50.",
+    "expected": {
+      "kind": "balance_notice",
+      "direction": null,
+      "txn_type": null,
+      "amount": null,
+      "bank": "ENBD"
+    }
+  }
+]
