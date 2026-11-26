@@ -612,6 +612,9 @@ export class PocketBaseBackend implements FuloosBackend {
       "set_category_id",
       "currency",
       "original_currency",
+      "fx_rate_date",
+      "fx_source",
+      "fx_status",
       "household_id",
     ]) {
       if (body[key] === null) body[key] = "";
@@ -630,11 +633,16 @@ export class PocketBaseBackend implements FuloosBackend {
     if (
       table === "transactions" &&
       "original_currency" in body &&
-      (!body.original_currency || body.original_currency === "AED")
+      !body.original_currency
     ) {
       body.original_currency = "";
       body.original_amount = 0;
       body.fx_rate = 0;
+    } else if (
+      table === "transactions" &&
+      typeof body.original_currency === "string"
+    ) {
+      body.original_currency = body.original_currency.trim().toUpperCase();
     }
     if (table === "recurring_prefs" && "dismissed_keys" in body) {
       body.dismissed_keys = serializeDismissedKeys(body.dismissed_keys);

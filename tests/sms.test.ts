@@ -142,3 +142,89 @@ test("dateInText skips invalid slash dates and finds subsequent valid dates", ()
   assert.equal(dateInText("on 05-MAY-2025"), "2025-05-05");
   assert.equal(dateInText("on 31-FEB-2025"), null);
 });
+
+test("multi-currency SMS parsing extracts GBP, EUR, INR, JPY, KWD, symbols, Arabic-Indic digits, billed amounts, and never mistakes credit limits for amounts", async () => {
+  const {
+    extractBilledAmount,
+    extractCurrencyAmount,
+    normalizeSmsDigits,
+    parseSms,
+  } = await import("../src/ledger/sms.ts");
+
+  // 1. Acceptance check: GBP 12.00 + Avl Cr. Limit AED 7,000.00 -> GBP 1200, NOT AED 7000
+  const gbp = parseSms(
+    "Purchase of GBP 12.00 with Credit Card ending 0000 at SAMPLE STORE LONDON. Avl Cr. Limit is AED 7,000.00",
+    "Liv",
+  );
+  assert.equal(gbp.currency, "GBP");
+  assert.equal(gbp.amount_minor, 1200);
+  assert.equal(gbp.billed_amount_minor, null);
+  assert.equal(gbp.balance_after, 7000);
+
+  // 2. JPY 0 decimals
+  const jpy = parseSms(
+    "Purchase of JPY 1,500 with Credit Card ending 0000 at SAMPLE RAMEN TOKYO. Avl Bal is AED 5,000.00",
+    "Liv",
+  );
+  assert.equal(jpy.currency, "JPY");
+  assert.equal(jpy.amount_minor, 1500);
+
+  // 3. KWD 3 decimals
+  const kwd = parseSms(
+    "Purchase of KWD 2.500 with Credit Card ending 0000 at SAMPLE BAKERY KUWAIT. Avl Bal is AED 5,000.00",
+    "Liv",
+  );
+  assert.equal(kwd.currency, "KWD");
+  assert.equal(kwd.amount_minor, 2500);
+
+  // 4. Unknown 3-letter currency code: does not crash, assumes exponent 2, warns unknown_currency_code
+  const unknown = parseSms(
+    "Purchase of ZZZ 42.50 with Credit Card ending 0000 at SAMPLE VENDOR. Avl Bal is AED 1,000.00",
+    "Liv",
+  );
+  assert.equal(unknown.currency, "ZZZ");
+  assert.equal(unknown.amount_minor, 4250);
+  assert.deepEqual(unknown.warnings, ["unknown_currency_code"]);
+
+  // 5. Dual amount: foreign + billed AED amount
+  const dual = parseSms(
+    "Purchase of GBP 12.00 (AED 56.10 billed) with Credit Card ending 0000 at SAMPLE STORE LONDON. Avl Cr. Limit is AED 7,000.00",
+    "Liv",
+  );
+  assert.equal(dual.currency, "GBP");
+  assert.equal(dual.amount_minor, 1200);
+  assert.equal(dual.billed_currency, "AED");
+  assert.equal(dual.billed_amount_minor, 5610);
+
+  // 6. Code before, code after, no space, and currency symbols
+  assert.equal(extractCurrencyAmount("Spent 24.50 EUR at SAMPLE CAFE")?.currency, "EUR");
+  assert.equal(extractCurrencyAmount("Spent 24.50 EUR at SAMPLE CAFE")?.amountMinor, 2450);
+  assert.equal(extractCurrencyAmount("Paid GBP12 at SAMPLE SHOP")?.amountMinor, 1200);
+  assert.equal(extractCurrencyAmount("Charged €19.99 at SAMPLE STREAM")?.currency, "EUR");
+  assert.equal(extractCurrencyAmount("Charged £12.00 at SAMPLE STORE")?.currency, "GBP");
+  assert.equal(extractCurrencyAmount("Charged ₹1,250.00 at SAMPLE MART")?.currency, "INR");
+  assert.equal(extractCurrencyAmount("Charged ₹1,250.00 at SAMPLE MART")?.amountMinor, 125000);
+  assert.equal(extractCurrencyAmount("Paid $15.00 at SAMPLE CLOUD")?.currency, "USD");
+  // `$` must NOT become USD when another ISO currency code is present
+  assert.equal(extractCurrencyAmount("Paid CAD $15.00 at SAMPLE STORE")?.currency, "CAD");
+
+  // 7. Arabic-Indic digits
+  assert.equal(normalizeSmsDigits("GBP ١٢٫٠٠"), "GBP 12.00");
+  const arabic = parseSms(
+    "Purchase of GBP ١٢٫٠٠ with Credit Card ending ٠٠٠٠ at SAMPLE STORE. Avl Bal is AED ٧٬٠٠٠٫٠٠",
+    "Liv",
+  );
+  assert.equal(arabic.currency, "GBP");
+  assert.equal(arabic.amount_minor, 1200);
+
+  // 8. Balance / credit limit only SMS yields NO extracted amount
+  assert.equal(
+    extractCurrencyAmount("Your Avl Cr. Limit is AED 7,000.00. Available Balance is AED 3,500.00."),
+    null,
+  );
+  assert.equal(
+    extractBilledAmount("Purchase of GBP 12.00 at SAMPLE STORE. Avl Cr. Limit is AED 7,000.00", "GBP"),
+    null,
+  );
+});
+

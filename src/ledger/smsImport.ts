@@ -1,5 +1,17 @@
 /* Turns bank SMS into reviewable Fuloos transactions. Everything here runs in the browser; only the transactions the
    user confirms are saved, and the SMS text itself is never stored. */
+import {
+  computeImpliedRate,
+  convertMinor,
+  DEFAULT_CURRENCY,
+  formatCurrencyInput,
+  getCurrencyDecimals,
+  getPeggedFallbackRate,
+  isSupportedCurrency,
+  normalizeCurrencyCode,
+  type FxSource,
+  type FxStatus,
+} from "../currency.ts";
 import { validateTransaction, type Ledger } from "../domain.ts";
 import { transactionKey, type ImportTransaction } from "../csv.ts";
 import type { UserSuggestion } from "./learning.ts";
@@ -14,12 +26,20 @@ import {
   type SmsType,
 } from "./sms.ts";
 
+export interface SmsImportRateEntry {
+  rate: number;
+  rateDate: string;
+  provider?: string;
+}
+
 export interface SmsImportOptions {
   account: string;
   /** Used when neither the SMS text nor the backup file has a date. */
   fallbackDate: string;
   /** Force a bank for every message (otherwise sender, then templates, decide). */
   bank?: string | null;
+  /** Optional cached FX rates keyed by `"BASE|QUOTE|YYYY-MM-DD"`. */
+  fxRates?: Record<string, SmsImportRateEntry>;
 }
 
 export interface SmsPreviewRow {
@@ -35,6 +55,7 @@ export interface SmsPreviewRow {
   /** Rows the user would normally not import (OTPs, internal moves, card repayments). */
   skipped: string;
   error: string;
+  warnings?: string[];
 }
 
 const SKIP: Partial<Record<SmsType, string>> = {
@@ -70,6 +91,32 @@ export function displayPayee(merchant: string | null): string {
     );
 }
 
+function findCachedRate(
+  fxRates: Record<string, SmsImportRateEntry> | undefined,
+  from: string,
+  to: string,
+  date: string,
+): { rate: number; rateDate: string } | null {
+  if (!fxRates) return null;
+  const exact = fxRates[`${from}|${to}|${date}`];
+  if (exact && exact.rate > 0) return { rate: exact.rate, rateDate: exact.rateDate || date };
+  let bestBefore: SmsImportRateEntry | null = null;
+  let bestAny: SmsImportRateEntry | null = null;
+  for (const [k, v] of Object.entries(fxRates)) {
+    if (!v || !(v.rate > 0)) continue;
+    const [b, q, kd] = k.split("|");
+    if (b === from && q === to) {
+      const ed = v.rateDate || kd;
+      if (!bestAny || ed > bestAny.rateDate) bestAny = { ...v, rateDate: ed };
+      if (ed <= date && (!bestBefore || ed > bestBefore.rateDate)) {
+        bestBefore = { ...v, rateDate: ed };
+      }
+    }
+  }
+  const hit = bestBefore ?? bestAny;
+  return hit ? { rate: hit.rate, rateDate: hit.rateDate } : null;
+}
+
 export function previewSms(
   messages: RawSms[],
   options: SmsImportOptions,
@@ -78,6 +125,8 @@ export function previewSms(
   suggest: (merchant: string | null, amountAed: number) => UserSuggestion,
 ): SmsPreviewRow[] {
   const seenText = new Set<string>();
+  const targetAccount = ledger.accounts.find((a) => a.id === options.account);
+  const accCurrency = normalizeCurrencyCode(targetAccount?.currency);
   const batchBank =
     options.bank ??
     detectBank(
@@ -114,13 +163,10 @@ export function previewSms(
       }
       if (parsed.direction === "none")
         throw new Error("Not a debit or credit.");
-      if (!Number.isFinite(parsed.amount_aed)) {
-        throw new Error(
-          parsed.currency
-            ? `Currency ${parsed.currency} is not supported yet.`
-            : "Amount not found in this SMS.",
-        );
+      if (parsed.amount_minor === null || !parsed.currency) {
+        throw new Error("Amount not found in this SMS.");
       }
+
       const date = parsed.date_in_text ?? raw.date ?? options.fallbackDate;
       row.dateSource = parsed.date_in_text
         ? "sms"
@@ -128,14 +174,83 @@ export function previewSms(
           ? "backup"
           : "fallback";
       const type = parsed.direction === "debit" ? "expense" : "income";
+
+      const origCurrency = normalizeCurrencyCode(parsed.currency);
+      const origMinor = parsed.amount_minor;
+      const warnings = [...parsed.warnings];
+      const known = isSupportedCurrency(origCurrency);
+      if (!known && !warnings.includes("unknown_currency_code")) {
+        warnings.push("unknown_currency_code");
+      }
+
+      let amountMinor = 0;
+      let fxRate: number | undefined;
+      let fxRateDate = date;
+      let fxSource: FxSource | undefined;
+      let fxStatus: FxStatus = "exact";
+
+      if (origCurrency === accCurrency) {
+        amountMinor = origMinor;
+        fxRate = 1;
+        fxSource = "same_currency";
+        fxStatus = "exact";
+      } else if (
+        parsed.billed_currency === accCurrency &&
+        parsed.billed_amount_minor !== null &&
+        parsed.billed_amount_minor > 0
+      ) {
+        amountMinor = parsed.billed_amount_minor;
+        fxRate = computeImpliedRate(origMinor, origCurrency, amountMinor, accCurrency);
+        fxSource = "bank_sms";
+        fxStatus = "exact";
+      } else {
+        const cached = known
+          ? findCachedRate(options.fxRates, origCurrency, accCurrency, date)
+          : null;
+        if (cached) {
+          amountMinor = convertMinor(origMinor, origCurrency, accCurrency, cached.rate);
+          fxRate = cached.rate;
+          fxRateDate = cached.rateDate;
+          fxSource = "api_estimate";
+          fxStatus = "estimated";
+        } else {
+          const pegged = known
+            ? getPeggedFallbackRate(origCurrency, accCurrency)
+            : null;
+          if (pegged !== null) {
+            amountMinor = convertMinor(origMinor, origCurrency, accCurrency, pegged);
+            fxRate = pegged;
+            fxSource = "manual_rate";
+            fxStatus = "estimated";
+          } else {
+            amountMinor = 0;
+            fxRate = undefined;
+            fxSource = undefined;
+            fxStatus = "estimated";
+            warnings.push("rate_unavailable");
+          }
+        }
+      }
+
+      const amountForMlAed =
+        accCurrency === DEFAULT_CURRENCY && amountMinor > 0
+          ? amountMinor / 100
+          : origMinor / 10 ** getCurrencyDecimals(origCurrency);
+
       let category_id: string | null = null;
       if (type === "expense") {
-        row.suggestion = suggest(parsed.merchant_clean, parsed.amount_aed);
+        row.suggestion = suggest(parsed.merchant_clean, amountForMlAed);
         category_id = row.suggestion.category_id;
       }
+
+      const origStr = formatCurrencyInput(origMinor, origCurrency);
       const foreign =
-        parsed.currency && parsed.currency !== "AED"
-          ? ` · ${parsed.amount.toFixed(2)} ${parsed.currency} at a fixed reference rate`
+        origCurrency !== accCurrency
+          ? fxSource === "bank_sms"
+            ? ` · ${origCurrency} ${origStr} (bank billed)`
+            : warnings.includes("rate_unavailable")
+              ? ` · ${origCurrency} ${origStr} (rate pending)`
+              : ` · ${origCurrency} ${origStr} (estimated)`
           : "";
       const transaction: ImportTransaction = {
         date,
@@ -143,16 +258,23 @@ export function previewSms(
         to_account_id: null,
         category_id,
         type,
-        amount: Math.round(parsed.amount_aed * 100),
+        amount: amountMinor,
         payee:
           row.suggestion?.payee ||
           displayPayee(parsed.merchant_clean) ||
           PAYEE_FOR_TYPE[parsed.txn_type] ||
           "",
         notes: `From ${bank ?? "bank"} SMS${foreign}`,
+        original_amount: origMinor,
+        original_currency: origCurrency,
+        ...(fxRate !== undefined ? { fx_rate: fxRate } : {}),
+        fx_rate_date: fxRateDate,
+        ...(fxSource ? { fx_source: fxSource } : {}),
+        fx_status: fxStatus,
       };
       validateTransaction(transaction, ledger);
       row.transaction = transaction;
+      if (warnings.length) row.warnings = warnings;
     } catch (e) {
       row.error = e instanceof Error ? e.message : "Could not read this SMS.";
     }

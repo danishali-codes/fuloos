@@ -407,9 +407,11 @@ test("SupabaseBackend translates empty strings to NULL on writes and normalizes 
       assert.equal(row.user_id, "11111111-1111-4111-8111-111111111111");
       assert.equal(row.category_id, null);
       assert.equal(row.to_account_id, "acc2");
-      assert.equal(row.original_currency, null);
-      assert.equal(row.original_amount, null);
-      assert.equal(row.fx_rate, null);
+      assert.equal(row.original_currency, "AED");
+      assert.equal(row.original_amount, 4500);
+      assert.equal(row.fx_rate, 1);
+      assert.equal(row.fx_source, "same_currency");
+      assert.equal(row.fx_status, "exact");
       return json({
         id: "tx0000000000001",
         type: "transfer",
@@ -423,9 +425,12 @@ test("SupabaseBackend translates empty strings to NULL on writes and normalizes 
         tags: null,
         splits: null,
         receipt: null,
-        original_currency: null,
-        original_amount: null,
-        fx_rate: null,
+        original_currency: "AED",
+        original_amount: 4500,
+        fx_rate: 1,
+        fx_rate_date: "2026-11-20",
+        fx_source: "same_currency",
+        fx_status: "exact",
       });
     }
     if (
@@ -460,6 +465,9 @@ test("SupabaseBackend translates empty strings to NULL on writes and normalizes 
     original_currency: "AED",
     original_amount: 4500,
     fx_rate: 1,
+    fx_rate_date: "2026-11-20",
+    fx_source: "same_currency",
+    fx_status: "exact",
     user_id: "spoofed-id",
   });
   assert.equal(tx.id, "tx0000000000001");
@@ -469,7 +477,11 @@ test("SupabaseBackend translates empty strings to NULL on writes and normalizes 
   assert.deepEqual(tx.tags, []);
   assert.deepEqual(tx.splits, []);
   assert.equal("receipt" in tx, false);
-  assert.equal("original_currency" in tx, false);
+  assert.equal(tx.original_currency, "AED");
+  assert.equal(tx.original_amount, 4500);
+  assert.equal(tx.fx_rate, 1);
+  assert.equal(tx.fx_source, "same_currency");
+  assert.equal(tx.fx_status, "exact");
 
   const budget = await f.backend.save(
     "budgets",

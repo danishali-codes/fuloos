@@ -1,5 +1,15 @@
-import { startingBalance } from "./domain.ts";
+import {
+  accountCurrency,
+  reportingCurrency,
+  startingBalance,
+} from "./domain.ts";
 import type { Kind, Ledger, Transaction } from "./domain.ts";
+import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "./currency.ts";
+import {
+  convertAmountToReporting,
+  defaultRateLookup,
+  type RateLookupFn,
+} from "./multiCurrency.ts";
 
 /**
  * One line of the transactions register. Most transactions produce one entry.
@@ -10,13 +20,17 @@ export interface RegisterEntry {
   key: string;
   tx: Transaction;
   accountId: string;
+  /** Currency of `payment` and `deposit` (the account's own currency). */
+  currency?: string;
+  /** Currency of `balance` (account currency when filtered to one account, else reporting currency). */
+  balanceCurrency?: string;
   /** For transfers: the account on the other side. */
   counterpartyId: string | null;
   /** For transfers: "out" leaves accountId, "in" arrives in accountId. */
   direction: "in" | "out" | null;
   payment: number;
   deposit: number;
-  /** Running balance after this entry, in fils. */
+  /** Running balance after this entry, in `balanceCurrency` minor units. */
   balance: number;
   /** Chronological position, used as the date tie-breaker. */
   seq: number;
@@ -26,24 +40,70 @@ export interface RegisterEntry {
  * Builds register entries for every transaction in the ledger, with running
  * balances computed over the full history (not just what is filtered).
  * With an account id, only that account's entries are returned and the balance
- * is that account's balance. Without one, the balance is the combined balance
- * of all accounts, and both sides of each transfer are listed.
+ * is in that account's currency. Without one, the running total is converted
+ * into the user's reporting currency, and both sides of each transfer are listed.
  */
-export function buildRegister(ledger: Ledger, accountId = ""): RegisterEntry[] {
+export function buildRegister(
+  ledger: Ledger,
+  accountId = "",
+  options?: { reportingCurrency?: string; rateLookup?: RateLookupFn },
+): RegisterEntry[] {
   const inScope = (id: string) => !accountId || id === accountId;
+  const repCurr = normalizeCurrencyCode(
+    options?.reportingCurrency ?? reportingCurrency(ledger),
+  );
+  const rateLookup = options?.rateLookup ?? defaultRateLookup;
+  const accMap = new Map(ledger.accounts.map((a) => [a.id, a]));
+  const scopedAccount = accountId ? accMap.get(accountId) : undefined;
+  const balCurrency = scopedAccount ? accountCurrency(scopedAccount) : repCurr;
+
   let running = ledger.accounts
     .filter((a) => inScope(a.id))
-    .reduce((sum, a) => sum + startingBalance(a, ledger.transactions), 0);
+    .reduce((sum, a) => {
+      const startBal = startingBalance(a, ledger.transactions);
+      const curr = accountCurrency(a);
+      if (curr === balCurrency) return sum + startBal;
+      return (
+        sum +
+        convertAmountToReporting(
+          startBal,
+          curr,
+          balCurrency,
+          a.opening_date,
+          rateLookup,
+        ).amount
+      );
+    }, 0);
+
   const ordered = [...ledger.transactions].sort(
     (a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id),
   );
   const entries: RegisterEntry[] = [];
   const push = (
-    entry: Omit<RegisterEntry, "balance" | "seq" | "key">,
+    entry: Omit<RegisterEntry, "balance" | "seq" | "key" | "currency" | "balanceCurrency">,
     key: string,
   ) => {
-    running += entry.deposit - entry.payment;
-    entries.push({ ...entry, key, balance: running, seq: entries.length });
+    const entryCurr = accountCurrency(accMap.get(entry.accountId));
+    const deltaNative = entry.deposit - entry.payment;
+    const deltaForRunning =
+      entryCurr === balCurrency
+        ? deltaNative
+        : convertAmountToReporting(
+            deltaNative,
+            entryCurr,
+            balCurrency,
+            entry.tx.date,
+            rateLookup,
+          ).amount;
+    running += deltaForRunning;
+    entries.push({
+      ...entry,
+      currency: entryCurr,
+      balanceCurrency: balCurrency,
+      key,
+      balance: running,
+      seq: entries.length,
+    });
   };
   for (const t of ordered) {
     if (t.type === "transfer" && t.to_account_id) {
@@ -67,7 +127,7 @@ export function buildRegister(ledger: Ledger, accountId = ""): RegisterEntry[] {
             counterpartyId: t.account_id,
             direction: "in",
             payment: 0,
-            deposit: t.amount,
+            deposit: t.to_amount ?? t.amount,
           },
           `${t.id}:in`,
         );

@@ -1,9 +1,21 @@
 import {
-  minor,
+  convertMinor,
+  DEFAULT_CURRENCY,
+  getCurrencyDecimals,
+  isSupportedCurrency,
+  isThreeLetterCurrencyCode,
+  normalizeCurrencyCode,
+  parseCurrencyMinor,
+  type FxSource,
+  type FxStatus,
+} from "./currency.ts";
+import {
+  accountCurrency,
   validateTransaction,
   type Ledger,
   type Transaction,
 } from "./domain.ts";
+import { fxRateService } from "./fxRates.ts";
 export type ImportTransaction = Omit<Transaction, "id">;
 export interface CsvOptions {
   transfers?: Record<number, string>;
@@ -14,12 +26,18 @@ export interface CsvOptions {
   amount: number;
   debit: number;
   credit: number;
+  currency?: number;
   split: boolean;
   flip: boolean;
   decimal: "." | ",";
   dateFormat: "DMY" | "MDY" | "YMD";
   account: string;
 }
+export type CsvRateLookup = (
+  from: string,
+  to: string,
+  date: string,
+) => { rate: number | null; source?: FxSource; rateDate?: string; estimated: boolean };
 export function parseCsv(
   text: string,
   delimiter = ",",
@@ -97,20 +115,32 @@ export function csvDate(
     throw new Error("Invalid calendar date.");
   return result;
 }
-export function csvAmount(value: string, decimal: "." | ","): number {
+export function csvAmount(
+  value: string,
+  decimal: "." | ",",
+  currency: string = DEFAULT_CURRENCY,
+): number {
   let s = value.trim().replace(/\s/g, "");
   const parentheses = /^\(.*\)$/.test(s);
   if (parentheses) s = "-" + s.slice(1, -1);
+  const decimals = getCurrencyDecimals(currency);
   const pattern =
-    decimal === "."
-      ? /^-?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/
-      : /^-?(?:\d+|\d{1,3}(?:\.\d{3})+)(?:,\d{1,2})?$/;
+    decimals === 0
+      ? decimal === "."
+        ? /^-?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.0+)?$/
+        : /^-?(?:\d+|\d{1,3}(?:\.\d{3})+)(?:,0+)?$/
+      : decimal === "."
+        ? new RegExp(`^-?(?:\\d+|\\d{1,3}(?:,\\d{3})+)(?:\\.\\d{1,${decimals}})?$`)
+        : new RegExp(`^-?(?:\\d+|\\d{1,3}(?:\\.\\d{3})+)(?:,\\d{1,${decimals}})?$`);
   if (!pattern.test(s)) throw new Error("Invalid amount or decimal separator.");
-  return minor(
+  let normalized =
     decimal === "."
       ? s.replace(/,/g, "")
-      : s.replace(/\./g, "").replace(",", "."),
-  );
+      : s.replace(/\./g, "").replace(",", ".");
+  if (decimals === 0) {
+    normalized = normalized.replace(/\.0+$/, "");
+  }
+  return parseCurrencyMinor(normalized, currency, { allowUnknownCode: true });
 }
 export function transactionKey(t: ImportTransaction): string {
   return JSON.stringify([
@@ -122,12 +152,30 @@ export function transactionKey(t: ImportTransaction): string {
     t.payee.trim().toLowerCase().replace(/\s+/g, " "),
   ]);
 }
+function defaultCsvRateLookup(
+  from: string,
+  to: string,
+  date: string,
+): { rate: number | null; source?: FxSource; rateDate?: string; estimated: boolean } {
+  const res = fxRateService.getCachedRateSync(from, to, date);
+  return {
+    rate: res.rate,
+    source: res.source ?? undefined,
+    rateDate: res.rateDate,
+    estimated: res.status === "estimated",
+  };
+}
 export function previewCsv(
   rows: string[][],
   options: CsvOptions,
   ledger: Ledger,
+  rateLookup: CsvRateLookup = defaultCsvRateLookup,
 ) {
   const seen = new Set(ledger.transactions.map(transactionKey));
+  const targetAccount = ledger.accounts.find((a) => a.id === options.account);
+  const targetCurrency = accountCurrency(targetAccount);
+  const currencyCol = options.currency ?? -1;
+
   return rows.map((row, index) => {
     try {
       const get = (i: number) => (i < 0 ? "" : (row[i] ?? "").trim());
@@ -140,18 +188,29 @@ export function previewCsv(
           : options.amount < 0)
       )
         throw new Error("Map the date and amount columns.");
+
+      const rawCurrency = get(currencyCol);
+      let rowCurrency = targetCurrency;
+      if (rawCurrency) {
+        const norm = normalizeCurrencyCode(rawCurrency);
+        if (!isThreeLetterCurrencyCode(norm)) {
+          throw new Error(`Invalid currency code "${rawCurrency}".`);
+        }
+        rowCurrency = norm;
+      }
+
       let signed: number;
       if (options.split) {
         const debit = get(options.debit)
-          ? csvAmount(get(options.debit), options.decimal)
+          ? csvAmount(get(options.debit), options.decimal, rowCurrency)
           : 0;
         const credit = get(options.credit)
-          ? csvAmount(get(options.credit), options.decimal)
+          ? csvAmount(get(options.credit), options.decimal, rowCurrency)
           : 0;
         if (debit < 0 || credit < 0 || (debit && credit))
           throw new Error("Use a positive debit or credit, not both.");
         signed = credit - debit;
-      } else signed = csvAmount(get(options.amount), options.decimal);
+      } else signed = csvAmount(get(options.amount), options.decimal, rowCurrency);
       if (options.flip) signed *= -1;
       const categoryName = get(options.category);
       const category = ledger.categories.find(
@@ -162,9 +221,48 @@ export function previewCsv(
         throw new Error(
           `Unknown category: ${categoryName}. Create it first or leave Category unmapped.`,
         );
+
+      const date = csvDate(get(options.date), options.dateFormat);
+      const originalMinor = Math.abs(signed);
+      const txAccountId = otherAccount && signed > 0 ? otherAccount : options.account;
+      const txAccountCurrency = accountCurrency(
+        ledger.accounts.find((a) => a.id === txAccountId),
+      );
+
+      let accountMinor = originalMinor;
+      let fxRate = 1;
+      let fxRateDate = date;
+      let fxSource: FxSource = "same_currency";
+      let fxStatus: FxStatus = "exact";
+
+      if (rowCurrency !== txAccountCurrency) {
+        const lookup = rateLookup(rowCurrency, txAccountCurrency, date);
+        if (lookup.rate !== null && lookup.rate > 0) {
+          accountMinor = convertMinor(
+            originalMinor,
+            rowCurrency,
+            txAccountCurrency,
+            lookup.rate,
+          );
+          fxRate = lookup.rate;
+          fxRateDate = lookup.rateDate ?? date;
+          fxSource = lookup.source ?? "api_estimate";
+          fxStatus = lookup.estimated ? "estimated" : "exact";
+        } else {
+          accountMinor = 0;
+          fxRate = 1;
+          fxRateDate = date;
+          fxSource = "manual_rate";
+          fxStatus = "estimated";
+        }
+        if (!isSupportedCurrency(rowCurrency)) {
+          fxStatus = "estimated";
+        }
+      }
+
       const transaction: ImportTransaction = {
-        date: csvDate(get(options.date), options.dateFormat),
-        account_id: otherAccount && signed > 0 ? otherAccount : options.account,
+        date,
+        account_id: txAccountId,
         to_account_id: otherAccount
           ? signed > 0
             ? options.account
@@ -172,7 +270,13 @@ export function previewCsv(
           : null,
         category_id: otherAccount ? null : (category?.id ?? null),
         type: otherAccount ? "transfer" : signed < 0 ? "expense" : "income",
-        amount: Math.abs(signed),
+        amount: accountMinor,
+        original_amount: originalMinor,
+        original_currency: rowCurrency,
+        fx_rate: fxRate,
+        fx_rate_date: fxRateDate,
+        fx_source: fxSource,
+        fx_status: fxStatus,
         payee: get(options.payee),
         notes: get(options.notes),
       };

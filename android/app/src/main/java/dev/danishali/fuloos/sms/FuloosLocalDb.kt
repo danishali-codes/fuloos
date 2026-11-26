@@ -36,6 +36,15 @@ class FuloosLocalDb private constructor(context: Context) :
         val retryCount: Int,
     )
 
+    data class FxRateEntry(
+        val base: String,
+        val quote: String,
+        val rateDate: String,
+        val rate: Double,
+        val provider: String,
+        val fetchedAt: Long,
+    )
+
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """
@@ -85,6 +94,25 @@ class FuloosLocalDb private constructor(context: Context) :
             ON offline_queue (owner_key, id)
             """.trimIndent(),
         )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS fx_rates (
+                base TEXT NOT NULL,
+                quote TEXT NOT NULL,
+                rate_date TEXT NOT NULL,
+                rate REAL NOT NULL,
+                provider TEXT NOT NULL,
+                fetched_at INTEGER NOT NULL,
+                PRIMARY KEY (base, quote, rate_date)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE INDEX IF NOT EXISTS idx_fx_rates_pair_date
+            ON fx_rates (base, quote, rate_date DESC)
+            """.trimIndent(),
+        )
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -95,6 +123,7 @@ class FuloosLocalDb private constructor(context: Context) :
             db.execSQL("DROP TABLE IF EXISTS offline_queue")
             db.execSQL("DELETE FROM engine_cache")
         }
+        // v2 -> v3 adds fx_rates non-destructively via CREATE TABLE IF NOT EXISTS in onCreate.
         onCreate(db)
     }
 
@@ -369,9 +398,141 @@ class FuloosLocalDb private constructor(context: Context) :
         )
     }
 
+    @Synchronized
+    fun getFxRate(base: String, quote: String, rateDate: String): FxRateEntry? {
+        val b = base.trim().uppercase()
+        val q = quote.trim().uppercase()
+        val d = rateDate.trim()
+        if (b.length != 3 || q.length != 3 || d.length != 10) return null
+        readableDatabase.rawQuery(
+            """
+            SELECT base, quote, rate_date, rate, provider, fetched_at
+            FROM fx_rates
+            WHERE base = ? AND quote = ? AND rate_date = ?
+            LIMIT 1
+            """.trimIndent(),
+            arrayOf(b, q, d),
+        ).use { c ->
+            return if (c.moveToFirst()) {
+                FxRateEntry(
+                    base = c.getString(0),
+                    quote = c.getString(1),
+                    rateDate = c.getString(2),
+                    rate = c.getDouble(3),
+                    provider = c.getString(4),
+                    fetchedAt = c.getLong(5),
+                )
+            } else {
+                null
+            }
+        }
+    }
+
+    @Synchronized
+    fun getLatestFxRate(
+        base: String,
+        quote: String,
+        onOrBeforeDate: String? = null,
+    ): FxRateEntry? {
+        val b = base.trim().uppercase()
+        val q = quote.trim().uppercase()
+        if (b.length != 3 || q.length != 3) return null
+        val cursor = if (!onOrBeforeDate.isNullOrBlank()) {
+            readableDatabase.rawQuery(
+                """
+                SELECT base, quote, rate_date, rate, provider, fetched_at
+                FROM fx_rates
+                WHERE base = ? AND quote = ? AND rate_date <= ?
+                ORDER BY rate_date DESC
+                LIMIT 1
+                """.trimIndent(),
+                arrayOf(b, q, onOrBeforeDate.trim()),
+            )
+        } else {
+            readableDatabase.rawQuery(
+                """
+                SELECT base, quote, rate_date, rate, provider, fetched_at
+                FROM fx_rates
+                WHERE base = ? AND quote = ?
+                ORDER BY rate_date DESC
+                LIMIT 1
+                """.trimIndent(),
+                arrayOf(b, q),
+            )
+        }
+        cursor.use { c ->
+            return if (c.moveToFirst()) {
+                FxRateEntry(
+                    base = c.getString(0),
+                    quote = c.getString(1),
+                    rateDate = c.getString(2),
+                    rate = c.getDouble(3),
+                    provider = c.getString(4),
+                    fetchedAt = c.getLong(5),
+                )
+            } else {
+                null
+            }
+        }
+    }
+
+    @Synchronized
+    fun putFxRate(
+        base: String,
+        quote: String,
+        rateDate: String,
+        rate: Double,
+        provider: String,
+    ) {
+        val b = base.trim().uppercase()
+        val q = quote.trim().uppercase()
+        val d = rateDate.trim()
+        if (b.length != 3 || q.length != 3 || d.length != 10 || !rate.isFinite() || rate <= 0.0) {
+            return
+        }
+        val cv = ContentValues().apply {
+            put("base", b)
+            put("quote", q)
+            put("rate_date", d)
+            put("rate", rate)
+            put("provider", provider.ifBlank { "api" })
+            put("fetched_at", System.currentTimeMillis())
+        }
+        writableDatabase.insertWithOnConflict("fx_rates", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    @Synchronized
+    fun exportFxRatesJson(limit: Int = 500): JSONObject {
+        val out = JSONObject()
+        readableDatabase.rawQuery(
+            """
+            SELECT base, quote, rate_date, rate, provider
+            FROM fx_rates
+            ORDER BY fetched_at DESC
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf(limit.toString()),
+        ).use { c ->
+            while (c.moveToNext()) {
+                val base = c.getString(0)
+                val quote = c.getString(1)
+                val rateDate = c.getString(2)
+                val rate = c.getDouble(3)
+                val provider = c.getString(4)
+                val entry = JSONObject()
+                    .put("rate", rate)
+                    .put("rateDate", rateDate)
+                    .put("provider", provider)
+                out.put("$base|$quote|$rateDate", entry)
+            }
+        }
+        return out
+    }
+
     /**
-     * Merges the latest saved links into the cached engine context so background
-     * workers always evaluate with up-to-date sender & card routing links.
+     * Merges the latest saved links and locally cached FX rates into the cached
+     * engine context so background workers always evaluate with up-to-date routing
+     * and offline-available exchange rates.
      */
     @Synchronized
     fun buildEffectiveEngineContextJson(ownerKey: String = getActiveOwnerKey()): String? {
@@ -380,6 +541,14 @@ class FuloosLocalDb private constructor(context: Context) :
         return try {
             val ctx = JSONObject(rawCtx)
             ctx.put("links", getLinksArray(ownerKey))
+            val mergedFx = ctx.optJSONObject("fxRates") ?: JSONObject()
+            val localFx = exportFxRatesJson()
+            val keys = localFx.keys()
+            while (keys.hasNext()) {
+                val k = keys.next()
+                mergedFx.put(k, localFx.get(k))
+            }
+            ctx.put("fxRates", mergedFx)
             ctx.toString()
         } catch (_: Exception) {
             rawCtx
@@ -410,7 +579,7 @@ class FuloosLocalDb private constructor(context: Context) :
 
     companion object {
         private const val DB_NAME = "fuloos_sms_local.db"
-        private const val DB_VERSION = 2
+        private const val DB_VERSION = 3
         private const val KEY_ACTIVE_OWNER = "active_owner_key"
         private const val KEY_SMS_LINKS = "sms_links"
         private const val KEY_ENGINE_CONTEXT = "engine_context"

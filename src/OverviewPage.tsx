@@ -5,12 +5,15 @@ import {
   ArrowUpRight,
   Eye,
   EyeOff,
+  Globe2,
   Plus,
   Tags,
   Wallet,
 } from "lucide-react";
 import {
+  accountCurrency,
   balance,
+  reportingCurrency,
   type Account,
   type Ledger,
   type SavingsGoal,
@@ -43,6 +46,8 @@ export function OverviewPage({
   monthly,
   month,
   busy,
+  estimatedCount = 0,
+  onOpenConfirmAmounts,
   onNavigate,
   onSelectAccount,
   onOpenModal,
@@ -53,15 +58,17 @@ export function OverviewPage({
 }: {
   ledger: Ledger;
   net: number;
-  summary: { income: number; expense: number };
+  summary: { income: number; expense: number; estimatedCount?: number };
   rangeLabel: string;
   hidden: boolean;
   setHidden: (v: boolean) => void;
-  concealed: (v: number) => string;
+  concealed: (v: number, currency?: string) => string;
   spending: SpendingItem[];
   monthly: Transaction[];
   month: string;
   busy: boolean;
+  estimatedCount?: number;
+  onOpenConfirmAmounts?: (txId?: string) => void;
   onNavigate: (
     page:
       | "Overview"
@@ -107,13 +114,44 @@ export function OverviewPage({
   );
 
   const { t } = useLocale();
+  const repCurr = reportingCurrency(ledger);
+  const periodEstCount = summary.estimatedCount ?? 0;
 
   return (
     <>
+      {estimatedCount > 0 && onOpenConfirmAmounts && (
+        <div
+          className="notice"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "12px",
+            marginBottom: "16px",
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <Globe2 size={16} />
+            <span>
+              {estimatedCount === 1
+                ? "1 foreign-currency transaction is using an estimated exchange rate."
+                : `${estimatedCount} foreign-currency transactions are using estimated exchange rates.`}
+            </span>
+          </span>
+          <button
+            type="button"
+            className="primary compact-btn"
+            onClick={() => onOpenConfirmAmounts()}
+          >
+            {t("fx.confirmAmounts")} ({estimatedCount})
+          </button>
+        </div>
+      )}
       <section className="stats">
         <article className="stat net">
           <div className="stat-label">
-            {t("overview.totalNetBalance")}{" "}
+            {t("overview.totalNetBalance")} ({repCurr}){" "}
             <button
               className="icon-button"
               aria-label={
@@ -124,7 +162,7 @@ export function OverviewPage({
               {hidden ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
-          <h2>{concealed(net)}</h2>
+          <h2>{concealed(net, repCurr)}</h2>
           <small>
             {t("overview.acrossAccounts", { count: ledger.accounts.length })}{" "}
             <span>{t("overview.includingCredit")}</span>
@@ -138,7 +176,7 @@ export function OverviewPage({
               <ArrowDownLeft size={19} />
             </span>
           </div>
-          <h2>{concealed(summary.income)}</h2>
+          <h2>{concealed(summary.income, repCurr)}</h2>
           <small>
             {t("overview.moneyComingIn")}{" "}
             <span className="green-text">{rangeLabel}</span>
@@ -151,9 +189,20 @@ export function OverviewPage({
               <ArrowUpRight size={19} />
             </span>
           </div>
-          <h2>{concealed(summary.expense)}</h2>
+          <h2>{concealed(summary.expense, repCurr)}</h2>
           <small>
             {t("overview.moneyGoingOut")} <span>{rangeLabel}</span>
+            {periodEstCount > 0 && (
+              <>
+                {" · "}
+                <span title="Includes estimated FX conversions">
+                  ≈{" "}
+                  {periodEstCount === 1
+                    ? t("fx.includesEstimatedOne")
+                    : t("fx.includesEstimated", { count: periodEstCount })}
+                </span>
+              </>
+            )}
           </small>
         </article>
       </section>
@@ -172,31 +221,36 @@ export function OverviewPage({
           </button>
         </div>
         <div className="account-grid">
-          {ledger.accounts.slice(0, 3).map((a: Account) => (
-            <button
-              className="account-card"
-              key={a.id}
-              onClick={() => {
-                onSelectAccount(a.id);
-                onNavigate("Transactions");
-              }}
-            >
-              <div className="account-top">
-                <span
-                  className="account-symbol"
-                  style={{ background: a.color + "18", color: a.color }}
-                >
-                  {a.emoji || <Wallet size={20} />}
-                </span>
-                <span className="account-kind">{ACCOUNT_TYPES[a.type]}</span>
-              </div>
-              <h3>{a.name}</h3>
-              <div className="account-bottom">
-                <strong>{concealed(balance(a, ledger.transactions))}</strong>
-                <span>AED</span>
-              </div>
-            </button>
-          ))}
+          {ledger.accounts.slice(0, 3).map((a: Account) => {
+            const accCurr = accountCurrency(a);
+            return (
+              <button
+                className="account-card"
+                key={a.id}
+                onClick={() => {
+                  onSelectAccount(a.id);
+                  onNavigate("Transactions");
+                }}
+              >
+                <div className="account-top">
+                  <span
+                    className="account-symbol"
+                    style={{ background: a.color + "18", color: a.color }}
+                  >
+                    {a.emoji || <Wallet size={20} />}
+                  </span>
+                  <span className="account-kind">{ACCOUNT_TYPES[a.type]}</span>
+                </div>
+                <h3>{a.name}</h3>
+                <div className="account-bottom">
+                  <strong>
+                    {concealed(balance(a, ledger.transactions), accCurr)}
+                  </strong>
+                  <span>{accCurr}</span>
+                </div>
+              </button>
+            );
+          })}
           <button
             className="add-account-card"
             onClick={() => onOpenModal({ kind: "account" })}

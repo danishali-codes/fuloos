@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { Download, Printer, Tags } from "lucide-react";
 import { budgetReport } from "./budgets";
 import { BudgetReportPanel, monthLabel } from "./BudgetsView";
-import { today, type Ledger } from "./domain";
+import { reportingCurrency, today, type Ledger } from "./domain";
 import { downloadBlob, reportToCsv } from "./export";
 import type { SpendingItem } from "./OverviewPage";
 import { isPeriodSpan, shortMonthName } from "./period";
@@ -57,12 +57,13 @@ export function ReportsPage({
   month: string;
   view: string;
   rangeLabel: string;
-  summary: { income: number; expense: number };
+  summary: { income: number; expense: number; estimatedCount?: number };
   spending: SpendingItem[];
-  concealed: (v: number) => string;
+  concealed: (v: number, currency?: string) => string;
   onManageBudgets: () => void;
 }) {
   const [payeeKind, setPayeeKind] = useState<"expense" | "income">("expense");
+  const repCurr = reportingCurrency(ledger);
 
   const span = isPeriodSpan(view) ? view : "month";
   const periodRange = useMemo(
@@ -74,8 +75,12 @@ export function ReportsPage({
   const savingsRatePct = computeSavingsRate(summary.income, summary.expense);
 
   const yoy = useMemo(
-    () => computeYoYComparison(ledger.transactions, periodRange),
-    [ledger.transactions, periodRange],
+    () =>
+      computeYoYComparison(ledger.transactions, periodRange, {
+        accounts: ledger.accounts,
+        reportingCurrency: repCurr,
+      }),
+    [ledger.transactions, ledger.accounts, periodRange, repCurr],
   );
 
   const payees = useMemo(
@@ -83,8 +88,10 @@ export function ReportsPage({
       computePayeeBreakdown(ledger.transactions, periodRange, {
         kind: payeeKind,
         limit: 10,
+        accounts: ledger.accounts,
+        reportingCurrency: repCurr,
       }),
-    [ledger.transactions, periodRange, payeeKind],
+    [ledger.transactions, ledger.accounts, periodRange, payeeKind, repCurr],
   );
 
   const trends = useMemo(
@@ -92,20 +99,25 @@ export function ReportsPage({
       computeCategoryTrends(ledger.transactions, ledger.categories, month, {
         monthsCount: 6,
         topCategories: 5,
+        accounts: ledger.accounts,
+        reportingCurrency: repCurr,
       }),
-    [ledger.transactions, ledger.categories, month],
+    [ledger.transactions, ledger.categories, ledger.accounts, month, repCurr],
   );
 
   const formatSignedMoney = (v: number) => {
-    if (v === 0) return concealed(0);
-    return `${v > 0 ? "+" : "−"}${concealed(Math.abs(v))}`;
+    if (v === 0) return concealed(0, repCurr);
+    return `${v > 0 ? "+" : "−"}${concealed(Math.abs(v), repCurr)}`;
   };
+  const estimatedCount = summary.estimatedCount ?? yoy.current.estimatedCount ?? 0;
 
   return (
     <>
       <div className="print-report-header">
         <h1>{uiText("Fuloos Financial Report")}</h1>
-        <span>{rangeLabel}</span>
+        <span>
+          {rangeLabel} · {repCurr}
+        </span>
       </div>
 
       <BudgetReportPanel
@@ -123,19 +135,31 @@ export function ReportsPage({
 
       <section className="panel">
         <div className="panel-heading">
-          <h2>{uiText("Where it went")}</h2>
+          <h2>
+            {uiText("Where it went")} ({repCurr})
+          </h2>
           <div className="reports-actions">
             <span>{rangeLabel}</span>
+            {estimatedCount > 0 && (
+              <span className="tag-badge fx-pill">
+                ≈ Includes {estimatedCount} estimated{" "}
+                {estimatedCount === 1 ? "amount" : "amounts"}
+              </span>
+            )}
             <button
               type="button"
               className="secondary no-print"
               onClick={() => {
-                const report = budgetReport(ledger, budgetRangeStart, month);
+                const report = budgetReport(ledger, budgetRangeStart, month, {
+                  reportingCurrency: repCurr,
+                });
                 const csv = reportToCsv({
                   rangeLabel,
                   summary,
                   spending,
                   budgetReport: report,
+                  currency: repCurr,
+                  estimatedCount,
                 });
                 downloadBlob(
                   csv,

@@ -11,6 +11,7 @@ import {
 } from "../budgets";
 import {
   money,
+  reportingCurrency,
   shiftMonth,
   today,
   type Budget,
@@ -46,15 +47,20 @@ export function MobileBudgets({
   onAddBudget: (categoryId?: string) => void;
   onEditBudget: (budget: Budget) => void;
 }) {
-  const report = budgetReport(ledger, month, month);
-  const unbudgeted = unbudgetedCategories(ledger, month);
+  const repCurr = reportingCurrency(ledger);
+  const report = budgetReport(ledger, month, month, {
+    reportingCurrency: repCurr,
+  });
+  const unbudgeted = unbudgetedCategories(ledger, month, {
+    reportingCurrency: repCurr,
+  });
   const totalBudget = report.totalBudget;
   const totalActual = report.totalActual;
   const remaining = totalBudget - totalActual;
   const pct = totalBudget > 0 ? Math.round((totalActual / totalBudget) * 100) : 0;
   const daysLeft = daysRemainingInMonth(month);
   const safeDaily = remaining > 0 ? Math.floor(remaining / daysLeft) : 0;
-  const fmt = (fils: number) => (hidden ? "••••••" : money(fils));
+  const fmt = (minorVal: number) => (hidden ? "••••••" : money(minorVal, repCurr));
 
   return (
     <div className="m-page">

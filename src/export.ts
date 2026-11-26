@@ -77,7 +77,7 @@ export function transactionsToCsv(
     toCsvRow([
       "Date",
       "Type",
-      "Amount (AED)",
+      "Amount",
       "Account",
       "To Account",
       "Category",
@@ -87,22 +87,31 @@ export function transactionsToCsv(
       "Original Amount",
       "Original Currency",
       "FX Rate",
+      "FX Rate Date",
+      "FX Source",
+      "FX Status",
     ]),
   ];
 
   for (const t of transactions) {
     const accountCurrency =
       accountCurrencies.get(t.account_id) ?? DEFAULT_CURRENCY;
-    const hasForeign =
-      Boolean(t.original_currency) &&
-      t.original_currency !== DEFAULT_CURRENCY &&
-      t.original_amount !== undefined &&
-      t.fx_rate !== undefined;
+    const origCurrency = normalizeCurrencyCode(
+      t.original_currency ?? accountCurrency,
+    );
+    const origAmount = t.original_amount ?? t.amount;
+    const fxRate =
+      t.fx_rate ?? (origCurrency === accountCurrency ? 1 : undefined);
+    const fxRateDate = t.fx_rate_date ?? t.date;
+    const fxSource =
+      t.fx_source ??
+      (origCurrency === accountCurrency ? "same_currency" : "manual_rate");
+    const fxStatus = t.fx_status ?? "exact";
     lines.push(
       toCsvRow([
         t.date,
         t.type,
-        { value: formatFils(t.amount), numeric: true },
+        { value: formatCurrencyInput(t.amount, accountCurrency), numeric: true },
         accountNames.get(t.account_id) ?? t.account_id,
         t.to_account_id
           ? (accountNames.get(t.to_account_id) ?? t.to_account_id)
@@ -113,17 +122,17 @@ export function transactionsToCsv(
         t.payee,
         t.notes,
         accountCurrency,
-        hasForeign
-          ? {
-              value: formatCurrencyInput(
-                t.original_amount!,
-                t.original_currency!,
-              ),
-              numeric: true,
-            }
+        {
+          value: formatCurrencyInput(origAmount, origCurrency),
+          numeric: true,
+        },
+        origCurrency,
+        fxRate !== undefined
+          ? { value: formatFxRate(fxRate), numeric: true }
           : "",
-        hasForeign ? t.original_currency! : "",
-        hasForeign ? { value: formatFxRate(t.fx_rate!), numeric: true } : "",
+        fxRateDate,
+        fxSource,
+        fxStatus,
       ]),
     );
   }
@@ -136,29 +145,40 @@ export function reportToCsv(params: {
   summary: { income: number; expense: number };
   spending: SpendingSummaryItem[];
   budgetReport?: BudgetReport;
+  currency?: string;
+  estimatedCount?: number;
 }): string {
   const { rangeLabel, summary, spending, budgetReport } = params;
+  const currency = normalizeCurrencyCode(
+    params.currency ?? budgetReport?.currency ?? DEFAULT_CURRENCY,
+  );
+  const fmt = (minorVal: number) => formatCurrencyInput(minorVal, currency);
   const net = summary.income - summary.expense;
   const lines: string[] = [];
 
   lines.push(toCsvRow(["Summary", rangeLabel]));
-  lines.push(toCsvRow(["Metric", "Amount (AED)"]));
+  lines.push(toCsvRow(["Metric", `Amount (${currency})`]));
   lines.push(
-    toCsvRow(["Income", { value: formatFils(summary.income), numeric: true }]),
+    toCsvRow(["Income", { value: fmt(summary.income), numeric: true }]),
   );
   lines.push(
-    toCsvRow([
-      "Expenses",
-      { value: formatFils(summary.expense), numeric: true },
-    ]),
+    toCsvRow(["Expenses", { value: fmt(summary.expense), numeric: true }]),
   );
   lines.push(
-    toCsvRow(["Net cash flow", { value: formatFils(net), numeric: true }]),
+    toCsvRow(["Net cash flow", { value: fmt(net), numeric: true }]),
   );
+  if (params.estimatedCount && params.estimatedCount > 0) {
+    lines.push(
+      toCsvRow([
+        "Note",
+        `Includes ${params.estimatedCount} estimated ${params.estimatedCount === 1 ? "amount" : "amounts"}`,
+      ]),
+    );
+  }
 
   lines.push("");
   lines.push(toCsvRow(["Category Spending", rangeLabel]));
-  lines.push(toCsvRow(["Category", "Amount (AED)", "Share (%)"]));
+  lines.push(toCsvRow(["Category", `Amount (${currency})`, "Share (%)"]));
   for (const item of spending) {
     const share =
       summary.expense > 0
@@ -167,21 +187,23 @@ export function reportToCsv(params: {
     lines.push(
       toCsvRow([
         item.name,
-        { value: formatFils(item.total), numeric: true },
+        { value: fmt(item.total), numeric: true },
         { value: share, numeric: true },
       ]),
     );
   }
 
   if (budgetReport && (budgetReport.rows.length > 0 || budgetReport.unbudgeted > 0)) {
+    const bCurr = normalizeCurrencyCode(budgetReport.currency ?? currency);
+    const fmtB = (minorVal: number) => formatCurrencyInput(minorVal, bCurr);
     lines.push("");
     lines.push(toCsvRow(["Budget vs Actual", rangeLabel]));
     lines.push(
       toCsvRow([
         "Category",
-        "Budget (AED)",
-        "Actual (AED)",
-        "Remaining (AED)",
+        `Budget (${bCurr})`,
+        `Actual (${bCurr})`,
+        `Remaining (${bCurr})`,
         "Used (%)",
         "Status",
         "Budgeted Months",
@@ -197,9 +219,9 @@ export function reportToCsv(params: {
       lines.push(
         toCsvRow([
           row.category.name,
-          { value: formatFils(row.budget), numeric: true },
-          { value: formatFils(row.actual), numeric: true },
-          { value: formatFils(row.remaining), numeric: true },
+          { value: fmtB(row.budget), numeric: true },
+          { value: fmtB(row.actual), numeric: true },
+          { value: fmtB(row.remaining), numeric: true },
           { value: pct, numeric: pct !== "Infinity" },
           row.status,
           row.budgetedMonths,
@@ -209,10 +231,10 @@ export function reportToCsv(params: {
     lines.push(
       toCsvRow([
         "Total Budgeted",
-        { value: formatFils(budgetReport.totalBudget), numeric: true },
-        { value: formatFils(budgetReport.totalActual), numeric: true },
+        { value: fmtB(budgetReport.totalBudget), numeric: true },
+        { value: fmtB(budgetReport.totalActual), numeric: true },
         {
-          value: formatFils(budgetReport.totalBudget - budgetReport.totalActual),
+          value: fmtB(budgetReport.totalBudget - budgetReport.totalActual),
           numeric: true,
         },
         "",
@@ -225,7 +247,7 @@ export function reportToCsv(params: {
         toCsvRow([
           "Unbudgeted Spending",
           "",
-          { value: formatFils(budgetReport.unbudgeted), numeric: true },
+          { value: fmtB(budgetReport.unbudgeted), numeric: true },
           "",
           "",
           "",

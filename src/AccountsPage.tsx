@@ -11,7 +11,14 @@ import {
 } from "lucide-react";
 import { computeCardSummary, type CardSummary } from "./debtTools";
 import { DebtToolsModal } from "./DebtToolsModal";
-import { balance, today, type Account, type Ledger } from "./domain";
+import {
+  accountCurrency,
+  balance,
+  reportingCurrency,
+  today,
+  type Account,
+  type Ledger,
+} from "./domain";
 import { ACCOUNT_TYPES, type EditorModalState } from "./EditorModal";
 import type { SmsAccountLink } from "./mobile/smsLinks";
 import { Empty } from "./TransactionList";
@@ -58,7 +65,7 @@ export function AccountsPage({
   net: number;
   density: "compact" | "relaxed";
   busy: boolean;
-  concealed: (v: number) => string;
+  concealed: (v: number, currency?: string) => string;
   balanceNote: (a: Account, short?: boolean) => string;
   smsLinks?: SmsAccountLink[];
   onSelectAccount: (accountId: string) => void;
@@ -68,18 +75,22 @@ export function AccountsPage({
 }) {
   const [debtToolsOpen, setDebtToolsOpen] = useState(false);
   const todayIso = today();
+  const repCurr = reportingCurrency(ledger);
 
   return (
     <>
       <div className="accounts-summary accounts-summary-bar">
-        <div>
-          <span>{uiText("Total net balance")}</span>
-          <strong>{concealed(net)}</strong>
-          <small>
-            {" "}
+        <div style={{ display: "grid", gap: "4px" }}>
+          <span className="muted" style={{ fontSize: "0.85rem" }}>
+            {uiText("Total net balance")} ({repCurr})
+          </span>
+          <strong style={{ fontSize: "1.65rem", lineHeight: 1.15 }}>
+            {concealed(net, repCurr)}
+          </strong>
+          <small className="muted">
             {uiText(
               "Credit card debt is shown as a negative balance. Enter a negative balance for amounts you owe.",
-            )}{" "}
+            )}
           </small>
         </div>
         <div className="accounts-summary-actions">
@@ -113,6 +124,7 @@ export function AccountsPage({
           </div>
           {ledger.accounts.map((a) => {
             const value = balance(a, ledger.transactions);
+            const accCurr = accountCurrency(a);
             const cardSummary =
               a.type === "credit_card"
                 ? computeCardSummary(a, value, ledger.transactions, todayIso)
@@ -148,7 +160,7 @@ export function AccountsPage({
                             <span>
                               {cardSummary.utilizationPct.toFixed(0)}
                               {uiText("% used ·")}{" "}
-                              {concealed(cardSummary.availableCreditFils)}{" "}
+                              {concealed(cardSummary.availableCreditFils, accCurr)}{" "}
                               {uiText("avail")}{" "}
                             </span>
                           )}
@@ -162,14 +174,11 @@ export function AccountsPage({
                   </span>
                 </button>
                 <span className="muted">
-                  {ACCOUNT_TYPES[a.type]}
-                  {a.currency && a.currency !== "AED"
-                    ? ` · AED balance / ${a.currency} purchases`
-                    : ""}
+                  {ACCOUNT_TYPES[a.type]} · {accCurr}
                 </span>
                 <span className="muted">{balanceNote(a, true)}</span>
                 <strong className={`num ${value < 0 ? "is-negative" : ""}`}>
-                  {concealed(value)}
+                  {concealed(value, accCurr)}
                 </strong>
                 <span className="compact-actions">
                   {onOpenSmsAutoCapture && (
@@ -216,6 +225,7 @@ export function AccountsPage({
         <div className="account-grid full">
           {ledger.accounts.map((a) => {
             const value = balance(a, ledger.transactions);
+            const accCurr = accountCurrency(a);
             const linked = smsLinks.filter((l) => l.account_id === a.id);
             const cardSummary =
               a.type === "credit_card"
@@ -232,10 +242,7 @@ export function AccountsPage({
                     {a.emoji || <Wallet size={22} />}
                   </span>
                   <span className="account-kind">
-                    {ACCOUNT_TYPES[a.type]}
-                    {a.currency && a.currency !== "AED"
-                      ? ` · AED balance / ${a.currency} purchases`
-                      : ""}
+                    {ACCOUNT_TYPES[a.type]} · {accCurr}
                   </span>
                   <div className="row-actions">
                     {onOpenSmsAutoCapture && (
@@ -286,7 +293,9 @@ export function AccountsPage({
                     </button>
                   )}
                 </h3>
-                <strong className="large-amount">{concealed(value)}</strong>
+                <strong className="large-amount">
+                  {concealed(value, accCurr)}
+                </strong>
                 <p className="muted small">{balanceNote(a)}</p>
                 {cardSummary && (
                   <div className="cc-meta">
@@ -299,7 +308,7 @@ export function AccountsPage({
                             <b>{cardSummary.utilizationPct.toFixed(1)}%</b>
                           </span>
                           <span>
-                            {concealed(cardSummary.availableCreditFils)}{" "}
+                            {concealed(cardSummary.availableCreditFils, accCurr)}{" "}
                             {uiText("available")}{" "}
                           </span>
                         </div>
@@ -333,7 +342,7 @@ export function AccountsPage({
                           cardSummary.statementWindow.start,
                           cardSummary.statementWindow.end,
                         )}
-                        : <b>{concealed(cardSummary.statementBalanceFils)}</b>
+                        : <b>{concealed(cardSummary.statementBalanceFils, accCurr)}</b>
                       </span>
                       {dueLabel && (
                         <span className={dueBadgeClass(cardSummary)}>

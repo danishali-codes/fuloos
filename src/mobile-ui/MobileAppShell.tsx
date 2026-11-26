@@ -65,6 +65,8 @@ export function MobileAppShell({
   onEditBudget,
   onOpenSmsAutoCapture,
   onOpenCaptureAlerts,
+  onOpenConfirmAmounts,
+  estimatedCount = 0,
   onOpenRules,
   onOpenImport,
   onOpenSettings,
@@ -80,7 +82,7 @@ export function MobileAppShell({
   online: boolean;
   month: string;
   net: number;
-  summary: { income: number; expense: number };
+  summary: { income: number; expense: number; estimatedCount?: number };
   monthly: Transaction[];
   hidden: boolean;
   busy: boolean;
@@ -117,6 +119,8 @@ export function MobileAppShell({
   onEditBudget: (budget: Budget) => void;
   onOpenSmsAutoCapture: (accountId?: string) => void;
   onOpenCaptureAlerts: () => void;
+  onOpenConfirmAmounts?: (txId?: string) => void;
+  estimatedCount?: number;
   onOpenRules: () => void;
   onOpenImport: () => void;
   onOpenSettings: () => void;
@@ -160,6 +164,7 @@ export function MobileAppShell({
           hidden={hidden}
           pendingAlertCount={pendingAlerts.length}
           pendingAlertPreview={pendingAlertPreview}
+          estimatedCount={estimatedCount}
           error={error}
           onToggleHidden={onToggleHidden}
           onChangeMonth={onChangeMonth}
@@ -171,6 +176,7 @@ export function MobileAppShell({
           onOpenBudgets={() => onNavigate("Budgets")}
           onOpenMore={() => onNavigate("More")}
           onOpenCaptureAlerts={onOpenCaptureAlerts}
+          onOpenConfirmAmounts={onOpenConfirmAmounts}
           onSelectTransaction={onSelectTx}
           onExitDemo={onSignOut}
           onRetry={onRetry}
@@ -235,10 +241,12 @@ export function MobileAppShell({
           hidden={hidden}
           lockConfig={lockConfig}
           pendingAlertCount={pendingAlerts.length}
+          estimatedCount={estimatedCount}
           smsLinks={smsLinks}
           onNavigate={onNavigate}
           onOpenSmsAutoCapture={() => onOpenSmsAutoCapture()}
           onOpenCaptureAlerts={onOpenCaptureAlerts}
+          onOpenConfirmAmounts={onOpenConfirmAmounts}
           onOpenRules={onOpenRules}
           onOpenImport={onOpenImport}
           onOpenSettings={onOpenSettings}
@@ -304,6 +312,11 @@ export function MobileAppShell({
           onClose={() => onSelectTx(null)}
           onQuickEdit={onQuickEditTx}
           onFullEdit={onOpenFullTxEditor}
+          onConfirmAmount={
+            onOpenConfirmAmounts
+              ? (tx) => onOpenConfirmAmounts(tx.id)
+              : undefined
+          }
           onDelete={onDeleteTx}
         />
       )}

@@ -1,5 +1,7 @@
 import {
+  accountCurrency,
   balance,
+  reportingCurrency,
   today,
   type Account,
   type Ledger,
@@ -8,12 +10,16 @@ import {
   type RecurringSchedule,
   type Transaction,
 } from "./domain.ts";
+import { normalizeCurrencyCode } from "./currency.ts";
+import {
+  convertAmountToReporting,
+  defaultRateLookup,
+  type RateLookupFn,
+} from "./multiCurrency.ts";
 import {
   addDays,
   daysBetween,
-  firstStepOnOrAfter,
   generateOccurrences,
-  occurrenceAtStep,
 } from "./recurring.ts";
 import { medianOf } from "./recurringSeries.ts";
 
@@ -26,6 +32,7 @@ export interface ScheduleHistoryProfile {
   hasRange: boolean;
   medianOffsetDays: number;
   basisExplanation: string;
+  currency?: string;
 }
 
 export interface ForecastItem {
@@ -42,6 +49,8 @@ export interface ForecastItem {
   highAmount: number;
   hasRange: boolean;
   explanation: string;
+  currency?: string;
+  hasEstimatedFx?: boolean;
 }
 
 export interface HorizonSummary {
@@ -53,11 +62,13 @@ export interface HorizonSummary {
   expense: { expected: number; low: number; high: number };
   income: { expected: number; low: number; high: number };
   net: { expected: number; low: number; high: number };
+  estimatedFxCount?: number;
 }
 
 export interface AccountBalanceProjection {
   account: Account;
   currentBalance: number;
+  currency?: string;
   horizons: Record<
     30 | 60 | 90,
     {
@@ -67,12 +78,15 @@ export interface AccountBalanceProjection {
       highBalance: number;
       hasRange: boolean;
       upcomingCount: number;
+      hasEstimatedFx?: boolean;
     }
   >;
 }
 
 export interface IntelligentForecast {
   asOfDate: string;
+  reportingCurrency?: string;
+  estimatedFxCount?: number;
   profiles: Record<string, ScheduleHistoryProfile>;
   upcomingItems: ForecastItem[];
   horizons: Record<30 | 60 | 90, HorizonSummary>;
@@ -215,7 +229,18 @@ export function analyzeScheduleHistory(
 export function buildIntelligentForecast(
   ledger: Ledger,
   asOfDate: string = today(),
+  options?: { reportingCurrency?: string; rateLookup?: RateLookupFn },
 ): IntelligentForecast {
+  const repCurr = normalizeCurrencyCode(
+    options?.reportingCurrency ?? reportingCurrency(ledger),
+  );
+  const rateLookup = options?.rateLookup ?? defaultRateLookup;
+  const accountById = new Map(ledger.accounts.map((a) => [a.id, a]));
+  const scheduleCurrency = (s: RecurringSchedule) =>
+    normalizeCurrencyCode(
+      s.currency ?? accountCurrency(accountById.get(s.account_id)),
+    );
+
   const schedules = (ledger.recurring ?? []).filter(
     (s) => s.status === "active",
   );
@@ -234,7 +259,10 @@ export function buildIntelligentForecast(
 
   const profiles: Record<string, ScheduleHistoryProfile> = {};
   for (const s of schedules) {
-    profiles[s.id] = analyzeScheduleHistory(s, ledger, precomputed);
+    profiles[s.id] = {
+      ...analyzeScheduleHistory(s, ledger, precomputed),
+      currency: scheduleCurrency(s),
+    };
   }
 
   const maxHorizonDate = addDays(asOfDate, 90);
@@ -242,6 +270,7 @@ export function buildIntelligentForecast(
 
   for (const schedule of schedules) {
     const profile = profiles[schedule.id];
+    const schedCurr = scheduleCurrency(schedule);
     const start =
       schedule.start_date < asOfDate ? schedule.start_date : asOfDate;
     const dates = generateOccurrences(schedule, start, maxHorizonDate);
@@ -293,6 +322,8 @@ export function buildIntelligentForecast(
         highAmount,
         hasRange: !isConfirmed && profile.hasRange,
         explanation,
+        currency: schedCurr,
+        hasEstimatedFx: schedCurr !== repCurr,
       });
     }
   }
@@ -303,6 +334,9 @@ export function buildIntelligentForecast(
       a.schedule.name.localeCompare(b.schedule.name),
   );
 
+  const convertTo = (amount: number, fromCurr: string, toCurr: string) =>
+    convertAmountToReporting(amount, fromCurr, toCurr, asOfDate, rateLookup);
+
   const buildHorizon = (days: 30 | 60 | 90): HorizonSummary => {
     const toDate = addDays(asOfDate, days);
     const inWindow = items.filter(
@@ -312,6 +346,7 @@ export function buildIntelligentForecast(
     const income = { expected: 0, low: 0, high: 0 };
     let unconfirmedCount = 0;
     let confirmedCount = 0;
+    let estimatedFxCount = 0;
 
     for (const it of inWindow) {
       if (it.isConfirmed) {
@@ -320,14 +355,19 @@ export function buildIntelligentForecast(
         continue;
       }
       unconfirmedCount++;
+      const itemCurr = it.currency ?? scheduleCurrency(it.schedule);
+      const expConv = convertTo(it.expectedAmount, itemCurr, repCurr);
+      const lowConv = convertTo(it.lowAmount, itemCurr, repCurr);
+      const highConv = convertTo(it.highAmount, itemCurr, repCurr);
+      if (expConv.estimated || itemCurr !== repCurr) estimatedFxCount++;
       if (it.schedule.type === "income") {
-        income.expected += it.expectedAmount;
-        income.low += it.lowAmount;
-        income.high += it.highAmount;
+        income.expected += expConv.amount;
+        income.low += lowConv.amount;
+        income.high += highConv.amount;
       } else {
-        expense.expected += it.expectedAmount;
-        expense.low += it.lowAmount;
-        expense.high += it.highAmount;
+        expense.expected += expConv.amount;
+        expense.low += lowConv.amount;
+        expense.high += highConv.amount;
       }
     }
 
@@ -345,6 +385,7 @@ export function buildIntelligentForecast(
         low: income.low - expense.high,
         high: income.high - expense.low,
       },
+      estimatedFxCount,
     };
   };
 
@@ -356,6 +397,7 @@ export function buildIntelligentForecast(
 
   const accountProjections: AccountBalanceProjection[] = ledger.accounts.map(
     (account) => {
+      const accCurr = accountCurrency(account);
       const currentBalance = balance(account, ledger.transactions);
       const calcForDays = (days: 30 | 60 | 90) => {
         const toDate = addDays(asOfDate, days);
@@ -370,16 +412,22 @@ export function buildIntelligentForecast(
         let lowDelta = 0;
         let highDelta = 0;
         let hasRange = false;
+        let hasEstimatedFx = false;
         for (const it of acctItems) {
           if (it.hasRange) hasRange = true;
+          const itemCurr = it.currency ?? scheduleCurrency(it.schedule);
+          const expConv = convertTo(it.expectedAmount, itemCurr, accCurr);
+          const lowConv = convertTo(it.lowAmount, itemCurr, accCurr);
+          const highConv = convertTo(it.highAmount, itemCurr, accCurr);
+          if (expConv.estimated) hasEstimatedFx = true;
           if (it.schedule.type === "income") {
-            expectedDelta += it.expectedAmount;
-            lowDelta += it.lowAmount;
-            highDelta += it.highAmount;
+            expectedDelta += expConv.amount;
+            lowDelta += lowConv.amount;
+            highDelta += highConv.amount;
           } else {
-            expectedDelta -= it.expectedAmount;
-            lowDelta -= it.highAmount;
-            highDelta -= it.lowAmount;
+            expectedDelta -= expConv.amount;
+            lowDelta -= highConv.amount;
+            highDelta -= lowConv.amount;
           }
         }
         return {
@@ -389,11 +437,13 @@ export function buildIntelligentForecast(
           highBalance: currentBalance + highDelta,
           hasRange,
           upcomingCount: acctItems.length,
+          hasEstimatedFx,
         };
       };
       return {
         account,
         currentBalance,
+        currency: accCurr,
         horizons: {
           30: calcForDays(30),
           60: calcForDays(60),
@@ -403,21 +453,41 @@ export function buildIntelligentForecast(
     },
   );
 
-  const currentNetBalance = accountProjections.reduce(
-    (s, p) => s + p.currentBalance,
-    0,
-  );
+  let estimatedFxCount = horizons[90].estimatedFxCount ?? 0;
+  const currentNetBalance = accountProjections.reduce((s, p) => {
+    const conv = convertTo(p.currentBalance, p.currency ?? accountCurrency(p.account), repCurr);
+    if (conv.estimated) estimatedFxCount++;
+    return s + conv.amount;
+  }, 0);
   const sumNetHorizon = (days: 30 | 60 | 90) => {
     const projectedNetBalance = accountProjections.reduce(
-      (s, p) => s + p.horizons[days].projectedBalance,
+      (s, p) =>
+        s +
+        convertTo(
+          p.horizons[days].projectedBalance,
+          p.currency ?? accountCurrency(p.account),
+          repCurr,
+        ).amount,
       0,
     );
     const lowNetBalance = accountProjections.reduce(
-      (s, p) => s + p.horizons[days].lowBalance,
+      (s, p) =>
+        s +
+        convertTo(
+          p.horizons[days].lowBalance,
+          p.currency ?? accountCurrency(p.account),
+          repCurr,
+        ).amount,
       0,
     );
     const highNetBalance = accountProjections.reduce(
-      (s, p) => s + p.horizons[days].highBalance,
+      (s, p) =>
+        s +
+        convertTo(
+          p.horizons[days].highBalance,
+          p.currency ?? accountCurrency(p.account),
+          repCurr,
+        ).amount,
       0,
     );
     const hasRange = accountProjections.some((p) => p.horizons[days].hasRange);
@@ -432,7 +502,9 @@ export function buildIntelligentForecast(
     if (s.end_date && s.end_date < asOfDate) continue;
     const profile = profiles[s.id];
     const mult = monthlyMultiplier(s.frequency);
-    const monthlyAmt = Math.round(profile.expectedAmount * mult);
+    const schedCurr = scheduleCurrency(s);
+    const converted = convertTo(profile.expectedAmount, schedCurr, repCurr);
+    const monthlyAmt = Math.round(converted.amount * mult);
     if (s.type === "income") totalIncome += monthlyAmt;
     else if (s.amount_type === "fixed") fixedExpense += monthlyAmt;
     else variableExpense += monthlyAmt;
@@ -440,6 +512,8 @@ export function buildIntelligentForecast(
 
   return {
     asOfDate,
+    reportingCurrency: repCurr,
+    estimatedFxCount,
     profiles,
     upcomingItems: items,
     horizons,

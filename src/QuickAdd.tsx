@@ -11,16 +11,20 @@ import {
   X,
 } from "lucide-react";
 import {
-  convertToAedFils,
-  DEFAULT_CURRENCY,
-  getReferenceFxRate,
+  computeImpliedRate,
+  convertMinor,
+  formatCurrency,
+  formatCurrencyInput,
+  formatFxRate,
   normalizeCurrencyCode,
   parseCurrencyMinor,
-  REFERENCE_RATES_NOTE,
-  SUPPORTED_CURRENCIES,
+  type FxSource,
+  type FxStatus,
 } from "./currency";
-import { errorMessage, today, type Ledger } from "./domain";
+import { CurrencyPicker } from "./CurrencyPicker";
+import { accountCurrency, errorMessage, today, type Ledger } from "./domain";
 import { collectLedgerTags } from "./enrichment";
+import { fxRateService } from "./fxRates";
 import { TagInput } from "./TagInput";
 import {
   buildQuickAddTransaction,
@@ -59,29 +63,31 @@ export function QuickAddModal({
   const [type, setType] = useState<QuickAddKind>(
     initialDraft?.type ?? "expense",
   );
-  const [amount, setAmount] = useState(initialDraft?.amount ?? "");
   const initialAccountId = pickDefaultAccountId(
     ledger.accounts,
     initialDraft?.accountId ?? readRememberedAccount(),
   );
-  const initialAccCurrency = normalizeCurrencyCode(
-    ledger.accounts.find((a) => a.id === initialAccountId)?.currency,
+  const initialAccCurrency = accountCurrency(
+    ledger.accounts.find((a) => a.id === initialAccountId),
   );
   const [accountId, setAccountId] = useState(initialAccountId);
-  const [foreignEnabled, setForeignEnabled] = useState(
-    initialAccCurrency !== DEFAULT_CURRENCY,
+  const selectedAccount = ledger.accounts.find((a) => a.id === accountId);
+  const accCurr = accountCurrency(selectedAccount);
+
+  const [txCurrency, setTxCurrency] = useState(
+    normalizeCurrencyCode(initialDraft?.currency ?? initialAccCurrency),
   );
-  const [originalCurrency, setOriginalCurrency] = useState(
-    initialAccCurrency !== DEFAULT_CURRENCY ? initialAccCurrency : "USD",
+  const [enteredAmount, setEnteredAmount] = useState(initialDraft?.amount ?? "");
+  const [accountAmountText, setAccountAmountText] = useState(
+    initialDraft?.amount ?? "",
   );
-  const [originalAmount, setOriginalAmount] = useState("");
-  const [fxRate, setFxRate] = useState(
-    String(
-      getReferenceFxRate(
-        initialAccCurrency !== DEFAULT_CURRENCY ? initialAccCurrency : "USD",
-      ),
-    ),
-  );
+  const [fxRateText, setFxRateText] = useState("1");
+  const [fxRateDate, setFxRateDate] = useState(initialDraft?.date ?? today());
+  const [fxSource, setFxSource] = useState<FxSource>("same_currency");
+  const [fxStatus, setFxStatus] = useState<FxStatus>("exact");
+  const [userEditedAccountAmount, setUserEditedAccountAmount] = useState(false);
+  const [rateLoading, setRateLoading] = useState(false);
+
   const [categoryId, setCategoryId] = useState(initialDraft?.categoryId ?? "");
   const [payee, setPayee] = useState(initialDraft?.payee ?? "");
   const [date, setDate] = useState(initialDraft?.date ?? today());
@@ -89,39 +95,93 @@ export function QuickAddModal({
   const [error, setError] = useState("");
   const tagSuggestions = collectLedgerTags(ledger);
 
+  const isForeign = txCurrency !== accCurr;
+
   useEffect(() => {
     dialog.current?.showModal();
     amountRef.current?.focus();
   }, []);
 
-  // Keep selected account valid if ledger finishes loading while modal is open.
   useEffect(() => {
     if (!accountId && ledger.accounts.length > 0) {
-      setAccountId(
-        pickDefaultAccountId(ledger.accounts, readRememberedAccount()),
+      const nextId = pickDefaultAccountId(
+        ledger.accounts,
+        readRememberedAccount(),
       );
+      setAccountId(nextId);
+      const nextCurr = accountCurrency(
+        ledger.accounts.find((a) => a.id === nextId),
+      );
+      if (!initialDraft?.currency) setTxCurrency(nextCurr);
     }
-  }, [accountId, ledger.accounts]);
+  }, [accountId, ledger.accounts, initialDraft?.currency]);
+
+  // Fetch historical FX rate when transaction currency differs from account currency.
+  useEffect(() => {
+    if (!isForeign) {
+      setFxRateText("1");
+      setFxRateDate(date);
+      setFxSource("same_currency");
+      setFxStatus("exact");
+      setUserEditedAccountAmount(false);
+      setRateLoading(false);
+      return;
+    }
+    let active = true;
+    setRateLoading(true);
+    fxRateService
+      .getRate(txCurrency, accCurr, date)
+      .then((res) => {
+        if (!active) return;
+        if (res.rate !== null && res.rate > 0) {
+          setFxRateText(formatFxRate(res.rate));
+          setFxRateDate(res.rateDate);
+          setFxSource(res.source ?? "manual_rate");
+          setFxStatus(res.status);
+          if (!userEditedAccountAmount && enteredAmount.trim()) {
+            try {
+              const origMinor = parseCurrencyMinor(enteredAmount, txCurrency);
+              const conv = convertMinor(origMinor, txCurrency, accCurr, res.rate);
+              setAccountAmountText(formatCurrencyInput(conv, accCurr));
+            } catch {
+              // Ignore partial input.
+            }
+          }
+        } else {
+          setFxRateText("");
+          setFxSource("manual_rate");
+          setFxStatus("estimated");
+        }
+      })
+      .catch(() => {
+        // Keep offline fallback state.
+      })
+      .finally(() => {
+        if (active) setRateLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isForeign, txCurrency, accCurr, date]);
+
+  // Keep estimated account amount synced when user types the original amount.
+  useEffect(() => {
+    if (!isForeign || userEditedAccountAmount) return;
+    const rate = Number(fxRateText);
+    if (!enteredAmount.trim() || !Number.isFinite(rate) || rate <= 0) {
+      if (!enteredAmount.trim()) setAccountAmountText("");
+      return;
+    }
+    try {
+      const origMinor = parseCurrencyMinor(enteredAmount, txCurrency);
+      const conv = convertMinor(origMinor, txCurrency, accCurr, rate);
+      setAccountAmountText(formatCurrencyInput(conv, accCurr));
+    } catch {
+      // Ignore incomplete typing.
+    }
+  }, [enteredAmount, fxRateText, txCurrency, accCurr, isForeign, userEditedAccountAmount]);
 
   const offlineLocked = !online && !demo;
-
-  function syncAedFromForeign(
-    nextOrig: string,
-    nextCurr: string,
-    nextRate: string,
-  ) {
-    try {
-      if (!nextOrig.trim()) return;
-      const origMinor = parseCurrencyMinor(nextOrig, nextCurr);
-      const rate = Number(nextRate);
-      if (origMinor >= 0 && Number.isFinite(rate) && rate > 0) {
-        const aedFils = convertToAedFils(origMinor, nextCurr, rate);
-        setAmount((aedFils / 100).toFixed(2));
-      }
-    } catch {
-      // Allow incomplete typing while editing.
-    }
-  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -131,35 +191,89 @@ export function QuickAddModal({
       return;
     }
     try {
-      let foreignFields: Record<string, unknown> = {};
-      if (foreignEnabled) {
-        if (!originalAmount.trim()) {
-          throw new Error("Enter the original currency amount.");
-        }
-        const origMinor = parseCurrencyMinor(originalAmount, originalCurrency);
-        const rate = Number(fxRate);
-        if (!Number.isFinite(rate) || rate <= 0) {
-          throw new Error("Enter an exchange rate greater than zero.");
-        }
-        foreignFields = {
-          original_currency: originalCurrency,
-          original_amount: origMinor,
-          fx_rate: rate,
-        };
+      if (!isForeign) {
+        const record = buildQuickAddTransaction(
+          {
+            type,
+            amount: enteredAmount,
+            currency: accCurr,
+            accountId,
+            categoryId,
+            payee,
+            date,
+          },
+          ledger,
+        );
+        saveRememberedAccount(accountId);
+        await onSave("transactions", {
+          ...record,
+          ...(tags.length > 0 ? { tags } : {}),
+        });
+        onClose();
+        return;
       }
-      const record = buildQuickAddTransaction(
-        { type, amount, accountId, categoryId, payee, date },
-        ledger,
-      );
+
+      if (!enteredAmount.trim()) {
+        throw new Error(`Enter the ${txCurrency} amount.`);
+      }
+      const origMinor = parseCurrencyMinor(enteredAmount, txCurrency);
+      if (origMinor <= 0) {
+        throw new Error("Enter an amount greater than zero.");
+      }
+
+      let accMinor = 0;
+      let finalRate = Number(fxRateText);
+      let finalSource: FxSource = fxSource;
+      let finalStatus: FxStatus = fxStatus;
+
+      if (accountAmountText.trim()) {
+        accMinor = parseCurrencyMinor(accountAmountText, accCurr);
+        if (userEditedAccountAmount && accMinor > 0) {
+          finalRate = computeImpliedRate(origMinor, txCurrency, accMinor, accCurr);
+          finalSource = "user_confirmed";
+          finalStatus = "exact";
+        }
+      } else if (Number.isFinite(finalRate) && finalRate > 0) {
+        accMinor = convertMinor(origMinor, txCurrency, accCurr, finalRate);
+      }
+
+      if (!Number.isFinite(finalRate) || finalRate <= 0) {
+        finalRate = 1;
+        finalSource = "manual_rate";
+        finalStatus = "estimated";
+      }
+
       saveRememberedAccount(accountId);
       await onSave("transactions", {
-        ...record,
-        ...foreignFields,
+        type,
+        amount: accMinor,
+        original_amount: origMinor,
+        original_currency: txCurrency,
+        fx_rate: finalRate,
+        fx_rate_date: fxRateDate || date,
+        fx_source: finalSource,
+        fx_status: finalStatus,
+        account_id: accountId,
+        to_account_id: null,
+        category_id: categoryId || null,
+        date,
+        payee: payee.trim().slice(0, 120),
+        notes: "",
         ...(tags.length > 0 ? { tags } : {}),
       });
       onClose();
     } catch (err) {
       setError(errorMessage(err));
+    }
+  }
+
+  let estPreviewLabel = "";
+  if (isForeign && accountAmountText.trim()) {
+    try {
+      const m = parseCurrencyMinor(accountAmountText, accCurr);
+      estPreviewLabel = `${fxStatus === "estimated" ? "≈ " : ""}${formatCurrency(m, accCurr)}`;
+    } catch {
+      estPreviewLabel = "";
     }
   }
 
@@ -178,7 +292,9 @@ export function QuickAddModal({
     >
       <div className="modal-head">
         <div>
-          <span className="eyebrow">{uiText("QUICK ADD · AED")}</span>
+          <span className="eyebrow">
+            {uiText("QUICK ADD")} · {txCurrency}
+          </span>
           <h2 id="quick-add-title">{uiText("Add transaction")}</h2>
         </div>
         <button
@@ -201,15 +317,13 @@ export function QuickAddModal({
       {ledger.accounts.length === 0 ? (
         <div className="quick-add-empty">
           <p className="muted">
-            {" "}
             {uiText(
               "Create an account first so Fuloos knows where this transaction belongs.",
-            )}{" "}
+            )}
           </p>
           <div className="modal-actions">
             <button type="button" className="secondary" onClick={onClose}>
-              {" "}
-              {uiText("Cancel")}{" "}
+              {uiText("Cancel")}
             </button>
             <button
               type="button"
@@ -220,8 +334,7 @@ export function QuickAddModal({
                 onAddAccount();
               }}
             >
-              {" "}
-              {uiText("Add account")}{" "}
+              {uiText("Add account")}
             </button>
           </div>
         </div>
@@ -237,163 +350,146 @@ export function QuickAddModal({
               className={type === "expense" ? "active" : ""}
               onClick={() => setType("expense")}
             >
-              <ArrowUpRight size={15} /> {uiText("Expense")}{" "}
+              <ArrowUpRight size={15} /> {uiText("Expense")}
             </button>
             <button
               type="button"
               className={type === "income" ? "active" : ""}
               onClick={() => setType("income")}
             >
-              <ArrowDownLeft size={15} /> {uiText("Income")}{" "}
+              <ArrowDownLeft size={15} /> {uiText("Income")}
             </button>
           </div>
 
-          <label>
-            {" "}
-            {uiText("Amount (AED)")}{" "}
-            <input
-              ref={amountRef}
-              required
-              inputMode="decimal"
-              name="amount"
-              placeholder="0.00"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-          </label>
-
-          <div className="enrichment-section">
-            <div className="enrichment-section-head">
-              <label className="selection-label">
-                <input
-                  type="checkbox"
-                  checked={foreignEnabled}
-                  disabled={busy}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    setForeignEnabled(checked);
-                    if (checked) {
-                      syncAedFromForeign(
-                        originalAmount,
-                        originalCurrency,
-                        fxRate,
-                      );
-                    }
-                  }}
-                />
-                <span>{uiText("Foreign currency")}</span>
-              </label>
-              {foreignEnabled && (
-                <span className="muted small">
-                  {uiText("Explicit FX to AED")}
-                </span>
-              )}
+          <div className="form-row">
+            <label style={{ flex: 2 }}>
+              {uiText("Amount")} ({txCurrency})
+              <input
+                ref={amountRef}
+                required
+                inputMode="decimal"
+                name="amount"
+                placeholder={formatCurrencyInput(0, txCurrency)}
+                value={enteredAmount}
+                onChange={(e) => {
+                  setEnteredAmount(e.target.value);
+                  setUserEditedAccountAmount(false);
+                }}
+              />
+            </label>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
+              <span className="field-label">{uiText("Currency")}</span>
+              <CurrencyPicker
+                value={txCurrency}
+                compact
+                disabled={busy}
+                onChange={(nextCurr) => {
+                  setTxCurrency(nextCurr);
+                  setUserEditedAccountAmount(false);
+                }}
+              />
             </div>
-            {foreignEnabled && (
-              <>
-                <div className="form-row">
-                  <label>
-                    {" "}
-                    {uiText("Currency")}{" "}
-                    <select
-                      name="original_currency"
-                      value={originalCurrency}
-                      disabled={busy}
-                      onChange={(e) => {
-                        const nextCurr = e.target.value;
-                        const nextRate = String(getReferenceFxRate(nextCurr));
-                        setOriginalCurrency(nextCurr);
-                        setFxRate(nextRate);
-                        syncAedFromForeign(originalAmount, nextCurr, nextRate);
-                      }}
-                    >
-                      {SUPPORTED_CURRENCIES.filter(
-                        (c) => c.code !== DEFAULT_CURRENCY,
-                      ).map((c) => (
-                        <option key={c.code} value={c.code}>
-                          {c.code} — {c.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    {" "}
-                    {uiText("Original (")}
-                    {originalCurrency})
-                    <input
-                      name="original_amount"
-                      inputMode="decimal"
-                      placeholder="0.00"
-                      value={originalAmount}
-                      disabled={busy}
-                      onChange={(e) => {
-                        const nextOrig = e.target.value;
-                        setOriginalAmount(nextOrig);
-                        syncAedFromForeign(nextOrig, originalCurrency, fxRate);
-                      }}
-                    />
-                  </label>
-                  <label>
-                    {" "}
-                    {uiText("Rate to AED")}{" "}
-                    <input
-                      name="fx_rate"
-                      inputMode="decimal"
-                      placeholder="3.6725"
-                      value={fxRate}
-                      disabled={busy}
-                      onChange={(e) => {
-                        const nextRate = e.target.value;
-                        setFxRate(nextRate);
-                        syncAedFromForeign(
-                          originalAmount,
-                          originalCurrency,
-                          nextRate,
-                        );
-                      }}
-                    />
-                  </label>
-                </div>
-                <p className="form-hint">{REFERENCE_RATES_NOTE}</p>
-              </>
-            )}
           </div>
+
+          {isForeign && (
+            <div className="enrichment-section">
+              <div className="enrichment-section-head">
+                <span className="field-label">
+                  {uiText("Charged to account")} ({accCurr})
+                </span>
+                <span className="muted small">
+                  {rateLoading
+                    ? uiText("Fetching rate…")
+                    : estPreviewLabel ||
+                      (fxRateText
+                        ? `1 ${txCurrency} = ${fxRateText} ${accCurr}`
+                        : uiText("Rate unavailable"))}
+                </span>
+              </div>
+              <div className="form-row">
+                <label>
+                  {accCurr} {uiText("Amount")}
+                  <input
+                    inputMode="decimal"
+                    placeholder={formatCurrencyInput(0, accCurr)}
+                    value={accountAmountText}
+                    disabled={busy}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setAccountAmountText(next);
+                      setUserEditedAccountAmount(true);
+                      try {
+                        const origM = parseCurrencyMinor(enteredAmount, txCurrency);
+                        const accM = parseCurrencyMinor(next, accCurr);
+                        if (origM > 0 && accM > 0) {
+                          setFxRateText(
+                            formatFxRate(
+                              computeImpliedRate(origM, txCurrency, accM, accCurr),
+                            ),
+                          );
+                          setFxSource("user_confirmed");
+                          setFxStatus("exact");
+                        }
+                      } catch {
+                        // Ignore partial typing.
+                      }
+                    }}
+                  />
+                </label>
+                <label>
+                  1 {txCurrency} = {accCurr}
+                  <input
+                    inputMode="decimal"
+                    value={fxRateText}
+                    disabled={busy}
+                    onChange={(e) => {
+                      setFxRateText(e.target.value);
+                      setUserEditedAccountAmount(false);
+                      setFxSource("manual_rate");
+                    }}
+                  />
+                </label>
+              </div>
+              <p className="form-hint">
+                {fxStatus === "estimated"
+                  ? `Estimated from ${fxRateDate || date} rate. Edit the ${accCurr} amount above if you already know what your bank charged, or confirm it later.`
+                  : `Confirmed amount in ${accCurr}.`}
+              </p>
+            </div>
+          )}
 
           <div className="form-row">
             <label>
-              {" "}
-              {uiText("Account")}{" "}
+              {uiText("Account")}
               <select
                 name="account_id"
                 value={accountId}
                 onChange={(e) => {
                   const nextId = e.target.value;
+                  const prevAccCurr = accCurr;
                   setAccountId(nextId);
-                  const acc = ledger.accounts.find((a) => a.id === nextId);
-                  const accCurr = normalizeCurrencyCode(acc?.currency);
-                  if (accCurr !== DEFAULT_CURRENCY) {
-                    const nextRate = String(getReferenceFxRate(accCurr));
-                    setForeignEnabled(true);
-                    setOriginalCurrency(accCurr);
-                    setFxRate(nextRate);
-                    syncAedFromForeign(originalAmount, accCurr, nextRate);
+                  const nextAccCurr = accountCurrency(
+                    ledger.accounts.find((a) => a.id === nextId),
+                  );
+                  if (txCurrency === prevAccCurr) {
+                    setTxCurrency(nextAccCurr);
                   }
+                  setUserEditedAccountAmount(false);
                 }}
               >
-                {ledger.accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.emoji ? `${a.emoji} ` : ""}
-                    {a.name}
-                    {a.currency && a.currency !== "AED"
-                      ? ` (${a.currency})`
-                      : ""}
-                  </option>
-                ))}
+                {ledger.accounts.map((a) => {
+                  const c = accountCurrency(a);
+                  return (
+                    <option key={a.id} value={a.id}>
+                      {a.emoji ? `${a.emoji} ` : ""}
+                      {a.name} ({c})
+                    </option>
+                  );
+                })}
               </select>
             </label>
             <label>
-              {" "}
-              {uiText("Category")}{" "}
+              {uiText("Category")}
               <select
                 name="category_id"
                 value={categoryId}
@@ -412,20 +508,18 @@ export function QuickAddModal({
 
           <div className="form-row">
             <label>
-              {" "}
               {uiText("Payee")}{" "}
               <span className="muted">{uiText("Optional")}</span>
               <input
                 name="payee"
                 maxLength={120}
-                placeholder={uiText("e.g. Carrefour, DEWA")}
+                placeholder={uiText("e.g. Sample Store, Cafe")}
                 value={payee}
                 onChange={(e) => setPayee(e.target.value)}
               />
             </label>
             <label>
-              {" "}
-              {uiText("Date")}{" "}
+              {uiText("Date")}
               <input
                 required
                 type="date"
@@ -438,7 +532,6 @@ export function QuickAddModal({
 
           <div className="field-block">
             <span className="field-label">
-              {" "}
               {uiText("Tags")}{" "}
               <span className="muted">{uiText("Optional")}</span>
             </span>
@@ -463,8 +556,7 @@ export function QuickAddModal({
               disabled={busy}
               onClick={onClose}
             >
-              {" "}
-              {uiText("Cancel")}{" "}
+              {uiText("Cancel")}
             </button>
             <button
               type="submit"
@@ -546,8 +638,7 @@ export function PwaBanners({
             {uiText("A new version of Fuloos is ready.")}{" "}
           </span>
           <button type="button" onClick={onApplyUpdate}>
-            {" "}
-            {uiText("Update now")}{" "}
+            {uiText("Update now")}
           </button>
         </div>
       )}
@@ -560,8 +651,7 @@ export function PwaBanners({
             )}{" "}
           </span>
           <button type="button" onClick={onInstall}>
-            {" "}
-            {uiText("Install app")}{" "}
+            {uiText("Install app")}
           </button>
         </div>
       )}

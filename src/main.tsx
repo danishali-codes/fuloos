@@ -90,15 +90,16 @@ import { MobileAuth } from "./mobile-ui/MobileAuth";
 import { MobileAppShell } from "./mobile-ui/MobileAppShell";
 import { Leaf } from "lucide-react";
 import {
-  balance,
+  accountCurrency,
   balanceAsOfDate,
+  defaultUserSettings,
   emptyLedger,
   errorMessage,
   hasBalanceAnchor,
   money,
+  reportingCurrency,
   shiftMonth,
   today,
-  totals,
   validateTransaction,
   type Account,
   type Budget,
@@ -107,8 +108,23 @@ import {
   type SavingsGoal,
   type Transaction,
   type TransactionRule,
+  type UserSettings,
 } from "./domain";
 import { transactionCategoryAmounts } from "./enrichment";
+import {
+  CompositeRateProvider,
+  EdgeFunctionRateProvider,
+  FawazAhmedProvider,
+  FrankfurterProvider,
+  fxRateService,
+} from "./fxRates";
+import {
+  accountCurrencyMap,
+  estimatedTransactions,
+  reportingTotals,
+  totalNetBalanceInReporting,
+  transactionCategoryAmountsInReporting,
+} from "./multiCurrency";
 import { validateRule } from "./rules";
 import { demoLedger } from "./demo";
 import "./style.css";
@@ -179,6 +195,11 @@ function App() {
   const [smsOpen, setSmsOpen] = useState(false);
   const [pdfOpen, setPdfOpen] = useState(false);
   const [captureAlertsOpen, setCaptureAlertsOpen] = useState(false);
+  const [confirmAmountsOpen, setConfirmAmountsOpen] = useState(false);
+  const [confirmAmountsTxId, setConfirmAmountsTxId] = useState<string | null>(
+    null,
+  );
+  const [fxRevision, setFxRevision] = useState(0);
   const [smsAutoCaptureOpen, setSmsAutoCaptureOpen] = useState(false);
   const [smsAutoCaptureAccountId, setSmsAutoCaptureAccountId] = useState<
     string | undefined
@@ -466,7 +487,23 @@ function App() {
       ]);
       if (current === generation.current) {
         savedTx.current.clear();
-        setLedger({ ...data, captured_alerts: alertsRes.alerts });
+        let fallbackSettings = data.user_settings;
+        if (!fallbackSettings) {
+          try {
+            const raw = appStorage?.getItem("fuloos.user_settings");
+            if (raw) {
+              const parsed = JSON.parse(raw) as Partial<UserSettings>;
+              fallbackSettings = { ...defaultUserSettings, ...parsed };
+            }
+          } catch {
+            // Ignore corrupt local preference.
+          }
+        }
+        setLedger({
+          ...data,
+          ...(fallbackSettings ? { user_settings: fallbackSettings } : {}),
+          captured_alerts: alertsRes.alerts,
+        });
       }
     } catch (e) {
       if (current === generation.current) setError(errorMessage(e));
@@ -1417,15 +1454,136 @@ function App() {
           ),
     [ledger.transactions, view, startIso, endIso],
   );
-  const summary = useMemo(() => totals(monthly), [monthly]);
+  const repCurr = reportingCurrency(ledger);
+  const estimatedList = useMemo(
+    () => estimatedTransactions(ledger.transactions),
+    [ledger.transactions],
+  );
+
+  // Configure FX rate provider (Supabase Edge Function when signed in, direct public providers in demo/offline).
+  useEffect(() => {
+    const fallback = new CompositeRateProvider([
+      new FawazAhmedProvider(),
+      new FrankfurterProvider(),
+    ]);
+    if (!demo && session && backend?.fetchFxRate) {
+      const invoke = backend.fetchFxRate.bind(backend);
+      fxRateService.setProvider(
+        new CompositeRateProvider([
+          new EdgeFunctionRateProvider((from, to, date) =>
+            invoke(from, to, date),
+          ),
+          fallback,
+        ]),
+      );
+    } else {
+      fxRateService.setProvider(fallback);
+    }
+    void fxRateService.hydrate().then(() => setFxRevision((v) => v + 1));
+  }, [demo, session?.user.id]);
+
+  // Prefetch historical rates needed for reporting-currency conversion.
+  useEffect(() => {
+    const requests: Array<{ from: string; to: string; date: string }> = [];
+    const todayIso = today();
+    const accCurrMap = accountCurrencyMap(ledger.accounts);
+    for (const acc of ledger.accounts) {
+      const curr = accountCurrency(acc);
+      if (curr !== repCurr) {
+        requests.push({ from: curr, to: repCurr, date: todayIso });
+      }
+    }
+    for (const tx of monthly) {
+      const curr = accCurrMap.get(tx.account_id) ?? repCurr;
+      if (curr !== repCurr) {
+        requests.push({ from: curr, to: repCurr, date: tx.date });
+      }
+    }
+    if (!requests.length) return;
+    let active = true;
+    void fxRateService.prefetchPairs(requests).then(() => {
+      if (active) setFxRevision((v) => v + 1);
+    });
+    return () => {
+      active = false;
+    };
+  }, [ledger.accounts, monthly, repCurr]);
+
+  async function handleSaveUserSettings(next: UserSettings) {
+    const normalized: UserSettings = {
+      ...defaultUserSettings,
+      ...next,
+    };
+    setLedger((l) => ({ ...l, user_settings: normalized }));
+    try {
+      appStorage?.setItem("fuloos.user_settings", JSON.stringify(normalized));
+    } catch {
+      // Ignore storage quota errors.
+    }
+    if (!demo && session && backend?.saveUserSettings) {
+      try {
+        const saved = await backend.saveUserSettings(normalized);
+        setLedger((l) => ({ ...l, user_settings: saved }));
+      } catch {
+        // Non-fatal if migration not yet applied; local preference remains active.
+      }
+    }
+  }
+
+  async function handleConfirmForeignAmount(
+    tx: Transaction,
+    patch: Pick<Transaction, "amount" | "fx_rate" | "fx_source" | "fx_status">,
+  ) {
+    await save(
+      "transactions",
+      {
+        type: tx.type,
+        amount: patch.amount,
+        ...(tx.to_amount !== undefined ? { to_amount: tx.to_amount } : {}),
+        original_amount: tx.original_amount ?? tx.amount,
+        original_currency:
+          tx.original_currency ??
+          accountCurrency(ledger.accounts.find((a) => a.id === tx.account_id)),
+        fx_rate: patch.fx_rate,
+        fx_rate_date: tx.fx_rate_date ?? tx.date,
+        fx_source: patch.fx_source,
+        fx_status: patch.fx_status,
+        account_id: tx.account_id,
+        to_account_id: tx.to_account_id,
+        category_id: tx.category_id,
+        date: tx.date,
+        payee: tx.payee,
+        notes: tx.notes,
+        ...(tx.tags ? { tags: tx.tags } : {}),
+        ...(tx.splits ? { splits: tx.splits } : {}),
+      },
+      tx.id,
+    );
+  }
+
+  function openConfirmAmounts(txId?: string) {
+    setConfirmAmountsTxId(txId ?? null);
+    setConfirmAmountsOpen(true);
+  }
+
+  const summary = useMemo(
+    () => reportingTotals(monthly, ledger.accounts, repCurr),
+    [monthly, ledger.accounts, repCurr, fxRevision],
+  );
   const net = useMemo(
     () =>
-      ledger.accounts.reduce((s, a) => s + balance(a, ledger.transactions), 0),
-    [ledger.accounts, ledger.transactions],
+      totalNetBalanceInReporting(
+        ledger.accounts,
+        ledger.transactions,
+        repCurr,
+      ).total,
+    [ledger.accounts, ledger.transactions, repCurr, fxRevision],
   );
+  const concealed = (v: number, currency?: string) =>
+    hidden ? "••••••" : money(v, currency ?? repCurr);
   const balanceNote = (a: Account, short = false) =>
     hasBalanceAnchor(a)
-      ? `${concealed(a.opening_balance)}${short ? " · " : " at end of "}${new Date(
+      ? `${concealed(a.opening_balance, accountCurrency(a))}${short ? " · " : " at end of "}${new Date(
           balanceAsOfDate(a) + "T12:00:00Z",
         ).toLocaleDateString("en-GB", {
           day: "numeric",
@@ -1448,10 +1606,16 @@ function App() {
   }, [ledger.transactions]);
   const spending = useMemo<SpendingItem[]>(() => {
     const byCategory = new Map<string, number>();
+    const accCurrMap = accountCurrencyMap(ledger.accounts);
     let uncategorized = 0;
     for (const t of monthly) {
       if (t.type !== "expense") continue;
-      for (const part of transactionCategoryAmounts(t)) {
+      const fromCurr = accCurrMap.get(t.account_id) ?? repCurr;
+      for (const part of transactionCategoryAmountsInReporting(
+        t,
+        fromCurr,
+        repCurr,
+      ).parts) {
         if (part.category_id) {
           byCategory.set(
             part.category_id,
@@ -1478,8 +1642,7 @@ function App() {
       });
     }
     return items;
-  }, [monthly, ledger.categories]);
-  const concealed = (v: number) => (hidden ? "••••••" : money(v));
+  }, [monthly, ledger.categories, ledger.accounts, repCurr, fxRevision]);
   const budgetRangeStart =
     view === "all"
       ? (ledger.budgets ?? []).reduce(
@@ -1534,6 +1697,7 @@ function App() {
 
   const hasOpenModal = Boolean(
     settingsOpen ||
+      confirmAmountsOpen ||
       rulesOpen ||
       smsAutoCaptureOpen ||
       captureAlertsOpen ||
@@ -1566,7 +1730,8 @@ function App() {
     page,
     hasOpenModal,
     onCloseTopModal: () => {
-      if (quickAdd) setQuickAdd(null);
+      if (confirmAmountsOpen) setConfirmAmountsOpen(false);
+      else if (quickAdd) setQuickAdd(null);
       else if (mobileEditQuickTx) setMobileEditQuickTx(null);
       else if (mobileSelectedTx) setMobileSelectedTx(null);
       else if (smsAutoCaptureOpen) setSmsAutoCaptureOpen(false);
@@ -1768,6 +1933,11 @@ function App() {
         save={save}
         settingsOpen={settingsOpen}
         setSettingsOpen={setSettingsOpen}
+        onSaveUserSettings={handleSaveUserSettings}
+        confirmAmountsOpen={confirmAmountsOpen}
+        confirmAmountsTxId={confirmAmountsTxId}
+        setConfirmAmountsOpen={setConfirmAmountsOpen}
+        onConfirmForeignAmount={handleConfirmForeignAmount}
         deleteOpen={deleteOpen}
         setDeleteOpen={setDeleteOpen}
         accountToDelete={accountToDelete}
@@ -1947,6 +2117,8 @@ function App() {
           onEditBudget={(item) => setBudgetModal({ item })}
           onOpenSmsAutoCapture={(accountId) => openSmsAutoCapture(accountId)}
           onOpenCaptureAlerts={() => setCaptureAlertsOpen(true)}
+          estimatedCount={estimatedList.length}
+          onOpenConfirmAmounts={openConfirmAmounts}
           onOpenRules={() => setRulesOpen(true)}
           onOpenImport={() => setImportOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
@@ -2006,6 +2178,7 @@ function App() {
           page={page}
           demo={demo}
           session={session}
+          currency={repCurr}
           onOpenSettings={() => setSettingsOpen(true)}
         />
         <div className="content">
@@ -2079,6 +2252,8 @@ function App() {
               monthly={monthly}
               month={month}
               busy={busy}
+              estimatedCount={estimatedList.length}
+              onOpenConfirmAmounts={openConfirmAmounts}
               onNavigate={setPage}
               onSelectAccount={setAccountFilter}
               onOpenModal={setModal}
@@ -2165,6 +2340,8 @@ function App() {
               pendingAlertCount={
                 pendingCapturedAlerts(ledger.captured_alerts).length
               }
+              estimatedCount={estimatedList.length}
+              onOpenConfirmAmounts={openConfirmAmounts}
               onOpenCaptureAlerts={() => setCaptureAlertsOpen(true)}
               onEditSelected={setBulkItems}
               onDeleteSelected={(items) =>

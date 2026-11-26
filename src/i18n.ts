@@ -1,4 +1,5 @@
 import { ARABIC_UI } from "./arabicUi.ts";
+import { formatCurrency } from "./currency.ts";
 import {
   createContext,
   createElement,
@@ -155,17 +156,38 @@ const en = {
   "reports.netCashFlow": "Net cash flow",
 
   // Quick Add
-  "quickAdd.eyebrow": "QUICK ADD · AED",
+  "quickAdd.eyebrow": "QUICK ADD",
   "quickAdd.title": "Add transaction",
   "quickAdd.offline": "You're offline — reconnect to save changes.",
   "quickAdd.expense": "Expense",
   "quickAdd.income": "Income",
-  "quickAdd.amount": "Amount (AED)",
+  "quickAdd.amount": "Amount",
   "quickAdd.account": "Account",
   "quickAdd.category": "Category",
   "quickAdd.payee": "Payee",
   "quickAdd.date": "Date",
   "quickAdd.save": "Save transaction",
+
+  // Multi-currency & FX
+  "fx.reportingCurrency": "Reporting currency",
+  "fx.reportingCurrencyHint":
+    "Totals, budgets, net worth and reports across accounts convert into this currency.",
+  "fx.confirmMode": "Ask me to confirm foreign amounts",
+  "fx.confirmModeHint":
+    "When a foreign-currency purchase is estimated, ask you to enter the actual amount charged.",
+  "fx.confirmAlways": "Always",
+  "fx.confirmAbove": "Only above threshold",
+  "fx.confirmNever": "Never",
+  "fx.confirmThreshold": "Confirm above",
+  "fx.confirmAmounts": "Confirm amounts",
+  "fx.estimated": "Estimated",
+  "fx.looksRight": "Looks right",
+  "fx.confirmRealAmount": "Confirm real amount",
+  "fx.includesEstimated": "Includes {count} estimated amounts",
+  "fx.includesEstimatedOne": "Includes 1 estimated amount",
+  "fx.searchCurrency": "Search currency code or name…",
+  "fx.recentCurrencies": "Recent",
+  "fx.allCurrencies": "All currencies",
 
   // Auth Screen
   "auth.eyebrow": "A LITTLE MORE CLARITY",
@@ -375,17 +397,38 @@ const ar: Record<TranslationKey, string> = {
   "reports.netCashFlow": "صافي التدفق النقدي",
 
   // Quick Add
-  "quickAdd.eyebrow": "إضافة سريعة · درهم",
+  "quickAdd.eyebrow": "إضافة سريعة",
   "quickAdd.title": "إضافة معاملة",
   "quickAdd.offline": "أنت غير متصل — أعد الاتصال لحفظ التغييرات.",
   "quickAdd.expense": "مصروف",
   "quickAdd.income": "دخل",
-  "quickAdd.amount": "المبلغ (درهم)",
+  "quickAdd.amount": "المبلغ",
   "quickAdd.account": "الحساب",
   "quickAdd.category": "الفئة",
   "quickAdd.payee": "المستفيد",
   "quickAdd.date": "التاريخ",
   "quickAdd.save": "حفظ المعاملة",
+
+  // Multi-currency & FX
+  "fx.reportingCurrency": "عملة التقارير",
+  "fx.reportingCurrencyHint":
+    "تُحوَّل الإجماليات والميزانيات وصافي الثروة والتقارير عبر الحسابات إلى هذه العملة.",
+  "fx.confirmMode": "اطلب مني تأكيد المبالغ بعملات أجنبية",
+  "fx.confirmModeHint":
+    "عند تقدير عملية شراء بعملة أجنبية، يُطلب منك إدخال المبلغ الفعلي المخصوم.",
+  "fx.confirmAlways": "دائماً",
+  "fx.confirmAbove": "فقط فوق الحد",
+  "fx.confirmNever": "أبداً",
+  "fx.confirmThreshold": "تأكيد فوق",
+  "fx.confirmAmounts": "تأكيد المبالغ",
+  "fx.estimated": "تقديري",
+  "fx.looksRight": "يبدو صحيحاً",
+  "fx.confirmRealAmount": "تأكيد المبلغ الفعلي",
+  "fx.includesEstimated": "يتضمن {count} مبالغ تقديرية",
+  "fx.includesEstimatedOne": "يتضمن مبلغاً تقديرياً واحداً",
+  "fx.searchCurrency": "ابحث برمز العملة أو اسمها…",
+  "fx.recentCurrencies": "الأخيرة",
+  "fx.allCurrencies": "جميع العملات",
 
   // Auth Screen
   "auth.eyebrow": "قليل من الوضوح",
@@ -533,14 +576,19 @@ export function t(
   return template;
 }
 
+export function formatLocalizedCurrency(
+  minorUnits: number,
+  currency: string = "AED",
+  locale: Locale = currentLocale,
+): string {
+  return formatCurrency(minorUnits, currency, locale === "ar" ? "ar-AE" : "en-AE");
+}
+
 export function formatLocalizedAed(
   amountFils: number,
   locale: Locale = currentLocale,
 ): string {
-  return new Intl.NumberFormat(locale === "ar" ? "ar-AE" : "en-AE", {
-    style: "currency",
-    currency: "AED",
-  }).format(amountFils / 100);
+  return formatLocalizedCurrency(amountFils, "AED", locale);
 }
 
 export function formatLocalizedNumber(

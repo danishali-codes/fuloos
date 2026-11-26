@@ -6,6 +6,12 @@ import {
   X,
 } from "lucide-react";
 import {
+  formatCurrency,
+  formatFxRate,
+  normalizeCurrencyCode,
+} from "../currency";
+import {
+  accountCurrency,
   money,
   today,
   type Account,
@@ -74,13 +80,23 @@ export function MobileTxCard({
       ? "var(--m-trf-bg)"
       : hexAlpha(category?.color ?? "#1b4a39", 0.16);
 
+  const accCurr = accountCurrency(account);
+  const origCurr = tx.original_currency
+    ? normalizeCurrencyCode(tx.original_currency)
+    : accCurr;
+  const showForeign =
+    origCurr !== accCurr && tx.original_amount !== undefined;
+  const isEst = tx.fx_status === "estimated";
+
   const accountSubtitle =
     tx.type === "transfer"
       ? `${account?.name ?? uiText("Account")} → ${toAccount?.name ?? uiText("Account")}`
       : account?.name ?? uiText("Account");
 
   const sign = tx.type === "income" ? "+" : tx.type === "expense" ? "−" : "";
-  const formattedAmt = hidden ? "••••••" : `${sign}${money(tx.amount)}`;
+  const formattedAmt = hidden
+    ? "••••••"
+    : `${isEst ? "≈ " : ""}${sign}${money(tx.amount, accCurr)}`;
   const isSms = Boolean(tx.tags?.some((tag) => /sms/i.test(tag)));
   const isSplit = Boolean(tx.splits && tx.splits.length > 0);
 
@@ -99,6 +115,14 @@ export function MobileTxCard({
         </div>
         <div className="m-tx-meta">
           <span>{accountSubtitle}</span>
+          {showForeign && (
+            <span className="m-mini-tag">
+              {hidden
+                ? origCurr
+                : formatCurrency(tx.original_amount!, origCurr)}
+            </span>
+          )}
+          {isEst && <span className="m-mini-tag">≈ {uiText("Est.")}</span>}
           {isSms && <span className="m-mini-tag">SMS</span>}
           {isSplit && <span className="m-mini-tag">{uiText("Split")}</span>}
         </div>
@@ -131,6 +155,7 @@ export function MobileTxDetailSheet({
   onClose,
   onQuickEdit,
   onFullEdit,
+  onConfirmAmount,
   onDelete,
 }: {
   tx: Transaction;
@@ -142,6 +167,7 @@ export function MobileTxDetailSheet({
   onClose: () => void;
   onQuickEdit: (tx: Transaction) => void;
   onFullEdit: (tx: Transaction) => void;
+  onConfirmAmount?: (tx: Transaction) => void;
   onDelete: (tx: Transaction) => void;
 }) {
   const badgeBg =
@@ -149,6 +175,14 @@ export function MobileTxDetailSheet({
       ? "var(--m-trf-bg)"
       : hexAlpha(category?.color ?? "#1b4a39", 0.16);
   const sign = tx.type === "income" ? "+" : tx.type === "expense" ? "−" : "";
+  const accCurr = accountCurrency(account);
+  const toAccCurr = accountCurrency(toAccount);
+  const origCurr = tx.original_currency
+    ? normalizeCurrencyCode(tx.original_currency)
+    : accCurr;
+  const showForeign =
+    origCurr !== accCurr && tx.original_amount !== undefined;
+  const isEst = tx.fx_status === "estimated";
   const accountLabel =
     tx.type === "transfer"
       ? `${account?.name ?? ""} → ${toAccount?.name ?? ""}`
@@ -201,7 +235,7 @@ export function MobileTxDetailSheet({
           }}
         >
           <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--m-muted)", textTransform: "uppercase" }}>
-            {tx.type}
+            {tx.type} {isEst ? `· ${uiText("Estimated")}` : ""}
           </div>
           <div
             className={`m-num ${
@@ -219,8 +253,23 @@ export function MobileTxDetailSheet({
                     : "var(--m-trf)",
             }}
           >
-            {hidden ? "••••••" : `${sign}${money(tx.amount)}`}
+            {hidden
+              ? "••••••"
+              : `${isEst ? "≈ " : ""}${sign}${money(tx.amount, accCurr)}`}
           </div>
+          {showForeign && !hidden && (
+            <div style={{ fontSize: 12.5, color: "var(--m-text-soft)", marginTop: 4 }}>
+              {formatCurrency(tx.original_amount!, origCurr)}
+              {tx.fx_rate && tx.fx_rate > 0
+                ? ` · 1 ${origCurr} = ${formatFxRate(tx.fx_rate)} ${accCurr}`
+                : ""}
+            </div>
+          )}
+          {tx.type === "transfer" && tx.to_amount !== undefined && toAccCurr !== accCurr && !hidden && (
+            <div style={{ fontSize: 12.5, color: "var(--m-text-soft)", marginTop: 4 }}>
+              → {money(tx.to_amount, toAccCurr)}
+            </div>
+          )}
           <div style={{ fontSize: 12.5, color: "var(--m-text-soft)", marginTop: 4 }}>
             {accountLabel}
           </div>
@@ -240,6 +289,21 @@ export function MobileTxDetailSheet({
           )}
         </div>
 
+        {isEst && onConfirmAmount && (
+          <button
+            type="button"
+            className="m-primary-btn"
+            style={{ height: 44, fontSize: 13.5 }}
+            disabled={busy}
+            onClick={() => {
+              onClose();
+              onConfirmAmount(tx);
+            }}
+          >
+            {uiText("Confirm real amount")}
+          </button>
+        )}
+
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <button
             type="button"
@@ -248,10 +312,7 @@ export function MobileTxDetailSheet({
             disabled={busy}
             onClick={() => {
               onClose();
-              // Split and foreign-currency rows carry fields the calculator
-              // sheet cannot edit; changing only the amount would leave their
-              // splits / original amount out of sync, so use the full editor.
-              if (tx.splits?.length || tx.original_currency) onFullEdit(tx);
+              if (tx.splits?.length || showForeign) onFullEdit(tx);
               else onQuickEdit(tx);
             }}
           >

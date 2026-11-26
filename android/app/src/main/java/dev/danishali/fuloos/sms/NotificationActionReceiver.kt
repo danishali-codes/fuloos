@@ -4,19 +4,29 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import androidx.core.app.RemoteInput
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import java.math.BigDecimal
+import java.math.MathContext
+import java.math.RoundingMode
 
 /**
  * Handles interactive Android notification buttons without requiring the user
  * to open the full app:
  * - [ACTION_QUICK_CATEGORIZE]: creates the transaction with the tapped category,
- *   marks the PocketBase captured alert imported, records a learning example,
+ *   marks the captured alert imported, records a learning example,
  *   and dismisses the notification.
- * - [ACTION_UNDO_TX]: deletes a recently auto-added transaction in PocketBase
+ * - [ACTION_UNDO_TX]: deletes a recently auto-added transaction
  *   and marks the SMS hash as dismissed.
+ * - [ACTION_CONFIRM_FX_REPLY]: parses the user's inline reply for the actual
+ *   charged account amount, recomputes the implied exchange rate, queues a
+ *   PATCH updating `amount`, `fx_rate`, `fx_source = "user_confirmed"`, and
+ *   `fx_status = "exact"`, and dismisses the notification.
+ * - [ACTION_CONFIRM_FX_ESTIMATE]: confirms the estimated amount as
+ *   `user_confirmed` / `exact` and dismisses the notification.
  */
 class NotificationActionReceiver : BroadcastReceiver() {
 
@@ -30,6 +40,8 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 when (action) {
                     ACTION_QUICK_CATEGORIZE -> handleQuickCategorize(appContext, intent)
                     ACTION_UNDO_TX -> handleUndoTransaction(appContext, intent)
+                    ACTION_CONFIRM_FX_REPLY -> handleConfirmFxReply(appContext, intent)
+                    ACTION_CONFIRM_FX_ESTIMATE -> handleConfirmFxEstimate(appContext, intent)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Notification action $action failed", e)
@@ -114,6 +126,119 @@ class NotificationActionReceiver : BroadcastReceiver() {
         }
     }
 
+    private fun handleConfirmFxReply(context: Context, intent: Intent) {
+        val notifId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, 0)
+        val expectedOwner = intent.getStringExtra(EXTRA_OWNER_KEY).orEmpty()
+        val session = SecureAuthStore(context).load()
+        if (session == null || (expectedOwner.isNotBlank() && session.ownerKey != expectedOwner)) {
+            SmsNotificationHelper.cancel(context, notifId)
+            return
+        }
+
+        val txId = intent.getStringExtra(EXTRA_TRANSACTION_ID).orEmpty()
+        val accCurr = intent.getStringExtra(EXTRA_ACCOUNT_CURRENCY).orEmpty().ifBlank { "AED" }
+        val origCurr = intent.getStringExtra(EXTRA_ORIGINAL_CURRENCY).orEmpty().ifBlank { accCurr }
+        val origMinor = intent.getLongExtra(EXTRA_ORIGINAL_AMOUNT, 0L)
+        val prevRate = intent.getDoubleExtra(EXTRA_FX_RATE, 1.0)
+
+        val replyText = RemoteInput.getResultsFromIntent(intent)
+            ?.getCharSequence(KEY_ACTUAL_AMOUNT_REPLY)
+            ?.toString()
+            ?.trim()
+            .orEmpty()
+
+        val actualMinor = SmsNotificationHelper.parseCurrencyMinor(replyText, accCurr)
+        if (txId.isBlank() || actualMinor == null || actualMinor <= 0L) {
+            Log.w(TAG, "Ignoring invalid foreign-amount notification reply for tx=$txId")
+            SmsNotificationHelper.cancel(context, notifId)
+            return
+        }
+
+        val impliedRate = computeImpliedRate(
+            actualMinor = actualMinor,
+            accountCurrency = accCurr,
+            originalMinor = origMinor,
+            originalCurrency = origCurr,
+            fallbackRate = prevRate,
+        )
+
+        val patch = JSONObject().apply {
+            put("amount", actualMinor)
+            put("fx_rate", impliedRate)
+            put("fx_source", "user_confirmed")
+            put("fx_status", "exact")
+        }
+
+        val pb = BackgroundSyncClient(context)
+        val res = pb.patchTransaction(txId, patch, queueOnNetworkFailure = true)
+        val accepted = res is BackgroundSyncClient.ApiResult.Success ||
+            res is BackgroundSyncClient.ApiResult.QueuedOffline
+
+        SmsNotificationHelper.cancel(context, notifId)
+        if (accepted) {
+            FuloosSmsPlugin.notifySmsProcessed(
+                action = "auto_add",
+                transactionId = txId,
+                alertId = null,
+                accountId = null,
+            )
+        }
+    }
+
+    private fun handleConfirmFxEstimate(context: Context, intent: Intent) {
+        val notifId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, 0)
+        val expectedOwner = intent.getStringExtra(EXTRA_OWNER_KEY).orEmpty()
+        val session = SecureAuthStore(context).load()
+        if (session == null || (expectedOwner.isNotBlank() && session.ownerKey != expectedOwner)) {
+            SmsNotificationHelper.cancel(context, notifId)
+            return
+        }
+
+        val txId = intent.getStringExtra(EXTRA_TRANSACTION_ID).orEmpty()
+        if (txId.isBlank()) {
+            SmsNotificationHelper.cancel(context, notifId)
+            return
+        }
+
+        val patch = JSONObject().apply {
+            put("fx_source", "user_confirmed")
+            put("fx_status", "exact")
+        }
+        val pb = BackgroundSyncClient(context)
+        val res = pb.patchTransaction(txId, patch, queueOnNetworkFailure = true)
+        val accepted = res is BackgroundSyncClient.ApiResult.Success ||
+            res is BackgroundSyncClient.ApiResult.QueuedOffline
+
+        SmsNotificationHelper.cancel(context, notifId)
+        if (accepted) {
+            FuloosSmsPlugin.notifySmsProcessed(
+                action = "auto_add",
+                transactionId = txId,
+                alertId = null,
+                accountId = null,
+            )
+        }
+    }
+
+    private fun computeImpliedRate(
+        actualMinor: Long,
+        accountCurrency: String,
+        originalMinor: Long,
+        originalCurrency: String,
+        fallbackRate: Double,
+    ): Double {
+        if (originalMinor <= 0L) return if (fallbackRate.isFinite() && fallbackRate > 0.0) fallbackRate else 1.0
+        val accDec = SmsNotificationHelper.currencyDecimals(accountCurrency)
+        val origDec = SmsNotificationHelper.currencyDecimals(originalCurrency)
+        val actualMajor = BigDecimal.valueOf(actualMinor).movePointLeft(accDec)
+        val origMajor = BigDecimal.valueOf(originalMinor).movePointLeft(origDec)
+        if (origMajor <= BigDecimal.ZERO) return 1.0
+        val rate = actualMajor.divide(origMajor, MathContext.DECIMAL64)
+            .setScale(6, RoundingMode.HALF_UP)
+            .toDouble()
+        return if (rate.isFinite() && rate > 0.0) rate else 1.0
+    }
+
     private fun hasLearningConsent(db: FuloosLocalDb, ownerKey: String): Boolean {
         val raw = db.getEngineContextJson(ownerKey) ?: return false
         return try {
@@ -165,6 +290,10 @@ class NotificationActionReceiver : BroadcastReceiver() {
 
         const val ACTION_QUICK_CATEGORIZE = "dev.danishali.fuloos.ACTION_QUICK_CATEGORIZE"
         const val ACTION_UNDO_TX = "dev.danishali.fuloos.ACTION_UNDO_TX"
+        const val ACTION_CONFIRM_FX_REPLY = "dev.danishali.fuloos.ACTION_CONFIRM_FX_REPLY"
+        const val ACTION_CONFIRM_FX_ESTIMATE = "dev.danishali.fuloos.ACTION_CONFIRM_FX_ESTIMATE"
+
+        const val KEY_ACTUAL_AMOUNT_REPLY = "key_actual_amount_reply"
 
         const val EXTRA_NOTIFICATION_ID = "notification_id"
         const val EXTRA_ALERT_ID = "alert_id"
@@ -176,5 +305,10 @@ class NotificationActionReceiver : BroadcastReceiver() {
         const val EXTRA_TRANSACTION_ID = "transaction_id"
         const val EXTRA_QUEUED_WRITE_ID = "queued_write_id"
         const val EXTRA_OWNER_KEY = "owner_key"
+        const val EXTRA_ACCOUNT_CURRENCY = "account_currency"
+        const val EXTRA_ORIGINAL_AMOUNT = "original_amount"
+        const val EXTRA_ORIGINAL_CURRENCY = "original_currency"
+        const val EXTRA_ESTIMATED_AMOUNT = "estimated_amount"
+        const val EXTRA_FX_RATE = "fx_rate"
     }
 }

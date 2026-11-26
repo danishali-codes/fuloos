@@ -6,6 +6,7 @@ import {
 import {
   defaultNotificationPreferences,
   defaultRecurringPreferences,
+  defaultUserSettings,
   type Account,
   type Budget,
   type CaptureAlertStatus,
@@ -22,6 +23,7 @@ import {
   type SavingsGoal,
   type Transaction,
   type TransactionRule,
+  type UserSettings,
 } from "./domain.ts";
 import type { NetWorthItem, NetWorthSnapshot } from "./netWorth.ts";
 import {
@@ -38,6 +40,7 @@ import {
   type RecordTypes,
   type SavedNotificationPreferences,
   type SavedRecurringPreferences,
+  type SavedUserSettings,
   type Session,
   type StorageLike,
   type Table,
@@ -66,6 +69,7 @@ import {
  * - `notify-test` (POST, JWT) -> { ok, message }
  * - `push-test` (POST, JWT) -> { ok, message }
  * - `inbound-capture` (POST, capture token) -> webhook endpoint shown in UI
+ * - `fx-rate` (POST, JWT) -> { rate, rate_date, provider } (receives only { from, to, date })
  *
  * Storage bucket (Phase 1/2):
  * - `receipts` (private bucket, object key `<transaction_id>/<filename>`)
@@ -87,6 +91,13 @@ const NULLABLE_TEXT_FIELDS = new Set([
   "set_category_id",
   "currency",
   "original_currency",
+  "fx_rate_date",
+  "fx_source",
+  "fx_status",
+  "parsed_currency",
+  "parsed_fx_rate_date",
+  "parsed_fx_source",
+  "parsed_fx_status",
   "household_id",
   "default_account_id",
   "parsed_date",
@@ -108,6 +119,9 @@ const NULLABLE_NUMERIC_FIELDS = new Set([
   "max_amount",
   "original_amount",
   "fx_rate",
+  "to_amount",
+  "parsed_original_amount",
+  "parsed_fx_rate",
 ]);
 
 /** supabase-js accepts async storage; the Android app keeps the session in the Keystore. */
@@ -874,6 +888,7 @@ export class SupabaseBackend implements FuloosBackend {
       recurring,
       recurringOccurrences,
       recurringPrefs,
+      userSettingsRows,
       budgets,
       goals,
       goalContributions,
@@ -887,6 +902,7 @@ export class SupabaseBackend implements FuloosBackend {
       this.optionalRows<RecurringSchedule>("recurring"),
       this.optionalRows<RecurringOccurrenceRecord>("recurring_occurrences"),
       this.optionalRows<SavedRecurringPreferences>("recurring_prefs"),
+      this.optionalRows<SavedUserSettings>("user_settings"),
       this.optionalRows<Budget>("budgets"),
       this.optionalRows<SavingsGoal>("goals"),
       this.optionalRows<GoalContribution>("goal_contributions"),
@@ -905,6 +921,9 @@ export class SupabaseBackend implements FuloosBackend {
       recurring_prefs: recurringPrefs[0]
         ? normalizeRecord("recurring_prefs", recurringPrefs[0])
         : { ...defaultRecurringPreferences },
+      user_settings: userSettingsRows[0]
+        ? normalizeRecord("user_settings", userSettingsRows[0])
+        : { ...defaultUserSettings },
       budgets: budgets.map((b) => normalizeRecord("budgets", b)),
       goals: goals.map((g) => normalizeRecord("goals", g)),
       goal_contributions: goalContributions.map((c) =>
@@ -924,7 +943,7 @@ export class SupabaseBackend implements FuloosBackend {
    * Translates Fuloos payloads to Postgres column conventions:
    * - converts empty strings on nullable FK/date/enum/text columns to `null`
    * - enforces current `user_id` on insert
-   * - clears foreign currency fields when currency is empty or AED
+   * - preserves multi-currency fields (`original_currency`, `original_amount`, `fx_*`)
    */
   private prepareBody<K extends Table>(
     table: K,
@@ -952,11 +971,16 @@ export class SupabaseBackend implements FuloosBackend {
     if (
       table === "transactions" &&
       "original_currency" in body &&
-      (!body.original_currency || body.original_currency === "AED")
+      !body.original_currency
     ) {
       body.original_currency = null;
       body.original_amount = null;
       body.fx_rate = null;
+    } else if (
+      table === "transactions" &&
+      typeof body.original_currency === "string"
+    ) {
+      body.original_currency = body.original_currency.trim().toUpperCase();
     }
     if (table === "recurring_prefs" && "dismissed_keys" in body) {
       body.dismissed_keys = serializeDismissedKeys(body.dismissed_keys);
@@ -1376,6 +1400,72 @@ export class SupabaseBackend implements FuloosBackend {
 
   async sendTestNotificationEmail(): Promise<{ ok: boolean; message: string }> {
     return this.invokeFunction<{ ok: boolean; message: string }>("notify-test");
+  }
+
+  async loadUserSettings(): Promise<{
+    settings: UserSettings;
+    supported: boolean;
+  }> {
+    if (!this.session) throw new Error("Please sign in.");
+    try {
+      const rows = await this.rows<SavedUserSettings>("user_settings");
+      return {
+        settings: rows[0]
+          ? normalizeRecord("user_settings", rows[0])
+          : { ...defaultUserSettings },
+        supported: true,
+      };
+    } catch (e) {
+      if (e instanceof MissingCollectionError) {
+        return { settings: { ...defaultUserSettings }, supported: false };
+      }
+      throw e;
+    }
+  }
+
+  async saveUserSettings(settings: UserSettings): Promise<UserSettings> {
+    if (!this.session) throw new Error("Please sign in.");
+    const body = {
+      reporting_currency: settings.reporting_currency.trim().toUpperCase() || "AED",
+      confirm_foreign_mode: settings.confirm_foreign_mode,
+      confirm_foreign_threshold: Math.max(
+        0,
+        Math.trunc(Number(settings.confirm_foreign_threshold) || 0),
+      ),
+    };
+    return this.save("user_settings", body, settings.id || undefined);
+  }
+
+  async fetchFxRate(
+    from: string,
+    to: string,
+    date: string,
+  ): Promise<{ rate: number; rate_date: string; provider: string } | null> {
+    if (!this.session) return null;
+    // Privacy: send ONLY currency codes and date — never amounts, merchants, or account data.
+    const res = await this.invokeFunction<{
+      rate?: number;
+      rate_date?: string;
+      provider?: string;
+    }>("fx-rate", {
+      from: from.trim().toUpperCase(),
+      to: to.trim().toUpperCase(),
+      date: date.trim().slice(0, 10),
+    });
+    if (
+      res &&
+      typeof res.rate === "number" &&
+      Number.isFinite(res.rate) &&
+      res.rate > 0 &&
+      typeof res.rate_date === "string"
+    ) {
+      return {
+        rate: res.rate,
+        rate_date: res.rate_date,
+        provider: String(res.provider ?? "edge"),
+      };
+    }
+    return null;
   }
 
   async loadPushSubscriptions(): Promise<{

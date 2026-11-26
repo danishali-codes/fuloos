@@ -16,22 +16,24 @@ import {
 } from "lucide-react";
 import { ColorPicker, EmojiField } from "./Appearance";
 import {
-  convertToAedFils,
-  DEFAULT_CURRENCY,
+  computeImpliedRate,
+  convertMinor,
+  formatCurrency,
   formatCurrencyInput,
-  getReferenceFxRate,
+  formatFxRate,
   normalizeCurrencyCode,
   parseCurrencyMinor,
-  REFERENCE_RATES_NOTE,
-  SUPPORTED_CURRENCIES,
+  type FxSource,
+  type FxStatus,
 } from "./currency";
+import { CurrencyPicker } from "./CurrencyPicker";
 import {
+  accountCurrency,
   balance,
   balanceAsOfDate,
   errorMessage,
   hasBalanceAnchor,
   isIsoCalendarDate,
-  minor,
   money,
   NO_BALANCE_DATE,
   openingDateFor,
@@ -51,6 +53,7 @@ import {
   splitRemainder,
   validateReceiptFile,
 } from "./enrichment";
+import { fxRateService } from "./fxRates";
 import { applyRules } from "./rules";
 import { TagInput } from "./TagInput";
 
@@ -113,55 +116,70 @@ export function Editor({
   const [accountType, setAccountType] = useState<AccountType>(
     accItem?.type ?? "current",
   );
+  const [accountFormCurrency, setAccountFormCurrency] = useState<string>(() =>
+    normalizeCurrencyCode(accItem?.currency),
+  );
   const [kind, setKind] = useState<Kind>(txItem ? txItem.type : "expense"),
     [error, setError] = useState("");
-  const [amountText, setAmountText] = useState(
-    txItem ? (txItem.amount / 100).toFixed(2) : "",
-  );
   const [accountId, setAccountId] = useState(
     () => txItem?.account_id ?? ledger.accounts[0]?.id ?? "",
   );
-  const initialAccountCurrency = normalizeCurrencyCode(
-    ledger.accounts.find(
-      (a) => a.id === (txItem?.account_id ?? ledger.accounts[0]?.id),
-    )?.currency,
+  const [toAccountId, setToAccountId] = useState(
+    () => txItem?.to_account_id ?? "",
   );
-  const [foreignEnabled, setForeignEnabled] = useState(() =>
-    txItem
-      ? Boolean(
-          txItem.original_currency &&
-          txItem.original_currency !== DEFAULT_CURRENCY,
-        )
-      : initialAccountCurrency !== DEFAULT_CURRENCY,
-  );
-  const [originalCurrency, setOriginalCurrency] = useState(() => {
-    if (
-      txItem?.original_currency &&
-      txItem.original_currency !== DEFAULT_CURRENCY
-    ) {
-      return txItem.original_currency;
+  const [dateValue, setDateValue] = useState(() => txItem?.date ?? today());
+
+  const selectedAccount = ledger.accounts.find((a) => a.id === accountId);
+  const accCurr = accountCurrency(selectedAccount);
+  const selectedToAccount = ledger.accounts.find((a) => a.id === toAccountId);
+  const toAccCurr = accountCurrency(selectedToAccount);
+
+  const [txCurrency, setTxCurrency] = useState<string>(() => {
+    if (txItem?.original_currency) {
+      return normalizeCurrencyCode(txItem.original_currency);
     }
-    return initialAccountCurrency !== DEFAULT_CURRENCY
-      ? initialAccountCurrency
-      : "USD";
+    return accountCurrency(
+      ledger.accounts.find(
+        (a) => a.id === (txItem?.account_id ?? ledger.accounts[0]?.id),
+      ),
+    );
   });
-  const [originalAmountText, setOriginalAmountText] = useState(() =>
-    txItem?.original_currency &&
-    txItem.original_currency !== DEFAULT_CURRENCY &&
-    txItem.original_amount !== undefined
-      ? formatCurrencyInput(txItem.original_amount, txItem.original_currency)
-      : "",
+
+  const [originalAmountText, setOriginalAmountText] = useState(() => {
+    if (!txItem) return "";
+    const origCurr = normalizeCurrencyCode(txItem.original_currency ?? accCurr);
+    const origAmt = txItem.original_amount ?? txItem.amount;
+    return formatCurrencyInput(origAmt, origCurr);
+  });
+  const [amountText, setAmountText] = useState(() =>
+    txItem ? formatCurrencyInput(txItem.amount, accCurr) : "",
   );
-  const [fxRateText, setFxRateText] = useState(() => {
-    if (txItem?.fx_rate && txItem.fx_rate > 0) return String(txItem.fx_rate);
-    const curr =
-      txItem?.original_currency && txItem.original_currency !== DEFAULT_CURRENCY
-        ? txItem.original_currency
-        : initialAccountCurrency !== DEFAULT_CURRENCY
-          ? initialAccountCurrency
-          : "USD";
-    return String(getReferenceFxRate(curr));
+  const [toAmountText, setToAmountText] = useState(() => {
+    if (!txItem || txItem.type !== "transfer") return "";
+    const destAcc = ledger.accounts.find((a) => a.id === txItem.to_account_id);
+    const destCurr = accountCurrency(destAcc);
+    return formatCurrencyInput(txItem.to_amount ?? txItem.amount, destCurr);
   });
+  const [fxRateText, setFxRateText] = useState(() =>
+    txItem?.fx_rate && txItem.fx_rate > 0 ? formatFxRate(txItem.fx_rate) : "1",
+  );
+  const [fxRateDate, setFxRateDate] = useState(
+    () => txItem?.fx_rate_date ?? txItem?.date ?? today(),
+  );
+  const [fxSource, setFxSource] = useState<FxSource>(
+    () => txItem?.fx_source ?? "same_currency",
+  );
+  const [fxStatus, setFxStatus] = useState<FxStatus>(
+    () => txItem?.fx_status ?? "exact",
+  );
+  const [userEditedAccountAmount, setUserEditedAccountAmount] = useState(
+    () => Boolean(txItem && txItem.fx_status !== "estimated"),
+  );
+  const [userEditedToAmount, setUserEditedToAmount] = useState(
+    () => Boolean(txItem?.to_amount !== undefined),
+  );
+  const [rateLoading, setRateLoading] = useState(false);
+
   const [categoryId, setCategoryId] = useState(
     txItem?.type !== "transfer" ? (txItem?.category_id ?? "") : "",
   );
@@ -171,7 +189,7 @@ export function Editor({
   const [splits, setSplits] = useState<SplitDraftRow[]>(() =>
     (txItem?.splits ?? []).map((s) => ({
       category_id: s.category_id ?? "",
-      amountText: (s.amount / 100).toFixed(2),
+      amountText: formatCurrencyInput(s.amount, accCurr),
       notes: s.notes ?? "",
     })),
   );
@@ -180,6 +198,10 @@ export function Editor({
   const [removeReceipt, setRemoveReceipt] = useState(false);
   const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string>("");
   const [receiptLoading, setReceiptLoading] = useState(false);
+
+  const isForeign = kind !== "transfer" && txCurrency !== accCurr;
+  const isCrossCurrencyTransfer =
+    kind === "transfer" && Boolean(selectedToAccount) && toAccCurr !== accCurr;
 
   const dialog = useRef<HTMLDialogElement>(null);
   const tagSuggestions = useMemo(() => collectLedgerTags(ledger), [ledger]);
@@ -251,19 +273,118 @@ export function Editor({
     demo,
   ]);
 
+  // Fetch live historical rate for foreign transactions or cross-currency transfers.
+  useEffect(() => {
+    if (modal.kind !== "transaction") return;
+    if (isForeign) {
+      if (
+        txItem &&
+        normalizeCurrencyCode(txItem.original_currency) === txCurrency &&
+        txItem.date === dateValue &&
+        txItem.account_id === accountId &&
+        txItem.fx_rate &&
+        txItem.fx_rate > 0
+      ) {
+        return;
+      }
+      let active = true;
+      setRateLoading(true);
+      fxRateService
+        .getRate(txCurrency, accCurr, dateValue)
+        .then((res) => {
+          if (!active) return;
+          if (res.rate !== null && res.rate > 0) {
+            setFxRateText(formatFxRate(res.rate));
+            setFxRateDate(res.rateDate);
+            setFxSource(res.source ?? "manual_rate");
+            setFxStatus(res.status);
+            if (!userEditedAccountAmount && originalAmountText.trim()) {
+              try {
+                const origM = parseCurrencyMinor(originalAmountText, txCurrency);
+                const conv = convertMinor(origM, txCurrency, accCurr, res.rate);
+                setAmountText(formatCurrencyInput(conv, accCurr));
+              } catch {
+                // Ignore partial input.
+              }
+            }
+          } else {
+            setFxRateText("");
+            setFxSource("manual_rate");
+            setFxStatus("estimated");
+          }
+        })
+        .catch(() => {
+          // Keep offline fallback state.
+        })
+        .finally(() => {
+          if (active) setRateLoading(false);
+        });
+      return () => {
+        active = false;
+      };
+    }
+
+    if (isCrossCurrencyTransfer) {
+      let active = true;
+      setRateLoading(true);
+      fxRateService
+        .getRate(accCurr, toAccCurr, dateValue)
+        .then((res) => {
+          if (!active) return;
+          if (res.rate !== null && res.rate > 0) {
+            setFxRateText(formatFxRate(res.rate));
+            setFxRateDate(res.rateDate);
+            setFxSource(res.source ?? "manual_rate");
+            if (!userEditedToAmount && amountText.trim()) {
+              try {
+                const fromM = parseCurrencyMinor(amountText, accCurr);
+                const toM = convertMinor(fromM, accCurr, toAccCurr, res.rate);
+                setToAmountText(formatCurrencyInput(toM, toAccCurr));
+              } catch {
+                // Ignore partial typing.
+              }
+            }
+          }
+        })
+        .catch(() => {
+          // Ignore offline lookup failure.
+        })
+        .finally(() => {
+          if (active) setRateLoading(false);
+        });
+      return () => {
+        active = false;
+      };
+    }
+
+    setRateLoading(false);
+  }, [
+    modal.kind,
+    isForeign,
+    isCrossCurrencyTransfer,
+    txCurrency,
+    accCurr,
+    toAccCurr,
+    dateValue,
+    accountId,
+  ]);
+
   const parsedParentAmount = useMemo(() => {
     try {
-      return amountText.trim() ? minor(amountText) : 0;
+      const txt = isForeign ? amountText : originalAmountText || amountText;
+      return txt.trim() ? parseCurrencyMinor(txt, accCurr) : 0;
     } catch {
       return 0;
     }
-  }, [amountText]);
+  }, [amountText, originalAmountText, isForeign, accCurr]);
 
   const parsedSplits = useMemo<TransactionSplit[]>(() => {
     return splits.map((row) => {
       let amt = 0;
       try {
-        amt = row.amountText.trim() ? minor(row.amountText) : 0;
+        amt = row.amountText.trim()
+          ? parseCurrencyMinor(row.amountText, accCurr)
+          : 0;
       } catch {
         amt = -1;
       }
@@ -273,7 +394,7 @@ export function Editor({
         ...(row.notes.trim() ? { notes: row.notes.trim() } : {}),
       };
     });
-  }, [splits]);
+  }, [splits, accCurr]);
 
   const remainingFils = useMemo(
     () => splitRemainder(parsedParentAmount, parsedSplits),
@@ -311,7 +432,7 @@ export function Editor({
     );
   }
 
-  function syncAedFromForeign(
+  function syncAccountFromOriginal(
     nextOrigText: string,
     nextCurr: string,
     nextRateText: string,
@@ -321,8 +442,8 @@ export function Editor({
       const origMinor = parseCurrencyMinor(nextOrigText, nextCurr);
       const rate = Number(nextRateText);
       if (origMinor >= 0 && Number.isFinite(rate) && rate > 0) {
-        const aedFils = convertToAedFils(origMinor, nextCurr, rate);
-        setAmountText((aedFils / 100).toFixed(2));
+        const conv = convertMinor(origMinor, nextCurr, accCurr, rate);
+        setAmountText(formatCurrencyInput(conv, accCurr));
       }
     } catch {
       // Allow incomplete typing while editing.
@@ -341,6 +462,7 @@ export function Editor({
         if (balanceText && !isIsoCalendarDate(asOf))
           throw new Error("Choose a valid date for the balance.");
         const accType = s("type") as AccountType;
+        const curr = normalizeCurrencyCode(accountFormCurrency);
         let creditCardFields: Record<string, number> = {
           credit_limit: 0,
           statement_day: 0,
@@ -355,10 +477,10 @@ export function Editor({
           const dueText = s("payment_due_day");
           const aprText = s("apr_pct");
 
-          const creditLimit = limitText ? minor(limitText) : 0;
+          const creditLimit = limitText ? parseCurrencyMinor(limitText, curr) : 0;
           if (creditLimit < 0)
             throw new Error("Credit limit must be zero or greater.");
-          const minPayment = minPayText ? minor(minPayText) : 0;
+          const minPayment = minPayText ? parseCurrencyMinor(minPayText, curr) : 0;
           if (minPayment < 0)
             throw new Error("Minimum payment must be zero or greater.");
 
@@ -397,9 +519,9 @@ export function Editor({
         const value = {
           name: s("name"),
           type: accType,
-          currency: normalizeCurrencyCode(s("currency")),
+          currency: curr,
           // No balance given: the balance is just the sum of transactions.
-          opening_balance: balanceText ? minor(balanceText) : 0,
+          opening_balance: balanceText ? parseCurrencyMinor(balanceText, curr) : 0,
           opening_date: balanceText ? openingDateFor(asOf) : NO_BALANCE_DATE,
           color: s("color"),
           emoji: s("emoji"),
@@ -417,40 +539,107 @@ export function Editor({
         if (!value.name) throw new Error("Enter a category name.");
         await save("categories", value, item?.id);
       } else {
-        let foreignFields: Record<string, unknown> = { original_currency: "" };
-        if (foreignEnabled) {
+        const chosenAccountId = accountId || s("account_id");
+        const chosenToAccountId = kind === "transfer" ? toAccountId || s("to_account_id") : null;
+        const chosenDate = dateValue || s("date");
+        const srcCurr = accountCurrency(
+          ledger.accounts.find((a) => a.id === chosenAccountId),
+        );
+        const destCurr = chosenToAccountId
+          ? accountCurrency(
+              ledger.accounts.find((a) => a.id === chosenToAccountId),
+            )
+          : srcCurr;
+
+        let txAmount: number;
+        let origAmount: number;
+        let origCurrency: string;
+        let finalRate = 1;
+        let finalRateDate = chosenDate;
+        let finalSource: FxSource = "same_currency";
+        let finalStatus: FxStatus = "exact";
+        let toAmount: number | undefined;
+
+        if (kind === "transfer") {
+          const fromInput = amountText.trim() || originalAmountText.trim();
+          if (!fromInput) throw new Error(`Enter the ${srcCurr} transfer amount.`);
+          txAmount = parseCurrencyMinor(fromInput, srcCurr);
+          origAmount = txAmount;
+          origCurrency = srcCurr;
+          if (destCurr !== srcCurr) {
+            if (!toAmountText.trim()) {
+              throw new Error(`Enter the receiving ${destCurr} amount.`);
+            }
+            toAmount = parseCurrencyMinor(toAmountText, destCurr);
+            if (toAmount <= 0) {
+              throw new Error("Receiving amount must be greater than zero.");
+            }
+            finalRate = computeImpliedRate(txAmount, srcCurr, toAmount, destCurr) || 1;
+            finalSource = userEditedToAmount ? "user_confirmed" : fxSource;
+            finalStatus = "exact";
+          }
+        } else if (txCurrency !== srcCurr) {
           if (!originalAmountText.trim()) {
-            throw new Error("Enter the original currency amount.");
+            throw new Error(`Enter the ${txCurrency} amount.`);
           }
-          const origMinor = parseCurrencyMinor(
-            originalAmountText,
-            originalCurrency,
-          );
-          const fxRate = Number(fxRateText);
-          if (!Number.isFinite(fxRate) || fxRate <= 0) {
-            throw new Error("Enter an exchange rate greater than zero.");
+          origAmount = parseCurrencyMinor(originalAmountText, txCurrency);
+          origCurrency = txCurrency;
+          if (amountText.trim()) {
+            txAmount = parseCurrencyMinor(amountText, srcCurr);
+            if (userEditedAccountAmount && txAmount > 0) {
+              finalRate =
+                computeImpliedRate(origAmount, txCurrency, txAmount, srcCurr) || 1;
+              finalSource = "user_confirmed";
+              finalStatus = "exact";
+            } else {
+              const r = Number(fxRateText);
+              finalRate = Number.isFinite(r) && r > 0 ? r : 1;
+              finalSource = fxSource === "same_currency" ? "manual_rate" : fxSource;
+              finalStatus = fxStatus;
+            }
+          } else {
+            const r = Number(fxRateText);
+            if (Number.isFinite(r) && r > 0) {
+              txAmount = convertMinor(origAmount, txCurrency, srcCurr, r);
+              finalRate = r;
+              finalSource = fxSource === "same_currency" ? "manual_rate" : fxSource;
+              finalStatus = fxStatus;
+            } else {
+              txAmount = 0;
+              finalRate = 1;
+              finalSource = "manual_rate";
+              finalStatus = "estimated";
+            }
           }
-          foreignFields = {
-            original_currency: originalCurrency,
-            original_amount: origMinor,
-            fx_rate: fxRate,
-          };
+          finalRateDate = fxRateDate || chosenDate;
+        } else {
+          const input = originalAmountText.trim() || amountText.trim();
+          if (!input) throw new Error(`Enter the ${srcCurr} amount.`);
+          txAmount = parseCurrencyMinor(input, srcCurr);
+          origAmount = txAmount;
+          origCurrency = srcCurr;
         }
-        const txAmount = minor(amountText);
+
         const activeSplits =
           kind !== "transfer" && splits.length > 0 ? parsedSplits : [];
         const value: Record<string, unknown> = {
           type: kind,
           amount: txAmount,
-          account_id: accountId || s("account_id"),
-          to_account_id: kind === "transfer" ? s("to_account_id") : null,
+          ...(toAmount !== undefined ? { to_amount: toAmount } : { to_amount: null }),
+          original_amount: origAmount,
+          original_currency: origCurrency,
+          fx_rate: finalRate,
+          fx_rate_date: finalRateDate,
+          fx_source: finalSource,
+          fx_status: finalStatus,
+          account_id: chosenAccountId,
+          to_account_id: chosenToAccountId,
           category_id: kind === "transfer" ? null : categoryId || null,
-          date: s("date"),
+          date: chosenDate,
           payee: payee.trim(),
           notes: notes.trim(),
           tags,
           splits: activeSplits,
-          ...foreignFields,
         };
         validateTransaction(
           { ...(value as Omit<Transaction, "id">), id: item?.id },
@@ -545,123 +734,216 @@ export function Editor({
                 </button>
               ))}
             </div>
-            <label>
-              {" "}
-              {uiText("Amount")} <span className="muted">AED</span>
-              <input
-                name="amount"
-                autoFocus
-                required
-                inputMode="decimal"
-                placeholder="0.00"
-                value={amountText}
-                onChange={(e) => setAmountText(e.target.value)}
-              />
-            </label>
-            <div className="enrichment-section">
-              <div className="enrichment-section-head">
-                <label className="selection-label">
+            {kind === "transfer" ? (
+              <div className="form-row">
+                <label>
+                  {uiText("Amount")} ({accCurr})
                   <input
-                    type="checkbox"
-                    checked={foreignEnabled}
-                    disabled={busy}
+                    name="amount"
+                    autoFocus
+                    required
+                    inputMode="decimal"
+                    placeholder={formatCurrencyInput(0, accCurr)}
+                    value={amountText}
                     onChange={(e) => {
-                      const checked = e.target.checked;
-                      setForeignEnabled(checked);
-                      if (checked) {
-                        syncAedFromForeign(
-                          originalAmountText,
-                          originalCurrency,
-                          fxRateText,
-                        );
+                      const next = e.target.value;
+                      setAmountText(next);
+                      setOriginalAmountText(next);
+                      if (isCrossCurrencyTransfer && !userEditedToAmount) {
+                        const r = Number(fxRateText);
+                        if (next.trim() && Number.isFinite(r) && r > 0) {
+                          try {
+                            const fromM = parseCurrencyMinor(next, accCurr);
+                            setToAmountText(
+                              formatCurrencyInput(
+                                convertMinor(fromM, accCurr, toAccCurr, r),
+                                toAccCurr,
+                              ),
+                            );
+                          } catch {
+                            // Ignore partial input.
+                          }
+                        }
                       }
                     }}
                   />
-                  <span>{uiText("Foreign currency")}</span>
                 </label>
-                {foreignEnabled && (
-                  <span className="muted small">
-                    {uiText("Explicit FX to AED")}
-                  </span>
+                {isCrossCurrencyTransfer && (
+                  <label>
+                    {uiText("Receiving amount")} ({toAccCurr})
+                    <input
+                      name="to_amount"
+                      required
+                      inputMode="decimal"
+                      placeholder={formatCurrencyInput(0, toAccCurr)}
+                      value={toAmountText}
+                      onChange={(e) => {
+                        setToAmountText(e.target.value);
+                        setUserEditedToAmount(true);
+                      }}
+                    />
+                  </label>
                 )}
               </div>
-              {foreignEnabled && (
-                <>
-                  <div className="form-row">
-                    <label>
-                      {" "}
-                      {uiText("Currency")}{" "}
-                      <select
-                        name="original_currency"
-                        value={originalCurrency}
-                        disabled={busy}
-                        onChange={(e) => {
-                          const nextCurr = e.target.value;
-                          const nextRate = String(getReferenceFxRate(nextCurr));
-                          setOriginalCurrency(nextCurr);
-                          setFxRateText(nextRate);
-                          syncAedFromForeign(
-                            originalAmountText,
-                            nextCurr,
-                            nextRate,
-                          );
-                        }}
-                      >
-                        {SUPPORTED_CURRENCIES.filter(
-                          (c) => c.code !== DEFAULT_CURRENCY,
-                        ).map((c) => (
-                          <option key={c.code} value={c.code}>
-                            {c.code} — {c.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      {" "}
-                      {uiText("Original amount (")}
-                      {originalCurrency})
-                      <input
-                        name="original_amount"
-                        inputMode="decimal"
-                        placeholder="0.00"
-                        value={originalAmountText}
-                        disabled={busy}
-                        onChange={(e) => {
-                          const nextOrig = e.target.value;
-                          setOriginalAmountText(nextOrig);
-                          syncAedFromForeign(
-                            nextOrig,
-                            originalCurrency,
-                            fxRateText,
-                          );
-                        }}
-                      />
-                    </label>
-                    <label>
-                      {" "}
-                      {uiText("Rate (1")} {originalCurrency} {uiText("= AED)")}{" "}
-                      <input
-                        name="fx_rate"
-                        inputMode="decimal"
-                        placeholder="3.6725"
-                        value={fxRateText}
-                        disabled={busy}
-                        onChange={(e) => {
-                          const nextRate = e.target.value;
-                          setFxRateText(nextRate);
-                          syncAedFromForeign(
-                            originalAmountText,
-                            originalCurrency,
-                            nextRate,
-                          );
-                        }}
-                      />
-                    </label>
-                  </div>
-                  <p className="form-hint">{REFERENCE_RATES_NOTE}</p>
-                </>
-              )}
-            </div>
+            ) : (
+              <div className="form-row">
+                <label style={{ flex: 2 }}>
+                  {uiText("Amount")} ({txCurrency})
+                  <input
+                    name="original_amount"
+                    autoFocus
+                    required
+                    inputMode="decimal"
+                    placeholder={formatCurrencyInput(0, txCurrency)}
+                    value={originalAmountText}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setOriginalAmountText(next);
+                      if (!isForeign) {
+                        setAmountText(next);
+                      } else if (!userEditedAccountAmount) {
+                        syncAccountFromOriginal(next, txCurrency, fxRateText);
+                      }
+                    }}
+                  />
+                </label>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <span className="field-label">{uiText("Currency")}</span>
+                  <CurrencyPicker
+                    value={txCurrency}
+                    compact
+                    disabled={busy}
+                    onChange={(nextCurr) => {
+                      setTxCurrency(nextCurr);
+                      setUserEditedAccountAmount(false);
+                      if (nextCurr === accCurr) {
+                        setAmountText(originalAmountText);
+                        setFxRateText("1");
+                        setFxSource("same_currency");
+                        setFxStatus("exact");
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+            {isCrossCurrencyTransfer && (
+              <p className="form-hint">
+                {rateLoading
+                  ? uiText("Fetching exchange rate…")
+                  : (() => {
+                      try {
+                        const fm = parseCurrencyMinor(amountText, accCurr);
+                        const tm = parseCurrencyMinor(toAmountText, toAccCurr);
+                        if (fm > 0 && tm > 0) {
+                          const implied = computeImpliedRate(fm, accCurr, tm, toAccCurr);
+                          return `Cross-currency transfer · 1 ${accCurr} = ${formatFxRate(implied)} ${toAccCurr}`;
+                        }
+                      } catch {
+                        // Ignore partial input.
+                      }
+                      return fxRateText
+                        ? `Cross-currency transfer · Est. 1 ${accCurr} = ${fxRateText} ${toAccCurr}`
+                        : "Cross-currency transfer between accounts in different currencies.";
+                    })()}
+              </p>
+            )}
+            {isForeign && (
+              <div className="enrichment-section">
+                <div className="enrichment-section-head">
+                  <span className="field-label">
+                    {uiText("Charged to account")} ({accCurr})
+                  </span>
+                  <span className="muted small">
+                    {rateLoading
+                      ? uiText("Fetching rate…")
+                      : fxStatus === "estimated"
+                        ? `≈ ${uiText("Estimated")} (${fxRateDate || dateValue})`
+                        : uiText("Confirmed")}
+                  </span>
+                </div>
+                <div className="form-row">
+                  <label>
+                    {accCurr} {uiText("Amount")}
+                    <input
+                      name="amount"
+                      inputMode="decimal"
+                      placeholder={formatCurrencyInput(0, accCurr)}
+                      value={amountText}
+                      disabled={busy}
+                      onChange={(e) => {
+                        const nextAmt = e.target.value;
+                        setAmountText(nextAmt);
+                        setUserEditedAccountAmount(true);
+                        try {
+                          const origM = parseCurrencyMinor(originalAmountText, txCurrency);
+                          const accM = parseCurrencyMinor(nextAmt, accCurr);
+                          if (origM > 0 && accM > 0) {
+                            setFxRateText(
+                              formatFxRate(
+                                computeImpliedRate(origM, txCurrency, accM, accCurr),
+                              ),
+                            );
+                            setFxSource("user_confirmed");
+                            setFxStatus("exact");
+                          }
+                        } catch {
+                          // Ignore partial input.
+                        }
+                      }}
+                    />
+                  </label>
+                  <label>
+                    1 {txCurrency} = {accCurr}
+                    <input
+                      name="fx_rate"
+                      inputMode="decimal"
+                      value={fxRateText}
+                      disabled={busy}
+                      onChange={(e) => {
+                        const nextRate = e.target.value;
+                        setFxRateText(nextRate);
+                        setUserEditedAccountAmount(false);
+                        setFxSource("manual_rate");
+                        syncAccountFromOriginal(
+                          originalAmountText,
+                          txCurrency,
+                          nextRate,
+                        );
+                      }}
+                    />
+                  </label>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: "8px",
+                    marginTop: "4px",
+                  }}
+                >
+                  <p className="form-hint" style={{ margin: 0 }}>
+                    {fxStatus === "estimated"
+                      ? `Approximate rate for ${fxRateDate || dateValue}. Edit ${accCurr} amount to confirm.`
+                      : `Confirmed in ${accCurr}.`}
+                  </p>
+                  {fxStatus === "estimated" && amountText.trim() && (
+                    <button
+                      type="button"
+                      className="secondary compact-btn"
+                      onClick={() => {
+                        setFxSource("user_confirmed");
+                        setFxStatus("exact");
+                        setUserEditedAccountAmount(true);
+                      }}
+                    >
+                      {uiText("Looks right")}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="form-row">
               <label>
                 {kind === "transfer"
@@ -673,58 +955,51 @@ export function Editor({
                   value={accountId}
                   onChange={(e) => {
                     const nextId = e.target.value;
+                    const prevAccCurr = accCurr;
                     setAccountId(nextId);
-                    if (!txItem) {
-                      const acc = ledger.accounts.find((a) => a.id === nextId);
-                      const accCurr = normalizeCurrencyCode(acc?.currency);
-                      if (accCurr !== DEFAULT_CURRENCY) {
-                        const nextRate = String(getReferenceFxRate(accCurr));
-                        setForeignEnabled(true);
-                        setOriginalCurrency(accCurr);
-                        setFxRateText(nextRate);
-                        syncAedFromForeign(
-                          originalAmountText,
-                          accCurr,
-                          nextRate,
-                        );
-                      }
+                    const acc = ledger.accounts.find((a) => a.id === nextId);
+                    const nextAccCurr = accountCurrency(acc);
+                    if (!txItem && txCurrency === prevAccCurr) {
+                      setTxCurrency(nextAccCurr);
                     }
+                    setUserEditedAccountAmount(false);
                   }}
                 >
-                  {ledger.accounts.map((a) => (
-                    <option value={a.id} key={a.id}>
-                      {a.name}
-                      {a.currency && a.currency !== "AED"
-                        ? ` (${a.currency})`
-                        : ""}
-                    </option>
-                  ))}
+                  {ledger.accounts.map((a) => {
+                    const c = accountCurrency(a);
+                    return (
+                      <option value={a.id} key={a.id}>
+                        {a.name} ({c})
+                      </option>
+                    );
+                  })}
                 </select>
               </label>
               {kind === "transfer" ? (
                 <label>
-                  {" "}
-                  {uiText("To account")}{" "}
+                  {uiText("To account")}
                   <select
                     name="to_account_id"
                     required
-                    defaultValue={modal.item?.to_account_id ?? ""}
+                    value={toAccountId}
+                    onChange={(e) => {
+                      setToAccountId(e.target.value);
+                      setUserEditedToAmount(false);
+                    }}
                   >
                     <option value="" disabled>
-                      {" "}
-                      {uiText("Choose account")}{" "}
+                      {uiText("Choose account")}
                     </option>
                     {ledger.accounts.map((a) => (
                       <option value={a.id} key={a.id}>
-                        {a.name}
+                        {a.name} ({accountCurrency(a)})
                       </option>
                     ))}
                   </select>
                 </label>
               ) : (
                 <label>
-                  {" "}
-                  {uiText("Category")}{" "}
+                  {uiText("Category")}
                   <select
                     key={kind}
                     name="category_id"
@@ -747,13 +1022,13 @@ export function Editor({
               )}
             </div>
             <label>
-              {" "}
-              {uiText("Date")}{" "}
+              {uiText("Date")}
               <input
                 required
                 name="date"
                 type="date"
-                defaultValue={modal.item?.date ?? today()}
+                value={dateValue}
+                onChange={(e) => setDateValue(e.target.value)}
               />
             </label>
             <label>
@@ -833,7 +1108,7 @@ export function Editor({
                             category_id: categoryId,
                             amountText:
                               parsedParentAmount > 0
-                                ? (half / 100).toFixed(2)
+                                ? formatCurrencyInput(half, accCurr)
                                 : "",
                             notes: "",
                           },
@@ -841,7 +1116,7 @@ export function Editor({
                             category_id: "",
                             amountText:
                               parsedParentAmount > 0
-                                ? (rem / 100).toFixed(2)
+                                ? formatCurrencyInput(rem, accCurr)
                                 : "",
                             notes: "",
                           },
@@ -853,7 +1128,7 @@ export function Editor({
                             category_id: "",
                             amountText:
                               remainingFils > 0
-                                ? (remainingFils / 100).toFixed(2)
+                                ? formatCurrencyInput(remainingFils, accCurr)
                                 : "",
                             notes: "",
                           },
@@ -894,7 +1169,7 @@ export function Editor({
                         <input
                           aria-label={`Split ${idx + 1} amount`}
                           inputMode="decimal"
-                          placeholder="0.00"
+                          placeholder={formatCurrencyInput(0, accCurr)}
                           value={row.amountText}
                           onChange={(e) =>
                             setSplits((rows) =>
@@ -939,7 +1214,7 @@ export function Editor({
                       >
                         {remainingFils === 0
                           ? uiText("Splits balanced")
-                          : `Remaining: ${money(remainingFils)}`}
+                          : `Remaining: ${money(remainingFils, accCurr)}`}
                       </span>
                       {remainingFils !== 0 && splits.length > 0 && (
                         <button
@@ -958,7 +1233,7 @@ export function Editor({
                                   i === lastIdx
                                     ? {
                                         ...r,
-                                        amountText: (nextLast / 100).toFixed(2),
+                                        amountText: formatCurrencyInput(nextLast, accCurr),
                                       }
                                     : r,
                                 ),
@@ -966,8 +1241,7 @@ export function Editor({
                             }
                           }}
                         >
-                          {" "}
-                          {uiText("Fill remainder on last line")}{" "}
+                          {uiText("Fill remainder on last line")}
                         </button>
                       )}
                     </div>
@@ -1084,8 +1358,7 @@ export function Editor({
             </label>
             <div className="form-row">
               <label>
-                {" "}
-                {uiText("Account type")}{" "}
+                {uiText("Account type")}
                 <select
                   name="type"
                   value={accountType}
@@ -1100,46 +1373,40 @@ export function Editor({
                   ))}
                 </select>
               </label>
-              <label>
-                {" "}
-                {uiText("Original purchase currency")}{" "}
-                <span className="muted">{uiText("Optional")}</span>
-                <select
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <span className="field-label">{uiText("Currency")}</span>
+                <CurrencyPicker
                   name="currency"
-                  defaultValue={normalizeCurrencyCode(modal.item?.currency)}
-                >
-                  {SUPPORTED_CURRENCIES.map((c) => (
-                    <option value={c.code} key={c.code}>
-                      {c.code} — {c.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  value={accountFormCurrency}
+                  disabled={busy}
+                  onChange={setAccountFormCurrency}
+                />
+              </div>
             </div>
             <p className="form-hint">
-              {uiText(
-                "All balances and transfers are recorded in AED. The currency above is a purchase reference, not a native-currency account balance. Enter your bank’s actual conversion rate for foreign purchases.",
-              )}
+              Balances for this account are stored in {accountFormCurrency}.
+              Dashboard totals and reports convert into your reporting currency.
             </p>
             <div className="form-row">
               <label>
-                {" "}
-                {uiText("Balance (AED)")}{" "}
+                {uiText("Balance")} ({accountFormCurrency}){" "}
                 <span className="muted">{uiText("Optional")}</span>
                 <input
                   inputMode="decimal"
                   name="balance"
-                  placeholder={uiText("e.g. 12500.00")}
+                  placeholder={formatCurrencyInput(0, accountFormCurrency)}
                   defaultValue={
                     modal.item && hasBalanceAnchor(modal.item)
-                      ? (modal.item.opening_balance / 100).toFixed(2)
+                      ? formatCurrencyInput(
+                          modal.item.opening_balance,
+                          accountFormCurrency,
+                        )
                       : ""
                   }
                 />
               </label>
               <label>
-                {" "}
-                {uiText("As of end of")}{" "}
+                {uiText("As of end of")}
                 <input
                   name="balance_as_of"
                   type="date"
@@ -1152,16 +1419,17 @@ export function Editor({
               </label>
             </div>
             <p className="form-hint">
-              {" "}
               {uiText(
                 "Enter what your bank shows at the end of a day. Transactions after that day are added to it. Earlier ones are already part of it, so you can add past transactions at any time without changing this balance. Leave it blank to just add up your transactions. Use a negative balance for credit card debt or an overdraft.",
               )}{" "}
               {modal.item && (
                 <>
-                  {" "}
                   {uiText("The app currently shows")}{" "}
-                  {money(balance(modal.item, ledger.transactions))}{" "}
-                  {uiText("for this account.")}{" "}
+                  {money(
+                    balance(modal.item, ledger.transactions),
+                    accountCurrency(modal.item),
+                  )}{" "}
+                  {uiText("for this account.")}
                 </>
               )}
             </p>
@@ -1169,36 +1437,39 @@ export function Editor({
               <div className="enrichment-section">
                 <div className="enrichment-section-head">
                   <span className="field-label">
-                    {" "}
                     {uiText("Credit card details")}{" "}
                     <span className="muted">{uiText("Optional")}</span>
                   </span>
                 </div>
                 <div className="form-row">
                   <label>
-                    {" "}
-                    {uiText("Credit limit (AED)")}{" "}
+                    {uiText("Credit limit")} ({accountFormCurrency})
                     <input
                       inputMode="decimal"
                       name="credit_limit"
-                      placeholder={uiText("e.g. 25000.00")}
+                      placeholder={formatCurrencyInput(0, accountFormCurrency)}
                       defaultValue={
                         modal.item?.credit_limit
-                          ? (modal.item.credit_limit / 100).toFixed(2)
+                          ? formatCurrencyInput(
+                              modal.item.credit_limit,
+                              accountFormCurrency,
+                            )
                           : ""
                       }
                     />
                   </label>
                   <label>
-                    {" "}
-                    {uiText("Minimum payment (AED)")}{" "}
+                    {uiText("Minimum payment")} ({accountFormCurrency})
                     <input
                       inputMode="decimal"
                       name="minimum_payment"
-                      placeholder={uiText("e.g. 500.00")}
+                      placeholder={formatCurrencyInput(0, accountFormCurrency)}
                       defaultValue={
                         modal.item?.minimum_payment
-                          ? (modal.item.minimum_payment / 100).toFixed(2)
+                          ? formatCurrencyInput(
+                              modal.item.minimum_payment,
+                              accountFormCurrency,
+                            )
                           : ""
                       }
                     />

@@ -5,6 +5,12 @@
    discards a user's training. Nothing here leaves the device except the log rows themselves, which hold the
    cleaned merchant text only (never the SMS). */
 import {
+  convertMinor,
+  DEFAULT_CURRENCY,
+  getPeggedFallbackRate,
+  normalizeCurrencyCode,
+} from "../currency.ts";
+import {
   CANONICAL,
   DEFAULT_REVIEW_THRESHOLD,
   categorise,
@@ -77,7 +83,11 @@ export function merchantKey(merchant: string | null): string {
 export function makeExample(input: {
   merchant: string | null;
   payee: string;
+  /** Amount in minor units of `currency` (defaults to AED fils). */
   amount: number;
+  currency?: string;
+  /** Optional rate (`1 currency = X AED`) used to normalise the amount feature to AED fils. */
+  rateToAed?: number | null;
   category_id: string | null;
   suggested_category_id: string | null;
   source: ExampleSource;
@@ -85,10 +95,21 @@ export function makeExample(input: {
 }): LearningExample | null {
   const merchant_text = merchantKey(input.merchant);
   if (!merchant_text || !input.category_id) return null;
+  const code = normalizeCurrencyCode(input.currency);
+  let amountFils = Math.max(0, Math.round(input.amount));
+  if (code !== DEFAULT_CURRENCY && amountFils > 0) {
+    const rate =
+      input.rateToAed && input.rateToAed > 0
+        ? input.rateToAed
+        : getPeggedFallbackRate(code, DEFAULT_CURRENCY);
+    if (rate && rate > 0) {
+      amountFils = convertMinor(amountFils, code, DEFAULT_CURRENCY, rate);
+    }
+  }
   return {
     merchant_text,
     payee: input.payee.trim().slice(0, 160),
-    amount: Math.max(0, Math.round(input.amount)),
+    amount: amountFils,
     category_id: input.category_id,
     source: input.source,
     model_version: input.model_version.slice(0, 32),

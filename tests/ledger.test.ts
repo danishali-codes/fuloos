@@ -57,17 +57,20 @@ test("parses each supported bank template", () => {
     const p = parseSms(message, detected);
     assert.equal(p.txn_type, "purchase");
     assert.equal(p.direction, "debit");
-    assert.equal(p.amount_aed, amount);
+    assert.equal(p.currency, "AED");
+    assert.equal(p.amount, amount);
+    assert.equal(p.amount_minor, Math.round(amount * 100));
     assert.equal(p.merchant_clean, merchant);
     assert.equal(p.date_in_text, date);
   }
 });
 
-test("flags OTPs, converts foreign currency and reads income", () => {
+test("flags OTPs, preserves foreign currency without converting, and reads income", () => {
   assert.equal(parseSms(SMS.otp, null).txn_type, "otp");
   const usd = parseSms(SMS.usd, "Liv");
   assert.equal(usd.currency, "USD");
-  assert.ok(Math.abs(usd.amount_aed - 36.725) < 1e-9);
+  assert.equal(usd.amount, 10);
+  assert.equal(usd.amount_minor, 1000);
   assert.equal(usd.is_foreign, true);
   const salary = parseSms(SMS.salary, "Liv");
   assert.equal(salary.txn_type, "income");
@@ -257,6 +260,12 @@ test("SMS preview builds reviewable transactions", () => {
     amount: 4500,
     payee: "Talabat",
     notes: "From Liv SMS",
+    original_amount: 4500,
+    original_currency: "AED",
+    fx_rate: 1,
+    fx_rate_date: "2025-06-01",
+    fx_source: "same_currency",
+    fx_status: "exact",
   });
   assert.equal(talabat.dateSource, "fallback");
   assert.equal(carrefour.duplicate, true);
@@ -264,7 +273,9 @@ test("SMS preview builds reviewable transactions", () => {
   assert.match(otp.skipped, /One-time password/);
   assert.equal(otp.transaction, null);
   assert.equal(usd.transaction?.amount, 3673);
-  assert.match(usd.transaction!.notes, /10\.00 USD/);
+  assert.equal(usd.transaction?.original_currency, "USD");
+  assert.equal(usd.transaction?.original_amount, 1000);
+  assert.match(usd.transaction!.notes, /USD 10\.00/);
   assert.equal(salary.transaction?.type, "income");
   assert.equal(salary.transaction?.category_id, null);
   assert.equal(salary.transaction?.payee, "Salary / income");

@@ -18,7 +18,8 @@ type PresetColumnKey =
   | "category"
   | "amount"
   | "debit"
-  | "credit";
+  | "credit"
+  | "currency";
 
 const PRESET_COLUMN_KEYS: readonly PresetColumnKey[] = [
   "date",
@@ -28,7 +29,10 @@ const PRESET_COLUMN_KEYS: readonly PresetColumnKey[] = [
   "amount",
   "debit",
   "credit",
+  "currency",
 ];
+
+const OPTIONAL_COLUMN_KEYS = new Set<PresetColumnKey>(["currency"]);
 
 const COLUMN_LABELS: Record<PresetColumnKey, string> = {
   date: "Date",
@@ -38,6 +42,7 @@ const COLUMN_LABELS: Record<PresetColumnKey, string> = {
   amount: "Amount",
   debit: "Debit / money out",
   credit: "Credit / money in",
+  currency: "Currency",
 };
 
 interface PresetColumn {
@@ -45,7 +50,9 @@ interface PresetColumn {
   name: string;
 }
 
-type PresetColumns = Record<PresetColumnKey, PresetColumn | null>;
+type PresetColumns = Record<Exclude<PresetColumnKey, "currency">, PresetColumn | null> & {
+  currency?: PresetColumn | null;
+};
 
 export interface CsvPreset {
   name: string;
@@ -137,7 +144,7 @@ export function parsePresetEntry(value: unknown): CsvPreset | null {
   const columns = {} as PresetColumns;
   for (const key of PRESET_COLUMN_KEYS) {
     const entry = value.columns[key];
-    if (entry === null) {
+    if (entry === null || (entry === undefined && OPTIONAL_COLUMN_KEYS.has(key))) {
       columns[key] = null;
     } else if (
       isPlainObject(entry) &&
@@ -240,6 +247,7 @@ export function buildPreset(input: {
     | "amount"
     | "debit"
     | "credit"
+    | "currency"
     | "split"
     | "flip"
     | "decimal"
@@ -266,7 +274,12 @@ export function buildPreset(input: {
   const columns = {} as PresetColumns;
   for (const key of PRESET_COLUMN_KEYS) {
     const index = input.options[key];
-    if (Number.isSafeInteger(index) && index >= 0 && index < columnCount) {
+    if (
+      typeof index === "number" &&
+      Number.isSafeInteger(index) &&
+      index >= 0 &&
+      index < columnCount
+    ) {
       columns[key] = {
         index,
         name: input.header ? input.firstRow[index] : `Column ${index + 1}`,
@@ -354,8 +367,8 @@ export function deletePreset(
 
 function relevantKeysForMode(split: boolean): PresetColumnKey[] {
   return split
-    ? ["date", "debit", "credit", "payee", "notes", "category"]
-    : ["date", "amount", "payee", "notes", "category"];
+    ? ["date", "debit", "credit", "currency", "payee", "notes", "category"]
+    : ["date", "amount", "currency", "payee", "notes", "category"];
 }
 
 export function resolvePreset(
