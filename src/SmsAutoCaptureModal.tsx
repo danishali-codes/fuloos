@@ -29,7 +29,7 @@ import {
   type LearningSettings,
 } from "./ledger/learning";
 import type { LearningStore } from "./ledger/learningStore";
-import { BANK_NAMES } from "./ledger/sms";
+import { ALL_SMS_BANKS } from "./sms/bankTemplates";
 import {
   platformBridge,
   type SmsPermissionStatus,
@@ -55,7 +55,7 @@ import {
 
 type ModalView = "overview" | "link_form" | "backfill";
 
-const SUPPORTED_BANKS = [...BANK_NAMES, "ENBD"];
+const SUPPORTED_BANKS = [...ALL_SMS_BANKS];
 
 function makeLinkId(): string {
   return `smslink_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;

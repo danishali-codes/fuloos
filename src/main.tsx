@@ -2,6 +2,7 @@ import { translateText as uiText } from "./i18n";
 import React, {
   Suspense,
   lazy,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -82,9 +83,16 @@ import { AppPageHeader, AppTopbar } from "./AppHeader";
 import { pendingCapturedAlerts } from "./captureAlerts";
 import type { ImportTransaction } from "./csv";
 import type { CapturedAlert } from "./domain";
-import { platformBridge } from "./mobile/platformBridge";
+import {
+  platformBridge,
+  type UnparsedSmsItem,
+} from "./mobile/platformBridge";
 import type { SmsAccountLink } from "./mobile/smsLinks";
 import { useNativeMobile } from "./mobile/useNativeMobile";
+import { LearnedTemplatesSection } from "./LearnedTemplatesSection";
+import type { TeachSmsTarget } from "./TeachSmsModal";
+import { parseSmsV1 } from "./sms/parse";
+import type { LearnedTemplate } from "./sms/types";
 import { isMobileApkMode } from "./mobile-ui/isMobileApkMode";
 import { MobileAuth } from "./mobile-ui/MobileAuth";
 import { MobileAppShell } from "./mobile-ui/MobileAppShell";
@@ -205,6 +213,17 @@ function App() {
     string | undefined
   >(undefined);
   const [smsLinks, setSmsLinks] = useState<SmsAccountLink[]>([]);
+  const [unparsedSmsOpen, setUnparsedSmsOpen] = useState(false);
+  const [unparsedSmsItems, setUnparsedSmsItems] = useState<UnparsedSmsItem[]>(
+    [],
+  );
+  const [learnedTemplates, setLearnedTemplates] = useState<LearnedTemplate[]>(
+    [],
+  );
+  const [teachSmsTarget, setTeachSmsTarget] = useState<TeachSmsTarget | null>(
+    null,
+  );
+  const [isDebugAndroid, setIsDebugAndroid] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(
     new Set(),
@@ -1657,10 +1676,21 @@ function App() {
       ? `${backend.url.trim().replace(/\/+$/, "")}|${session.user.id}`
       : "";
 
+  const refreshUnparsedSms = useCallback(async () => {
+    if (!smsOwnerKey) {
+      setUnparsedSmsItems([]);
+      return;
+    }
+    const items = await platformBridge.getUnparsedSms(smsOwnerKey, demo);
+    setUnparsedSmsItems(items);
+  }, [smsOwnerKey, demo]);
+
   useEffect(() => {
     let live = true;
     if (!smsOwnerKey) {
       setSmsLinks([]);
+      setUnparsedSmsItems([]);
+      setLearnedTemplates([]);
       return () => {
         live = false;
       };
@@ -1668,10 +1698,146 @@ function App() {
     void platformBridge.getLinks(smsOwnerKey).then((loaded) => {
       if (live) setSmsLinks(loaded);
     });
+    void platformBridge.getUnparsedSms(smsOwnerKey, demo).then((items) => {
+      if (live) setUnparsedSmsItems(items);
+    });
+    void platformBridge.getLearnedTemplates(smsOwnerKey).then((templates) => {
+      if (live) setLearnedTemplates(templates);
+    });
+    void platformBridge.getPermissionStatus().then((status) => {
+      if (live) setIsDebugAndroid(Boolean(status.isDebugBuild));
+    });
     return () => {
       live = false;
     };
-  }, [smsOwnerKey]);
+  }, [smsOwnerKey, demo]);
+
+  async function handleDismissUnparsedSms(item: UnparsedSmsItem) {
+    const ok = await platformBridge.dismissUnparsedSms(
+      item.id,
+      smsOwnerKey || undefined,
+      demo,
+    );
+    if (ok) {
+      setUnparsedSmsItems((prev) => prev.filter((x) => x.id !== item.id));
+    }
+  }
+
+  async function handleSaveLearnedTemplate(
+    template: LearnedTemplate,
+    target: TeachSmsTarget,
+  ) {
+    await platformBridge.saveLearnedTemplate(
+      template,
+      smsOwnerKey || undefined,
+    );
+    const nextTemplates = [
+      template,
+      ...learnedTemplates.filter(
+        (t) => t.id !== template.id && t.skeleton_hash !== template.skeleton_hash,
+      ),
+    ];
+    setLearnedTemplates(nextTemplates);
+
+    // Re-parse the taught SMS and any other matching "Couldn't read" messages
+    const defaultAcc = ledger.accounts[0];
+    const defaultAccCurr = defaultAcc ? accountCurrency(defaultAcc) : "AED";
+    const matchedIds = new Set<number>();
+    let hitsAdded = 0;
+
+    const candidates: Array<{
+      id?: number;
+      sender: string;
+      body: string;
+      received_at?: string;
+      sms_hash?: string;
+    }> = [...unparsedSmsItems];
+    if (
+      target.id === undefined ||
+      !candidates.some((c) => c.id === target.id)
+    ) {
+      candidates.unshift(target);
+    }
+
+    for (const item of candidates) {
+      const parsed = parseSmsV1(item.body, {
+        sender: item.sender,
+        received_at: item.received_at || new Date().toISOString(),
+        sms_hash: item.sms_hash,
+        account_currency: defaultAccCurr,
+        learned_templates: [template],
+      });
+      if (parsed.kind !== "transaction" || !parsed.amount) continue;
+      if (parsed.parsed_by !== `learned:${template.id}`) continue;
+
+      hitsAdded++;
+      if (item.id !== undefined) {
+        matchedIds.add(item.id);
+        await platformBridge.dismissUnparsedSms(
+          item.id,
+          smsOwnerKey || undefined,
+          demo,
+        );
+      }
+      await platformBridge.recordTemplateHit(
+        template.id,
+        smsOwnerKey || undefined,
+      );
+
+      // Queue as a pending review alert with zero raw SMS text synced to cloud
+      const amountMinor = parsed.amount.minor;
+      const currency = parsed.amount.currency;
+      const cardHint = parsed.instrument.last4
+        ? `Card ${parsed.instrument.last4}`
+        : "";
+      await addCapturedAlert({
+        source: "sms_native",
+        status: "pending",
+        raw_text: "",
+        sms_sender: item.sender,
+        card_last4: parsed.instrument.last4 || undefined,
+        subject: `${parsed.bank.id || item.sender} SMS`,
+        created_at_iso: item.received_at || new Date().toISOString(),
+        parsed_type: parsed.direction === "credit" ? "income" : "expense",
+        parsed_amount: currency === defaultAccCurr ? amountMinor : 0,
+        parsed_date: parsed.date || today(),
+        parsed_payee: parsed.counterparty.clean || "",
+        parsed_notes: `From ${parsed.bank.id || item.sender} SMS (learned format)${cardHint ? ` · ${cardHint}` : ""}`,
+        account_hint: cardHint,
+        parsed_original_amount: amountMinor,
+        parsed_currency: currency,
+        parsed_fx_rate: currency === defaultAccCurr ? 1 : undefined,
+        parsed_fx_rate_date: parsed.date || today(),
+        parsed_fx_source: currency === defaultAccCurr ? "same_currency" : undefined,
+        parsed_fx_status: currency === defaultAccCurr ? "exact" : "estimated",
+      });
+    }
+
+    if (matchedIds.size > 0) {
+      setUnparsedSmsItems((prev) => prev.filter((x) => !matchedIds.has(x.id)));
+    }
+    if (hitsAdded > 0) {
+      const refreshed = await platformBridge.getLearnedTemplates(
+        smsOwnerKey || undefined,
+      );
+      setLearnedTemplates(refreshed);
+    }
+  }
+
+  async function handleDeleteLearnedTemplate(tpl: LearnedTemplate) {
+    const ok = await platformBridge.deleteLearnedTemplate(
+      tpl.id,
+      smsOwnerKey || undefined,
+    );
+    if (ok) {
+      setLearnedTemplates((prev) => prev.filter((x) => x.id !== tpl.id));
+    }
+  }
+
+  const handleRunInboxDryRun =
+    demo || isDebugAndroid
+      ? () => platformBridge.runInboxDryRun(smsOwnerKey || undefined, demo)
+      : undefined;
 
   async function handleSmsLinksChange(next: SmsAccountLink[]) {
     setSmsLinks(next);
@@ -1698,6 +1864,8 @@ function App() {
   const hasOpenModal = Boolean(
     settingsOpen ||
       confirmAmountsOpen ||
+      teachSmsTarget ||
+      unparsedSmsOpen ||
       rulesOpen ||
       smsAutoCaptureOpen ||
       captureAlertsOpen ||
@@ -1731,6 +1899,8 @@ function App() {
     hasOpenModal,
     onCloseTopModal: () => {
       if (confirmAmountsOpen) setConfirmAmountsOpen(false);
+      else if (teachSmsTarget) setTeachSmsTarget(null);
+      else if (unparsedSmsOpen) setUnparsedSmsOpen(false);
       else if (quickAdd) setQuickAdd(null);
       else if (mobileEditQuickTx) setMobileEditQuickTx(null);
       else if (mobileSelectedTx) setMobileSelectedTx(null);
@@ -1757,6 +1927,7 @@ function App() {
     onOpenSmsAutoCapture: () => openSmsAutoCapture(),
     onReloadLedger: () => {
       if (!demo && session) void load();
+      void refreshUnparsedSms();
     },
   });
 
@@ -1938,6 +2109,34 @@ function App() {
         confirmAmountsTxId={confirmAmountsTxId}
         setConfirmAmountsOpen={setConfirmAmountsOpen}
         onConfirmForeignAmount={handleConfirmForeignAmount}
+        unparsedSmsOpen={unparsedSmsOpen}
+        setUnparsedSmsOpen={(v) => {
+          setUnparsedSmsOpen(v);
+          if (v) void refreshUnparsedSms();
+        }}
+        unparsedSmsItems={unparsedSmsItems}
+        onDismissUnparsedSms={(item) => void handleDismissUnparsedSms(item)}
+        onTeachUnparsedSms={(item) => {
+          setUnparsedSmsOpen(false);
+          setTeachSmsTarget({
+            id: item.id,
+            sender: item.sender,
+            body: item.body,
+            received_at: item.received_at,
+            sms_hash: item.sms_hash,
+          });
+        }}
+        teachSmsTarget={teachSmsTarget}
+        setTeachSmsTarget={setTeachSmsTarget}
+        onSaveLearnedTemplate={handleSaveLearnedTemplate}
+        onRunInboxDryRun={handleRunInboxDryRun}
+        smsSettingsSection={
+          <LearnedTemplatesSection
+            templates={learnedTemplates}
+            busy={busy}
+            onDelete={(tpl) => void handleDeleteLearnedTemplate(tpl)}
+          />
+        }
         deleteOpen={deleteOpen}
         setDeleteOpen={setDeleteOpen}
         accountToDelete={accountToDelete}
@@ -2117,6 +2316,11 @@ function App() {
           onEditBudget={(item) => setBudgetModal({ item })}
           onOpenSmsAutoCapture={(accountId) => openSmsAutoCapture(accountId)}
           onOpenCaptureAlerts={() => setCaptureAlertsOpen(true)}
+          unparsedSmsCount={unparsedSmsItems.length}
+          onOpenUnparsedSms={() => {
+            void refreshUnparsedSms();
+            setUnparsedSmsOpen(true);
+          }}
           estimatedCount={estimatedList.length}
           onOpenConfirmAmounts={openConfirmAmounts}
           onOpenRules={() => setRulesOpen(true)}

@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fuloos.app/schemas/fuloos-sms-v1.schema.json",
+  "title": "Fuloos Parsed SMS v1 (fuloos.sms/1)",
+  "description": "Canonical structured output produced by all on-device SMS parser layers in Fuloos. Never contains raw SMS body text.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "kind",
+    "direction",
+    "txn_type",
+    "amount",
+    "billed_amount",
+    "balance_after",
+    "date",
+    "time",
+    "date_source",
+    "counterparty",
+    "instrument",
+    "bank",
+    "sms",
+    "parsed_by",
+    "confidence",
+    "warnings"
+  ],
+  "properties": {
+    "schema": {
+      "const": "fuloos.sms/1"
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["transaction", "otp", "declined", "balance_notice", "promo", "unknown"]
+    },
+    "direction": {
+      "type": ["string", "null"],
+      "enum": ["debit", "credit", null]
+    },
+    "txn_type": {
+      "type": ["string", "null"],
+      "enum": [
+        "purchase",
+        "refund",
+        "cash_withdrawal",
+        "bill_payment",
+        "transfer_out",
+        "transfer_in",
+        "salary",
+        "fee",
+        "card_repayment",
+        "loan_repayment",
+        "internal_move",
+        "other",
+        null
+      ]
+    },
+    "amount": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/money" }
+      ]
+    },
+    "billed_amount": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/money" }
+      ]
+    },
+    "balance_after": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/balanceMoney" }
+      ]
+    },
+    "date": {
+      "type": ["string", "null"],
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "time": {
+      "type": ["string", "null"],
+      "pattern": "^\\d{2}:\\d{2}$"
+    },
+    "date_source": {
+      "type": "string",
+      "enum": ["text", "received"]
+    },
+    "counterparty": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["raw", "name", "clean", "city", "country"],
+      "properties": {
+        "raw": { "type": ["string", "null"] },
+        "name": { "type": ["string", "null"] },
+        "clean": { "type": ["string", "null"] },
+        "city": { "type": ["string", "null"] },
+        "country": { "type": ["string", "null"] }
+      }
+    },
+    "instrument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "last4"],
+      "properties": {
+        "kind": {
+          "type": ["string", "null"],
+          "enum": ["credit_card", "debit_card", "account", null]
+        },
+        "last4": {
+          "type": ["string", "null"],
+          "pattern": "^\\d{4}$"
+        }
+      }
+    },
+    "bank": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source"],
+      "properties": {
+        "id": { "type": ["string", "null"] },
+        "source": {
+          "type": ["string", "null"],
+          "enum": ["link", "sender", "template", "learned", "guess", null]
+        }
+      }
+    },
+    "sms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sender", "received_at", "hash"],
+      "properties": {
+        "sender": { "type": "string" },
+        "received_at": { "type": "string" },
+        "hash": { "type": "string" }
+      }
+    },
+    "parsed_by": {
+      "type": "string",
+      "minLength": 1
+    },
+    "confidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["overall", "amount", "direction", "date", "counterparty"],
+      "properties": {
+        "overall": { "type": "number", "minimum": 0, "maximum": 1 },
+        "amount": { "type": "number", "minimum": 0, "maximum": 1 },
+        "direction": { "type": "number", "minimum": 0, "maximum": 1 },
+        "date": { "type": "number", "minimum": 0, "maximum": 1 },
+        "counterparty": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "money": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minor", "currency", "exponent"],
+      "properties": {
+        "minor": { "type": "integer" },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "exponent": { "type": "integer", "enum": [0, 2, 3] }
+      }
+    },
+    "balanceMoney": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minor", "currency", "exponent", "label"],
+      "properties": {
+        "minor": { "type": "integer" },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "exponent": { "type": "integer", "enum": [0, 2, 3] },
+        "label": {
+          "type": "string",
+          "enum": ["available_balance", "available_limit", "balance"]
+        }
+      }
+    }
+  }
+}

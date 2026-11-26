@@ -282,8 +282,9 @@ test("smsPipeline: routes multi-card bank SMSes, auto-adds high-confidence brand
   assert.equal(draft.card_last4, "4512");
   assert.equal(draft.sms_sender, "ADCB");
   assert.equal(draft.parsed_amount, 7600);
-  // Privacy: long digit strings must be masked before syncing to PocketBase.
-  assert.ok(!draft.raw_text.includes("9876543210"));
+  // Privacy: SMS-native CapturedAlert drafts must NEVER send SMS text to Supabase.
+  assert.equal(draft.raw_text, "");
+  assert.ok(!draft.parsed_notes.includes("9876543210"));
 
   // 5) OTP is skipped
   const otpDecision = processSingleSms(
@@ -297,7 +298,7 @@ test("smsPipeline: routes multi-card bank SMSes, auto-adds high-confidence brand
   );
   assert.equal(otpDecision.action, "skip");
 
-  // 6) Existing duplicate key is skipped
+  // 6) Matching a non-SMS (manual/CSV) transaction flags possible_duplicate -> needs_review (never silently skipped)
   const dupCtx = buildTestContext([debitLink], {
     existingKeys: [transactionKey(talabatDecision.transaction!)],
   });
@@ -310,8 +311,45 @@ test("smsPipeline: routes multi-card bank SMSes, auto-adds high-confidence brand
     },
     dupCtx,
   );
-  assert.equal(dupDecision.action, "skip");
+  assert.equal(dupDecision.action, "needs_review");
   assert.equal(dupDecision.duplicate, true);
+  assert.ok(dupDecision.warnings?.includes("possible_duplicate"));
+
+  // 7) Two identical SMS arriving at different minutes create two transactions; same smsHash skips
+  const batchCtx = buildTestContext([debitLink]);
+  const firstCoffee = processSingleSms(
+    {
+      id: "107",
+      sender: "ADCB",
+      timestampMs: Date.UTC(2026, 10, 7, 10, 0, 0),
+      body: "AED 48.50 spent on your ADCB Card XX4512 at TALABAT, DUBAI-AE on 07/11/2026.",
+    },
+    batchCtx,
+  );
+  const secondCoffeeLater = processSingleSms(
+    {
+      id: "108",
+      sender: "ADCB",
+      timestampMs: Date.UTC(2026, 10, 7, 12, 30, 0),
+      body: "AED 48.50 spent on your ADCB Card XX4512 at TALABAT, DUBAI-AE on 07/11/2026.",
+    },
+    batchCtx,
+  );
+  assert.equal(firstCoffee.action, "auto_add");
+  assert.equal(secondCoffeeLater.action, "auto_add");
+  assert.notEqual(firstCoffee.smsHash, secondCoffeeLater.smsHash);
+
+  const exactHashReplay = processSingleSms(
+    {
+      id: "107-replay",
+      sender: "ADCB",
+      timestampMs: Date.UTC(2026, 10, 7, 10, 0, 0),
+      body: "AED 48.50 spent on your ADCB Card XX4512 at TALABAT, DUBAI-AE on 07/11/2026.",
+    },
+    buildTestContext([debitLink], { processedSmsHashes: [firstCoffee.smsHash] }),
+  );
+  assert.equal(exactHashReplay.action, "skip");
+  assert.equal(exactHashReplay.duplicate, true);
 });
 
 test("smsPipeline: groupBackfillForReview groups repeated unfamiliar merchants together", () => {
@@ -514,7 +552,7 @@ test("migration 1794860000_native_sms_capture extends fuloos_captured_alerts and
   assert.equal(fields.length, 1);
 });
 
-test("collectExistingDedupeKeys: deduplicates existing ledger transactions and pending native captured alerts", () => {
+test("collectExistingDedupeKeys: flags matching non-SMS transactions as possible_duplicate without collapsing SMS-sourced repeats", () => {
   const ledger = demoLedger();
   const checking = ledger.accounts[0]!;
   const link = makeLink("link-dedupe", checking.id, ["ADCB"], {
@@ -529,47 +567,45 @@ test("collectExistingDedupeKeys: deduplicates existing ledger transactions and p
     body: "AED 64.00 spent on your ADCB Card XX4512 at AL MARWA VENTURES, SHARJAH on 14/11/2026.",
   };
 
-  // First evaluation produces a needs_review decision & pending captured alert draft.
+  // First evaluation produces a needs_review decision & privacy-safe captured alert draft.
   const initialCtx = buildTestContext([link]);
   const initialDecision = processSingleSms(rawSms, initialCtx);
   assert.equal(initialDecision.action, "needs_review");
   const draft = buildCapturedAlertDraft(initialDecision);
+  assert.equal(draft.raw_text, "");
 
-  const pendingAlert: CapturedAlert = {
-    id: "alert0000000001",
-    ...draft,
-    status: "pending",
+  // A manual/CSV ledger transaction with the same date, account, amount, and payee flags possible_duplicate.
+  const manualTx = {
+    account_id: checking.id,
+    to_account_id: null,
+    date: "2026-11-14",
+    type: "expense" as const,
+    amount: 6400,
+    payee: initialDecision.transaction!.payee,
+    notes: "Manual entry",
   };
-  const dismissedAlert: CapturedAlert = {
-    id: "alert0000000002",
-    ...draft,
-    parsed_amount: 9900,
-    status: "dismissed",
+  // An SMS-sourced ledger transaction is excluded so two identical SMS at different times both save.
+  const smsTx = {
+    ...manualTx,
+    amount: 9900,
+    notes: "From ADCB SMS · Card ••4512",
   };
-
   const existingKeys = collectExistingDedupeKeys(
-    ledger.transactions,
-    [pendingAlert, dismissedAlert],
+    [...ledger.transactions, manualTx, smsTx],
+    [],
     checking.id,
   );
 
-  // Subsequent scan (backfill or catch-up) recognizes the pending alert as already captured.
+  assert.ok(existingKeys.includes(transactionKey(manualTx as typeof ledger.transactions[number])));
+  assert.ok(!existingKeys.includes(transactionKey(smsTx as typeof ledger.transactions[number])));
+
   const dedupedCtx = buildTestContext([link], { existingKeys });
   const secondDecision = processSingleSms(rawSms, dedupedCtx);
   assert.equal(secondDecision.duplicate, true);
-  assert.equal(secondDecision.action, "skip");
+  assert.equal(secondDecision.action, "needs_review");
+  assert.ok(secondDecision.warnings?.includes("possible_duplicate"));
 
-  // Dismissed alerts are not treated as duplicates.
-  const dismissedSms: RawNativeSms = {
-    ...rawSms,
-    id: "502",
-    body: "AED 99.00 spent on your ADCB Card XX4512 at AL MARWA VENTURES, SHARJAH on 14/11/2026.",
-  };
-  const dismissedDecision = processSingleSms(dismissedSms, dedupedCtx);
-  assert.equal(dismissedDecision.duplicate, false);
-  assert.equal(dismissedDecision.action, "needs_review");
-
-  // Existing ledger transactions are included in the dedupe key set.
+  // Existing non-SMS ledger transactions are included in the dedupe key set.
   assert.ok(existingKeys.includes(transactionKey(ledger.transactions[0]!)));
 
   // Large ledgers (>5,000 rows) are never truncated by default during historical backfill.
@@ -580,6 +616,7 @@ test("collectExistingDedupeKeys: deduplicates existing ledger transactions and p
     type: "expense" as const,
     amount: 100 + idx,
     payee: `Merchant ${idx}`,
+    notes: "",
   }));
   assert.equal(collectExistingDedupeKeys(largeLedger).length, 5050);
   assert.equal(collectExistingDedupeKeys(largeLedger, [], undefined, 5000).length, 5000);
@@ -712,7 +749,7 @@ test("smsPipeline: multi-currency golden tests (GBP+limit, EUR, INR, JPY, KWD, u
   assert.equal(billedRes.transaction?.fx_source, "bank_sms");
   assert.equal(billedRes.transaction?.fx_status, "exact");
 
-  // 8. Balance / credit limit only SMS -> skipped, NEVER becomes a transaction amount
+  // 8. Balance / credit limit only SMS -> routed to unparsed (never silently skipped, NEVER becomes a transaction amount)
   const limitOnlyRes = processSingleSms(
     {
       id: "mc-8",
@@ -722,7 +759,7 @@ test("smsPipeline: multi-currency golden tests (GBP+limit, EUR, INR, JPY, KWD, u
     },
     ctx,
   );
-  assert.equal(limitOnlyRes.action, "skip");
+  assert.equal(limitOnlyRes.action, "unparsed");
   assert.equal(limitOnlyRes.transaction, undefined);
 
   // 9. Offline with no cached FX rate -> saved as needs_review with rate_unavailable, NEVER skipped

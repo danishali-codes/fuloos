@@ -87,7 +87,7 @@ class SmsProcessWorker(
                 }
             }
         }
-        return if (applyDecision(decision, ctxJson, ownerKey) == DecisionOutcome.FAILED_RETRYABLE) {
+        return if (applyDecision(decision, ctxJson, ownerKey, body) == DecisionOutcome.FAILED_RETRYABLE) {
             Result.retry()
         } else {
             Result.success()
@@ -174,7 +174,8 @@ class SmsProcessWorker(
                 val decision = decisions.optJSONObject(i) ?: continue
                 val linkId = decision.optNonNullString("linkId")
                 val ts = decision.optLong("timestampMs", 0L)
-                val outcome = applyDecision(decision, ctxJson, ownerKey)
+                val rawBody = messages.optJSONObject(i)?.optString("body", "").orEmpty()
+                val outcome = applyDecision(decision, ctxJson, ownerKey, rawBody)
                 when (outcome) {
                     DecisionOutcome.COVERED -> {
                         if (linkId.isNotEmpty() && ts > 0L && linkId !in firstFailedTsByLink) {
@@ -243,7 +244,12 @@ class SmsProcessWorker(
      * Applies one SMS decision without advancing catch-up watermarks (watermarks are
      * advanced exclusively by [handleCatchUp] after scanning earlier inbox messages).
      */
-    private fun applyDecision(decision: JSONObject, ctxJson: String, ownerKey: String): DecisionOutcome {
+    private fun applyDecision(
+        decision: JSONObject,
+        ctxJson: String,
+        ownerKey: String,
+        rawBody: String = "",
+    ): DecisionOutcome {
         val smsHash = decision.optNonNullString("smsHash")
         if (smsHash.isBlank() || db.isProcessed(smsHash, ownerKey)) return DecisionOutcome.COVERED
 
@@ -267,7 +273,42 @@ class SmsProcessWorker(
             return DecisionOutcome.COVERED
         }
 
+        // Store unrecognised messages from linked senders in local-only `unparsed_sms`
+        // ("Couldn't read" list). Raw SMS text never leaves the device.
+        if (action == "unparsed") {
+            val sender = decision.optNonNullString("sender")
+            val ts = decision.optLong("timestampMs", System.currentTimeMillis())
+            val receivedAtIso = java.time.Instant.ofEpochMilli(if (ts > 0L) ts else System.currentTimeMillis()).toString()
+            if (rawBody.isNotBlank()) {
+                db.insertUnparsedSms(
+                    ownerKey = ownerKey,
+                    sender = sender,
+                    receivedAt = receivedAtIso,
+                    smsHash = smsHash,
+                    body = rawBody,
+                )
+            }
+            db.markProcessed(
+                listOf(
+                    FuloosLocalDb.ProcessedEntry(
+                        smsHash = smsHash,
+                        androidSmsId = androidSmsId,
+                        accountId = accountId.ifBlank { null },
+                        transactionId = null,
+                        status = "unparsed",
+                    ),
+                ),
+                ownerKey,
+            )
+            return DecisionOutcome.COVERED
+        }
+
         val txJson = decision.optJSONObject("transaction") ?: return DecisionOutcome.COVERED
+        val parsedBy = decision.optNonNullString("parsedBy")
+        if (parsedBy.startsWith("learned:")) {
+            val tplId = parsedBy.removePrefix("learned:").trim()
+            if (tplId.isNotEmpty()) db.recordTemplateHit(tplId, ownerKey)
+        }
         val lookups = parseLookups(ctxJson)
         val accountName = lookups.accounts[accountId]
         val accountCurrency = decision.optNonNullString("accountCurrency")

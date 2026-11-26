@@ -36,8 +36,15 @@ import { ConfirmOccurrenceModal, RecurringEditorModal } from "./RecurringView";
 import { HouseholdSettings } from "./HouseholdSettings";
 import { NotificationSettings } from "./NotificationSettings";
 import { SettingsDialog } from "./Settings";
+import { TeachSmsModal, type TeachSmsTarget } from "./TeachSmsModal";
+import { UnparsedSmsModal } from "./UnparsedSmsModal";
 import { planTransactionDeletion } from "./transactionDeletion";
+import type {
+  InboxDryRunSenderStats,
+  UnparsedSmsItem,
+} from "./mobile/platformBridge";
 import type { SmsAccountLink } from "./mobile/smsLinks";
+import type { LearnedTemplate } from "./sms/types";
 
 const CsvImport = lazy(() =>
   import("./CsvImport").then((m) => ({ default: m.CsvImport })),
@@ -76,6 +83,16 @@ export function AppModals({
   confirmAmountsTxId,
   setConfirmAmountsOpen,
   onConfirmForeignAmount,
+  unparsedSmsOpen = false,
+  setUnparsedSmsOpen,
+  unparsedSmsItems = [],
+  onDismissUnparsedSms,
+  onTeachUnparsedSms,
+  teachSmsTarget = null,
+  setTeachSmsTarget,
+  onSaveLearnedTemplate,
+  onRunInboxDryRun,
+  smsSettingsSection,
   deleteOpen,
   setDeleteOpen,
   accountToDelete,
@@ -159,6 +176,19 @@ export function AppModals({
     tx: Transaction,
     patch: Pick<Transaction, "amount" | "fx_rate" | "fx_source" | "fx_status">,
   ) => Promise<void>;
+  unparsedSmsOpen?: boolean;
+  setUnparsedSmsOpen?: (v: boolean) => void;
+  unparsedSmsItems?: UnparsedSmsItem[];
+  onDismissUnparsedSms?: (item: UnparsedSmsItem) => void;
+  onTeachUnparsedSms?: (item: UnparsedSmsItem) => void;
+  teachSmsTarget?: TeachSmsTarget | null;
+  setTeachSmsTarget?: (target: TeachSmsTarget | null) => void;
+  onSaveLearnedTemplate?: (
+    template: LearnedTemplate,
+    target: TeachSmsTarget,
+  ) => Promise<void> | void;
+  onRunInboxDryRun?: () => Promise<{ supported: boolean; senders: InboxDryRunSenderStats[] }>;
+  smsSettingsSection?: ReactNode;
   deleteOpen: boolean;
   setDeleteOpen: (v: boolean) => void;
   accountToDelete: Account | null;
@@ -262,11 +292,22 @@ export function AppModals({
             setSettingsOpen(false);
             setSmsAutoCaptureOpen(true);
           }}
+          onOpenUnparsedSms={
+            setUnparsedSmsOpen
+              ? () => {
+                  setSettingsOpen(false);
+                  setUnparsedSmsOpen(true);
+                }
+              : undefined
+          }
+          onRunInboxDryRun={onRunInboxDryRun}
           pendingAlertCount={pendingAlertCount}
+          unparsedSmsCount={unparsedSmsItems.length}
           linkedSmsCount={smsLinks.length}
           userSettings={ledger.user_settings}
           onSaveUserSettings={onSaveUserSettings}
           security={security}
+          smsSection={smsSettingsSection}
           notifications={
             <NotificationSettings
               demo={demo}
@@ -540,6 +581,9 @@ export function AppModals({
             onImportAlert={onImportCapturedAlert}
             onDismissAlert={onDismissCapturedAlert}
             onAddAlert={onAddCapturedAlert}
+            onTeachFromCorrection={
+              setTeachSmsTarget ? (target) => setTeachSmsTarget(target) : undefined
+            }
             onLoadToken={
               !demo && backend ? () => backend!.loadCaptureToken() : undefined
             }
@@ -653,6 +697,27 @@ export function AppModals({
           onConfirm={onConfirmForeignAmount}
           onClose={() => {
             if (!busy) setConfirmAmountsOpen(false);
+          }}
+        />
+      )}
+      {unparsedSmsOpen && setUnparsedSmsOpen && onDismissUnparsedSms && (
+        <UnparsedSmsModal
+          items={unparsedSmsItems}
+          busy={busy}
+          onDismiss={onDismissUnparsedSms}
+          onTeach={onTeachUnparsedSms}
+          onClose={() => {
+            if (!busy) setUnparsedSmsOpen(false);
+          }}
+        />
+      )}
+      {teachSmsTarget && setTeachSmsTarget && onSaveLearnedTemplate && (
+        <TeachSmsModal
+          target={teachSmsTarget}
+          busy={busy}
+          onSave={onSaveLearnedTemplate}
+          onClose={() => {
+            if (!busy) setTeachSmsTarget(null);
           }}
         />
       )}

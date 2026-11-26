@@ -416,6 +416,142 @@ class FuloosSmsPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun getUnparsedSms(call: PluginCall) {
+        val ownerKey = resolveOwnerKey(call)
+        val entries = db.getUnparsedSms(ownerKey)
+        val arr = JSArray()
+        for (item in entries) {
+            arr.put(
+                JSObject().apply {
+                    put("id", item.id)
+                    put("sender", item.sender)
+                    put("received_at", item.receivedAt)
+                    put("sms_hash", item.smsHash)
+                    put("body", item.body)
+                    put("created_at", item.createdAt)
+                    put("dismissed", item.dismissed)
+                },
+            )
+        }
+        call.resolve(JSObject().put("items", arr))
+    }
+
+    @PluginMethod
+    fun dismissUnparsedSms(call: PluginCall) {
+        val ownerKey = resolveOwnerKey(call)
+        val id = call.getLong("id") ?: -1L
+        val ok = if (id > 0L) db.dismissUnparsedSms(id, ownerKey) else false
+        call.resolve(JSObject().put("ok", ok))
+    }
+
+    @PluginMethod
+    fun getLearnedTemplates(call: PluginCall) {
+        val ownerKey = resolveOwnerKey(call)
+        val arr = db.getLearnedTemplatesJson(ownerKey)
+        call.resolve(JSObject().put("templates", JSArray(arr.toString())))
+    }
+
+    @PluginMethod
+    fun saveLearnedTemplate(call: PluginCall) {
+        val ownerKey = resolveOwnerKey(call)
+        val tplObj = call.getObject("template")
+        val ok = if (tplObj != null) {
+            db.saveLearnedTemplate(JSONObject(tplObj.toString()), ownerKey)
+        } else {
+            false
+        }
+        call.resolve(JSObject().put("ok", ok))
+    }
+
+    @PluginMethod
+    fun deleteLearnedTemplate(call: PluginCall) {
+        val ownerKey = resolveOwnerKey(call)
+        val id = call.getString("id")?.trim().orEmpty()
+        val ok = if (id.isNotEmpty()) db.deleteLearnedTemplate(id, ownerKey) else false
+        call.resolve(JSObject().put("ok", ok))
+    }
+
+    @PluginMethod
+    fun recordTemplateHit(call: PluginCall) {
+        val ownerKey = resolveOwnerKey(call)
+        val id = call.getString("id")?.trim().orEmpty()
+        if (id.isNotEmpty()) db.recordTemplateHit(id, ownerKey)
+        call.resolve(JSObject().put("ok", id.isNotEmpty()))
+    }
+
+    /**
+     * Debug-only dry run: reads up to 500 recent SMS from linked senders on-device,
+     * evaluates them through HeadlessSmsEngine, and returns ONLY aggregate counts
+     * per sender (parsed, review, unparsed, skipped). Zero message text returned,
+     * zero DB writes, zero network calls.
+     */
+    @PluginMethod
+    fun runInboxDryRun(call: PluginCall) {
+        if (!BuildConfig.DEBUG || !BuildConfig.SUPPORTS_DIRECT_SMS ||
+            !hasAndroidPermission(Manifest.permission.READ_SMS)
+        ) {
+            call.resolve(JSObject().put("supported", false).put("senders", JSArray()))
+            return
+        }
+        val ownerKey = resolveOwnerKey(call)
+        val ctxJson = db.buildEffectiveEngineContextJson(ownerKey)
+        val (senders, _) = db.getEnabledSendersAndWatermark(ownerKey)
+        if (ctxJson.isNullOrBlank() || senders.isEmpty()) {
+            call.resolve(JSObject().put("supported", true).put("senders", JSArray()))
+            return
+        }
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val inboxRes = SmsInboxReader.readMessages(
+                    context = context,
+                    senders = senders,
+                    sinceTimestampMs = 0L,
+                    limit = 500,
+                    offset = 0,
+                )
+                val messages = inboxRes.optJSONArray("messages")
+                val counts = linkedMapOf<String, IntArray>() // [total, parsed, review, unparsed, skipped]
+                if (messages != null && messages.length() > 0) {
+                    val engine = HeadlessSmsEngine(context)
+                    val decisions = engine.processBatch(messages.toString(), ctxJson)
+                    if (decisions != null) {
+                        for (i in 0 until decisions.length()) {
+                            val d = decisions.optJSONObject(i) ?: continue
+                            val sender = FuloosLocalDb.normalizeSender(d.optString("sender", "UNKNOWN"))
+                                .ifBlank { "UNKNOWN" }
+                            val bucket = counts.getOrPut(sender) { IntArray(5) }
+                            bucket[0]++
+                            when (d.optString("action", "skip")) {
+                                "auto_add" -> bucket[1]++
+                                "needs_review" -> bucket[2]++
+                                "unparsed" -> bucket[3]++
+                                else -> bucket[4]++
+                            }
+                        }
+                    }
+                }
+                val outArr = JSArray()
+                for ((sender, b) in counts) {
+                    outArr.put(
+                        JSObject().apply {
+                            put("sender", sender)
+                            put("total", b[0])
+                            put("parsed", b[1])
+                            put("review", b[2])
+                            put("unparsed", b[3])
+                            put("skipped", b[4])
+                        },
+                    )
+                }
+                call.resolve(JSObject().put("supported", true).put("senders", outArr))
+            } catch (e: Exception) {
+                call.reject("Inbox dry run failed: ${e.message}", e)
+            }
+        }
+    }
+
+    @PluginMethod
     fun getPendingDeepLink(call: PluginCall) {
         val event = pendingDeepLink
         pendingDeepLink = null
@@ -443,6 +579,7 @@ class FuloosSmsPlugin : Plugin() {
             put("ignoringBatteryOptimizations", isIgnoringBatteryOptimizations())
             put("supportsDirectSms", BuildConfig.SUPPORTS_DIRECT_SMS)
             put("buildFlavor", BuildConfig.BUILD_FLAVOR)
+            put("isDebugBuild", BuildConfig.DEBUG)
         }
     }
 
