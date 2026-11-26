@@ -1,6 +1,25 @@
-import { shiftMonth, totals, type Category, type Kind, type Transaction } from "./domain.ts";
-import { transactionCategoryAmounts } from "./enrichment.ts";
+import {
+  shiftMonth,
+  type Account,
+  type Category,
+  type Kind,
+  type Transaction,
+} from "./domain.ts";
+import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "./currency.ts";
+import {
+  accountCurrencyMap,
+  convertTransactionToReporting,
+  defaultRateLookup,
+  transactionCategoryAmountsInReporting,
+  type RateLookupFn,
+} from "./multiCurrency.ts";
 import { periodMonths, type PeriodSpan } from "./period.ts";
+
+export interface ReportingOptions {
+  accounts?: ReadonlyArray<Account>;
+  reportingCurrency?: string;
+  rateLookup?: RateLookupFn;
+}
 
 export interface PeriodRange {
   /** First month "YYYY-MM" inclusive, or null for all time. */
@@ -14,6 +33,7 @@ export interface PeriodMetrics {
   expenses: number;
   net: number;
   savingsRatePct: number | null;
+  estimatedCount?: number;
 }
 
 export interface MetricDelta {
@@ -50,6 +70,7 @@ export interface PayeeBreakdownResult {
   totalFils: number;
   totalPayees: number;
   items: PayeeBreakdownItem[];
+  estimatedCount?: number;
 }
 
 export interface CategoryTrendSeries {
@@ -66,6 +87,7 @@ export interface CategoryTrendsResult {
   categories: CategoryTrendSeries[];
   monthTotals: number[];
   maxFils: number;
+  estimatedCount?: number;
 }
 
 /**
@@ -136,13 +158,34 @@ export function computeDeltaAndPct(
   };
 }
 
-function metricsFor(transactions: Transaction[]): PeriodMetrics {
-  const { income, expense } = totals(transactions);
+function metricsFor(
+  transactions: Transaction[],
+  options?: ReportingOptions,
+): PeriodMetrics {
+  const target = normalizeCurrencyCode(
+    options?.reportingCurrency ?? DEFAULT_CURRENCY,
+  );
+  const accCurr = options?.accounts
+    ? accountCurrencyMap(options.accounts)
+    : null;
+  const rateLookup = options?.rateLookup ?? defaultRateLookup;
+  let income = 0;
+  let expense = 0;
+  let estimatedCount = 0;
+  for (const t of transactions) {
+    if (t.type !== "income" && t.type !== "expense") continue;
+    const fromCurr = accCurr?.get(t.account_id) ?? target;
+    const conv = convertTransactionToReporting(t, fromCurr, target, rateLookup);
+    if (conv.estimated) estimatedCount++;
+    if (t.type === "income") income += conv.amount;
+    else expense += conv.amount;
+  }
   return {
     income,
     expenses: expense,
     net: income - expense,
     savingsRatePct: computeSavingsRate(income, expense),
+    ...(estimatedCount > 0 ? { estimatedCount } : {}),
   };
 }
 
@@ -152,9 +195,10 @@ function metricsFor(transactions: Transaction[]): PeriodMetrics {
 export function computeYoYComparison(
   transactions: ReadonlyArray<Transaction>,
   range: PeriodRange,
+  options?: ReportingOptions,
 ): YoYComparison {
   const currentTx = filterTransactionsInRange(transactions, range);
-  const current = metricsFor(currentTx);
+  const current = metricsFor(currentTx, options);
   const priorRange = shiftRangeOneYearBack(range);
 
   if (!priorRange) {
@@ -170,7 +214,7 @@ export function computeYoYComparison(
   }
 
   const priorTx = filterTransactionsInRange(transactions, priorRange);
-  const prior = metricsFor(priorTx);
+  const prior = metricsFor(priorTx, options);
 
   return {
     available: true,
@@ -199,10 +243,20 @@ export function computeYoYComparison(
 export function computePayeeBreakdown(
   transactions: ReadonlyArray<Transaction>,
   range: PeriodRange,
-  options?: { kind?: Exclude<Kind, "transfer">; limit?: number },
+  options?: {
+    kind?: Exclude<Kind, "transfer">;
+    limit?: number;
+  } & ReportingOptions,
 ): PayeeBreakdownResult {
   const kind = options?.kind ?? "expense";
   const limit = options?.limit ?? 10;
+  const target = normalizeCurrencyCode(
+    options?.reportingCurrency ?? DEFAULT_CURRENCY,
+  );
+  const accCurr = options?.accounts
+    ? accountCurrencyMap(options.accounts)
+    : null;
+  const rateLookup = options?.rateLookup ?? defaultRateLookup;
   const scoped = filterTransactionsInRange(transactions, range);
 
   const groups = new Map<
@@ -210,24 +264,28 @@ export function computePayeeBreakdown(
     { payee: string; count: number; totalFils: number }
   >();
   let totalFils = 0;
+  let estimatedCount = 0;
 
   for (const t of scoped) {
     if (t.type !== kind) continue;
+    const fromCurr = accCurr?.get(t.account_id) ?? target;
+    const conv = convertTransactionToReporting(t, fromCurr, target, rateLookup);
+    if (conv.estimated) estimatedCount++;
     const trimmed = (t.payee ?? "").trim();
     const displayPayee = trimmed || "(No payee)";
     const key = displayPayee.toLowerCase();
     const existing = groups.get(key);
     if (existing) {
       existing.count += 1;
-      existing.totalFils += t.amount;
+      existing.totalFils += conv.amount;
     } else {
       groups.set(key, {
         payee: displayPayee,
         count: 1,
-        totalFils: t.amount,
+        totalFils: conv.amount,
       });
     }
-    totalFils += t.amount;
+    totalFils += conv.amount;
   }
 
   const sorted = [...groups.values()].sort(
@@ -251,6 +309,7 @@ export function computePayeeBreakdown(
     totalFils,
     totalPayees: groups.size,
     items,
+    estimatedCount,
   };
 }
 
@@ -265,10 +324,20 @@ export function computeCategoryTrends(
   transactions: ReadonlyArray<Transaction>,
   categories: ReadonlyArray<Category>,
   endMonth: string,
-  options?: { monthsCount?: number; topCategories?: number },
+  options?: {
+    monthsCount?: number;
+    topCategories?: number;
+  } & ReportingOptions,
 ): CategoryTrendsResult {
   const monthsCount = Math.max(1, options?.monthsCount ?? 6);
   const topCategories = Math.max(1, options?.topCategories ?? 5);
+  const target = normalizeCurrencyCode(
+    options?.reportingCurrency ?? DEFAULT_CURRENCY,
+  );
+  const accCurr = options?.accounts
+    ? accountCurrencyMap(options.accounts)
+    : null;
+  const rateLookup = options?.rateLookup ?? defaultRateLookup;
 
   const months: string[] = [];
   for (let i = monthsCount - 1; i >= 0; i--) {
@@ -279,6 +348,7 @@ export function computeCategoryTrends(
 
   const monthTotals = new Array<number>(monthsCount).fill(0);
   const byCategory = new Map<string, number[]>();
+  let estimatedCount = 0;
 
   for (const t of transactions) {
     if (t.type !== "expense") continue;
@@ -286,7 +356,16 @@ export function computeCategoryTrends(
     const idx = monthIndex.get(m);
     if (idx === undefined) continue;
 
-    for (const part of transactionCategoryAmounts(t)) {
+    const fromCurr = accCurr?.get(t.account_id) ?? target;
+    const conv = transactionCategoryAmountsInReporting(
+      t,
+      fromCurr,
+      target,
+      rateLookup,
+    );
+    if (conv.estimated) estimatedCount++;
+
+    for (const part of conv.parts) {
       const catId = part.category_id ?? UNCATEGORIZED_ID;
       let arr = byCategory.get(catId);
       if (!arr) {
@@ -330,5 +409,6 @@ export function computeCategoryTrends(
     categories: top,
     monthTotals,
     maxFils,
+    estimatedCount,
   };
 }

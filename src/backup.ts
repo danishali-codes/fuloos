@@ -17,9 +17,15 @@ import type {
 } from "./domain.ts";
 import { budgetsOverlap, isMonth, MAX_BUDGET_AMOUNT } from "./budgets.ts";
 import {
+  DEFAULT_CURRENCY,
+  FX_SOURCES,
+  FX_STATUSES,
   isSupportedCurrency,
+  isThreeLetterCurrencyCode,
   normalizeCurrencyCode,
   validateForeignCurrencyFields,
+  type FxSource,
+  type FxStatus,
 } from "./currency.ts";
 import { normalizeSplits, normalizeTags } from "./enrichment.ts";
 import {
@@ -30,11 +36,14 @@ import {
 } from "./csvPresets.ts";
 import {
   defaultRecurringPreferences,
+  defaultUserSettings,
   isIsoCalendarDate,
+  reportingCurrency,
   type Account,
   type AccountType,
   type Budget,
   type Category,
+  type ConfirmForeignMode,
   type Kind,
   type Ledger,
   type RecurringAmountType,
@@ -45,6 +54,7 @@ import {
   type RecurringSchedule,
   type RecurringStatus,
   type Transaction,
+  type UserSettings,
 } from "./domain.ts";
 
 export const BACKUP_FORMAT_VERSION = 2;
@@ -105,7 +115,7 @@ export interface FuloosBackup {
   format_version: 1 | 2;
   app: "fuloos";
   exported_at: string;
-  currency: "AED";
+  currency: string;
   excluded: readonly string[];
   data: {
     accounts: Account[];
@@ -116,6 +126,7 @@ export interface FuloosBackup {
     recurring_prefs: RecurringPreferences;
     budgets: Budget[];
     csv_presets: CsvPreset[];
+    user_settings?: UserSettings;
     goals?: SavingsGoal[];
     goal_contributions?: GoalContribution[];
     rules?: TransactionRule[];
@@ -252,7 +263,7 @@ export function createBackup(
     format_version: BACKUP_FORMAT_VERSION,
     app: "fuloos",
     exported_at: exportedAt,
-    currency: "AED",
+    currency: reportingCurrency(ledger),
     excluded: [...BACKUP_EXCLUSIONS],
     data: {
       accounts: ledger.accounts.map((a) => ({ ...a })),
@@ -276,6 +287,9 @@ export function createBackup(
         ],
       },
       budgets: (ledger.budgets ?? []).map((b) => ({ ...b })),
+      ...(ledger.user_settings
+        ? { user_settings: { ...ledger.user_settings } }
+        : {}),
       goals: structuredClone(ledger.goals ?? []),
       goal_contributions: structuredClone(ledger.goal_contributions ?? []),
       rules: structuredClone(ledger.rules ?? []),
@@ -329,10 +343,15 @@ export function parseAndValidateBackup(rawText: string): {
   if (parsed.app !== undefined && parsed.app !== "fuloos") {
     fail("Backup file is not a Fuloos backup.");
   }
-  if (parsed.currency !== undefined && parsed.currency !== "AED") {
-    fail(
-      `Unsupported currency "${String(parsed.currency)}". Only AED is supported.`,
-    );
+  let backupCurrency: string = DEFAULT_CURRENCY;
+  if (parsed.currency !== undefined && parsed.currency !== null && parsed.currency !== "") {
+    if (
+      typeof parsed.currency !== "string" ||
+      !isSupportedCurrency(parsed.currency)
+    ) {
+      fail(`Unsupported currency "${String(parsed.currency)}".`);
+    }
+    backupCurrency = normalizeCurrencyCode(parsed.currency);
   }
   const exportedAt =
     typeof parsed.exported_at === "string" && parsed.exported_at.trim()
@@ -565,11 +584,42 @@ export function parseAndValidateBackup(rawText: string): {
         }
       }
 
+      let to_amount: number | undefined;
+      if (raw.to_amount !== undefined && raw.to_amount !== null) {
+        if (type !== "transfer") {
+          fail(`Transaction #${i + 1} cannot have to_amount unless it is a transfer.`);
+        }
+        to_amount = requireIntFils(
+          raw.to_amount,
+          `Transaction #${i + 1} to_amount`,
+          0,
+          MAX_MONETARY_FILS,
+        );
+      }
+
+      const fxSourceSet = new Set<string>(FX_SOURCES);
+      const fxStatusSet = new Set<string>(FX_STATUSES);
+      const fx_rate_date =
+        typeof raw.fx_rate_date === "string" && raw.fx_rate_date.trim()
+          ? requireDateInBounds(raw.fx_rate_date, `Transaction #${i + 1} fx_rate_date`)
+          : undefined;
+      const fx_source: FxSource | undefined =
+        typeof raw.fx_source === "string" && fxSourceSet.has(raw.fx_source)
+          ? (raw.fx_source as FxSource)
+          : undefined;
+      const fx_status: FxStatus | undefined =
+        typeof raw.fx_status === "string" && fxStatusSet.has(raw.fx_status)
+          ? (raw.fx_status as FxStatus)
+          : undefined;
+
       let foreignFields:
         | {
             original_currency: string;
             original_amount: number;
             fx_rate: number;
+            fx_rate_date?: string;
+            fx_source?: FxSource;
+            fx_status?: FxStatus;
           }
         | undefined;
       if (
@@ -581,13 +631,41 @@ export function parseAndValidateBackup(rawText: string): {
           fail(`Transaction #${i + 1} has an invalid original_currency.`);
         }
         const oc = normalizeCurrencyCode(raw.original_currency);
-        if (oc !== "AED") {
+        const txAcc = accounts.find((a) => a.id === raw.account_id);
+        const accCurr = normalizeCurrencyCode(txAcc?.currency);
+        const allowUnknown = fx_status === "estimated" && isThreeLetterCurrencyCode(oc);
+        if (oc === accCurr) {
+          const origAmt =
+            raw.original_amount !== undefined && raw.original_amount !== null
+              ? requireIntFils(
+                  raw.original_amount,
+                  `Transaction #${i + 1} original_amount`,
+                  0,
+                  MAX_MONETARY_FILS,
+                )
+              : amount;
+          const rate =
+            typeof raw.fx_rate === "number" && Number.isFinite(raw.fx_rate) && raw.fx_rate > 0
+              ? raw.fx_rate
+              : 1;
+          foreignFields = {
+            original_currency: oc,
+            original_amount: origAmt,
+            fx_rate: rate,
+            ...(fx_rate_date ? { fx_rate_date } : {}),
+            ...(fx_source ? { fx_source } : {}),
+            ...(fx_status ? { fx_status } : {}),
+          };
+        } else {
           try {
-            validateForeignCurrencyFields({
-              original_currency: oc,
-              original_amount: raw.original_amount as number,
-              fx_rate: raw.fx_rate as number,
-            });
+            validateForeignCurrencyFields(
+              {
+                original_currency: oc,
+                original_amount: raw.original_amount as number,
+                fx_rate: raw.fx_rate as number,
+              },
+              { accountCurrency: accCurr, allowUnknownCode: allowUnknown },
+            );
           } catch (err) {
             fail(
               `Transaction #${i + 1}: ${err instanceof Error ? err.message : "Invalid foreign currency fields."}`,
@@ -597,6 +675,9 @@ export function parseAndValidateBackup(rawText: string): {
             original_currency: oc,
             original_amount: raw.original_amount as number,
             fx_rate: raw.fx_rate as number,
+            ...(fx_rate_date ? { fx_rate_date } : {}),
+            ...(fx_source ? { fx_source } : {}),
+            ...(fx_status ? { fx_status } : {}),
           };
         }
       }
@@ -605,6 +686,7 @@ export function parseAndValidateBackup(rawText: string): {
         id,
         type,
         amount,
+        ...(to_amount !== undefined ? { to_amount } : {}),
         account_id: raw.account_id,
         to_account_id: toAccountId,
         category_id: categoryId,
@@ -710,11 +792,26 @@ export function parseAndValidateBackup(rawText: string): {
           : requireString(raw.notes, `Recurring schedule "${name}" notes`, {
               max: 1000,
             });
+      let recCurrency: string | undefined;
+      if (
+        raw.currency !== undefined &&
+        raw.currency !== null &&
+        raw.currency !== ""
+      ) {
+        if (
+          typeof raw.currency !== "string" ||
+          !isSupportedCurrency(raw.currency)
+        ) {
+          fail(`Recurring schedule "${name}" has an unsupported currency.`);
+        }
+        recCurrency = normalizeCurrencyCode(raw.currency);
+      }
       const schedule: RecurringSchedule = {
         id,
         name,
         type: raw.type as RecurringKind,
         amount,
+        ...(recCurrency ? { currency: recCurrency } : {}),
         amount_type: raw.amount_type as RecurringAmountType,
         account_id: raw.account_id,
         category_id: categoryId,
@@ -898,11 +995,41 @@ export function parseAndValidateBackup(rawText: string): {
     csv_presets.push(parsedPreset);
   }
 
+  let user_settings: UserSettings | undefined;
+  if (d.user_settings !== undefined) {
+    if (!isPlainObject(d.user_settings)) {
+      fail("Backup data.user_settings must be an object.");
+    }
+    const us = d.user_settings;
+    const repCurr =
+      typeof us.reporting_currency === "string" && isSupportedCurrency(us.reporting_currency)
+        ? normalizeCurrencyCode(us.reporting_currency)
+        : backupCurrency;
+    const mode: ConfirmForeignMode =
+      us.confirm_foreign_mode === "always" ||
+      us.confirm_foreign_mode === "above_threshold" ||
+      us.confirm_foreign_mode === "never"
+        ? us.confirm_foreign_mode
+        : defaultUserSettings.confirm_foreign_mode;
+    const threshold =
+      typeof us.confirm_foreign_threshold === "number" &&
+      Number.isSafeInteger(us.confirm_foreign_threshold) &&
+      us.confirm_foreign_threshold >= 0 &&
+      us.confirm_foreign_threshold <= MAX_MONETARY_FILS
+        ? us.confirm_foreign_threshold
+        : defaultUserSettings.confirm_foreign_threshold;
+    user_settings = {
+      reporting_currency: repCurr,
+      confirm_foreign_mode: mode,
+      confirm_foreign_threshold: threshold,
+    };
+  }
+
   const backup: FuloosBackup = {
     format_version: parsed.format_version as 1 | 2,
     app: "fuloos",
     exported_at: exportedAt,
-    currency: "AED",
+    currency: backupCurrency,
     excluded: [...BACKUP_EXCLUSIONS],
     data: {
       accounts,
@@ -913,6 +1040,7 @@ export function parseAndValidateBackup(rawText: string): {
       recurring_prefs,
       budgets,
       csv_presets,
+      ...(user_settings ? { user_settings } : {}),
       ...validateBackupExtensions(d, { accounts, categories, transactions }),
     },
   };
@@ -1011,6 +1139,7 @@ export type RestoreBackend = Pick<FuloosBackend, "save" | "createMany"> &
       | "shareBudgetWithHousehold"
       | "saveNotificationPrefs"
       | "loadNotificationPrefs"
+      | "saveUserSettings"
       | "loadHouseholds"
       | "getSession"
     >
@@ -1214,6 +1343,7 @@ export async function executeRestore(params: {
     const remapped: Omit<Transaction, "id"> = {
       type: t.type,
       amount: t.amount,
+      ...(t.to_amount !== undefined ? { to_amount: t.to_amount } : {}),
       account_id: accountIdMap.get(t.account_id) ?? t.account_id,
       to_account_id: t.to_account_id
         ? (accountIdMap.get(t.to_account_id) ?? t.to_account_id)
@@ -1235,11 +1365,14 @@ export async function executeRestore(params: {
             })),
           }
         : {}),
-      ...(t.original_currency && t.original_currency !== "AED"
+      ...(t.original_currency
         ? {
             original_currency: t.original_currency,
-            original_amount: t.original_amount,
-            fx_rate: t.fx_rate,
+            original_amount: t.original_amount ?? t.amount,
+            fx_rate: t.fx_rate ?? 1,
+            ...(t.fx_rate_date ? { fx_rate_date: t.fx_rate_date } : {}),
+            ...(t.fx_source ? { fx_source: t.fx_source } : {}),
+            ...(t.fx_status ? { fx_status: t.fx_status } : {}),
           }
         : {}),
     };
@@ -1306,6 +1439,7 @@ export async function executeRestore(params: {
       name: r.name,
       type: r.type,
       amount: r.amount,
+      ...(r.currency ? { currency: r.currency } : {}),
       amount_type: r.amount_type,
       account_id: accountIdMap.get(r.account_id) ?? r.account_id,
       category_id: r.category_id
@@ -1535,9 +1669,22 @@ export async function executeRestore(params: {
       demoId,
       check,
     );
+  let nextUserSettings = existingLedger.user_settings;
+  if (backup.data.user_settings && mode === "empty") {
+    nextUserSettings = { ...backup.data.user_settings };
+    if (!demo && backend?.saveUserSettings) {
+      try {
+        nextUserSettings = await backend.saveUserSettings(nextUserSettings);
+      } catch {
+        // Non-fatal if user_settings table is not yet migrated.
+      }
+    }
+  }
+
   const nextLedger: Ledger = {
     ...existingLedger,
     ...extensions,
+    ...(nextUserSettings ? { user_settings: nextUserSettings } : {}),
     accounts: [...existingLedger.accounts, ...createdAccounts].map((a) => {
       const original = backup.data.accounts.find(
         (old) => accountIdMap.get(old.id) === a.id,

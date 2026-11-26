@@ -1,5 +1,17 @@
-import type { Budget, Category, Ledger, Transaction } from "./domain.ts";
-import { transactionCategoryAmounts } from "./enrichment.ts";
+import {
+  reportingCurrency,
+  type Budget,
+  type Category,
+  type Ledger,
+  type Transaction,
+} from "./domain.ts";
+import {
+  accountCurrencyMap,
+  defaultRateLookup,
+  transactionCategoryAmountsInReporting,
+  type RateLookupFn,
+} from "./multiCurrency.ts";
+import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "./currency.ts";
 
 export const MAX_BUDGET_AMOUNT = 100_000_000_000;
 /** Share of a budget spent before a category is flagged as close to its limit. */
@@ -9,9 +21,9 @@ export type BudgetStatus = "under" | "near" | "over";
 
 export interface BudgetProgress {
   category: Category;
-  /** Total budget across every month in the range, in fils. */
+  /** Total budget across every month in the range, in reporting-currency minor units. */
   budget: number;
-  /** Expenses recorded against the category in the range, in fils. */
+  /** Expenses recorded against the category in the range, converted to reporting-currency minor units. */
   actual: number;
   remaining: number;
   /** actual / budget, or Infinity when spending exists against a zero budget. */
@@ -28,6 +40,10 @@ export interface BudgetReport {
   /** Expenses in the range that no budget covers (uncategorised, unbudgeted category or month). */
   unbudgeted: number;
   months: string[];
+  /** Reporting currency of budget and actual figures. */
+  currency?: string;
+  /** Number of expense transactions included with estimated FX rates. */
+  estimatedCount?: number;
 }
 
 export function isMonth(value: string): boolean {
@@ -131,20 +147,37 @@ export function budgetReport(
   ledger: Ledger,
   startMonth: string,
   endMonth: string,
+  options?: { reportingCurrency?: string; rateLookup?: RateLookupFn },
 ): BudgetReport {
   const months = monthsBetween(startMonth, endMonth);
   const budgets = ledger.budgets ?? [];
   const monthSet = new Set(months);
+  const targetCurrency = normalizeCurrencyCode(
+    options?.reportingCurrency ?? reportingCurrency(ledger),
+  );
+  const rateLookup = options?.rateLookup ?? defaultRateLookup;
+  const accCurr = accountCurrencyMap(ledger.accounts);
   const expenses = ledger.transactions.filter(
     (t): t is Transaction =>
       t.type === "expense" && monthSet.has(t.date.slice(0, 7)),
   );
   const spentByKey = new Map<string, number>();
+  let totalSpent = 0;
+  let estimatedCount = 0;
   for (const t of expenses) {
     const monthKey = t.date.slice(0, 7);
-    for (const part of transactionCategoryAmounts(t)) {
+    const fromCurr = accCurr.get(t.account_id) ?? DEFAULT_CURRENCY;
+    const converted = transactionCategoryAmountsInReporting(
+      t,
+      fromCurr,
+      targetCurrency,
+      rateLookup,
+    );
+    if (converted.estimated) estimatedCount++;
+    for (const part of converted.parts) {
       const key = `${part.category_id ?? ""}|${monthKey}`;
       spentByKey.set(key, (spentByKey.get(key) ?? 0) + part.amount);
+      totalSpent += part.amount;
     }
   }
   const budgetsByCat = new Map<string, Budget[]>();
@@ -187,13 +220,14 @@ export function budgetReport(
       b.ratio - a.ratio ||
       a.category.name.localeCompare(b.category.name),
   );
-  const totalSpent = expenses.reduce((s, t) => s + t.amount, 0);
   return {
     rows,
     totalBudget: rows.reduce((s, r) => s + r.budget, 0),
     totalActual: covered,
     unbudgeted: totalSpent - covered,
     months,
+    currency: targetCurrency,
+    estimatedCount,
   };
 }
 
@@ -201,7 +235,13 @@ export function budgetReport(
 export function unbudgetedCategories(
   ledger: Ledger,
   month: string,
+  options?: { reportingCurrency?: string; rateLookup?: RateLookupFn },
 ): { category: Category; actual: number }[] {
+  const targetCurrency = normalizeCurrencyCode(
+    options?.reportingCurrency ?? reportingCurrency(ledger),
+  );
+  const rateLookup = options?.rateLookup ?? defaultRateLookup;
+  const accCurr = accountCurrencyMap(ledger.accounts);
   const budgetedCats = new Set<string>();
   for (const b of ledger.budgets ?? []) {
     if (budgetCovers(b, month)) budgetedCats.add(b.category_id);
@@ -209,7 +249,14 @@ export function unbudgetedCategories(
   const spentByCat = new Map<string, number>();
   for (const t of ledger.transactions) {
     if (t.type === "expense" && t.date.slice(0, 7) === month) {
-      for (const part of transactionCategoryAmounts(t)) {
+      const fromCurr = accCurr.get(t.account_id) ?? DEFAULT_CURRENCY;
+      const converted = transactionCategoryAmountsInReporting(
+        t,
+        fromCurr,
+        targetCurrency,
+        rateLookup,
+      );
+      for (const part of converted.parts) {
         if (part.category_id && !budgetedCats.has(part.category_id)) {
           spentByCat.set(
             part.category_id,

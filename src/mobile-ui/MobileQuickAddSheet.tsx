@@ -1,14 +1,26 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Delete, SlidersHorizontal, WifiOff, X } from "lucide-react";
 import {
+  convertMinor,
+  formatCurrency,
+  formatCurrencyInput,
+  getCurrencyDecimals,
+  normalizeCurrencyCode,
+  parseCurrencyMinor,
+  type FxSource,
+  type FxStatus,
+} from "../currency";
+import { CurrencyPicker } from "../CurrencyPicker";
+import {
+  accountCurrency,
   errorMessage,
-  minor,
   today,
   validateTransaction,
   type Kind,
   type Ledger,
   type Transaction,
 } from "../domain";
+import { fxRateService } from "../fxRates";
 import { translateText as uiText } from "../i18n";
 import {
   pickDefaultAccountId,
@@ -67,11 +79,6 @@ export function MobileQuickAddSheet({
   const [type, setType] = useState<Kind>(
     editingTx?.type ?? initialDraft?.type ?? "expense",
   );
-  const [expr, setExpr] = useState<string>(() => {
-    if (editingTx) return (editingTx.amount / 100).toFixed(2).replace(/\.00$/, "");
-    if (initialDraft?.amount) return initialDraft.amount;
-    return "0";
-  });
   const [accountId, setAccountId] = useState<string>(
     () =>
       editingTx?.account_id ??
@@ -80,6 +87,28 @@ export function MobileQuickAddSheet({
         initialDraft?.accountId ?? readRememberedAccount(),
       ),
   );
+  const selectedAccount = ledger.accounts.find((a) => a.id === accountId);
+  const accCurr = accountCurrency(selectedAccount);
+
+  const [txCurrency, setTxCurrency] = useState<string>(() => {
+    if (editingTx?.original_currency) {
+      return normalizeCurrencyCode(editingTx.original_currency);
+    }
+    if (initialDraft?.currency) {
+      return normalizeCurrencyCode(initialDraft.currency);
+    }
+    return accCurr;
+  });
+
+  const [expr, setExpr] = useState<string>(() => {
+    if (editingTx) {
+      const curr = normalizeCurrencyCode(editingTx.original_currency ?? accCurr);
+      const rawMinor = editingTx.original_amount ?? editingTx.amount;
+      return formatCurrencyInput(rawMinor, curr).replace(/\.0+$/, "");
+    }
+    if (initialDraft?.amount) return initialDraft.amount;
+    return "0";
+  });
   const [toAccountId, setToAccountId] = useState<string>(() => {
     if (editingTx?.to_account_id) return editingTx.to_account_id;
     const other = ledger.accounts.find((a) => a.id !== accountId);
@@ -94,8 +123,45 @@ export function MobileQuickAddSheet({
   const [date, setDate] = useState<string>(
     editingTx?.date ?? initialDraft?.date ?? today(),
   );
+  const [fxRate, setFxRate] = useState<number | null>(null);
+  const [fxRateDate, setFxRateDate] = useState<string>(date);
+  const [fxSource, setFxSource] = useState<FxSource>("same_currency");
+  const [fxStatus, setFxStatus] = useState<FxStatus>("exact");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const activeCurrency = type === "transfer" ? accCurr : txCurrency;
+  const decimals = getCurrencyDecimals(activeCurrency);
+  const isForeign = type !== "transfer" && txCurrency !== accCurr;
+
+  useEffect(() => {
+    if (!isForeign) {
+      setFxRate(1);
+      setFxRateDate(date);
+      setFxSource("same_currency");
+      setFxStatus("exact");
+      return;
+    }
+    let active = true;
+    fxRateService
+      .getRate(txCurrency, accCurr, date)
+      .then((res) => {
+        if (!active) return;
+        setFxRate(res.rate);
+        setFxRateDate(res.rateDate);
+        setFxSource(res.source ?? "manual_rate");
+        setFxStatus(res.status);
+      })
+      .catch(() => {
+        if (!active) return;
+        setFxRate(null);
+        setFxSource("manual_rate");
+        setFxStatus("estimated");
+      });
+    return () => {
+      active = false;
+    };
+  }, [isForeign, txCurrency, accCurr, date]);
 
   const offlineLocked = !online && !demo;
   const evaluated = evaluateCalculatorExpression(expr);
@@ -103,13 +169,29 @@ export function MobileQuickAddSheet({
   const displayEvaluated =
     evaluated !== null && evaluated > 0
       ? evaluated.toLocaleString("en-US", {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
+          minimumFractionDigits: decimals,
+          maximumFractionDigits: decimals,
         })
-      : "0.00";
+      : formatCurrencyInput(0, activeCurrency);
+
+  let estAccountMinor: number | null = null;
+  if (isForeign && evaluated !== null && evaluated > 0 && fxRate && fxRate > 0) {
+    try {
+      const origM = parseCurrencyMinor(evaluated.toFixed(decimals), txCurrency);
+      estAccountMinor = convertMinor(origM, txCurrency, accCurr, fxRate);
+    } catch {
+      estAccountMinor = null;
+    }
+  }
 
   function handleSelectAccount(nextId: string) {
+    const prevCurr = accCurr;
     setAccountId(nextId);
+    const nextAcc = ledger.accounts.find((a) => a.id === nextId);
+    const nextCurr = accountCurrency(nextAcc);
+    if (txCurrency === prevCurr) {
+      setTxCurrency(nextCurr);
+    }
     if (toAccountId === nextId) {
       const other = ledger.accounts.find((a) => a.id !== nextId);
       setToAccountId(other?.id ?? "");
@@ -133,6 +215,7 @@ export function MobileQuickAddSheet({
         return prev + key;
       }
       if (key === ".") {
+        if (decimals === 0) return prev;
         const lastPart = prev.split(/[+−×÷]/).pop() ?? "";
         if (lastPart.includes(".")) return prev;
         return prev + ".";
@@ -161,10 +244,52 @@ export function MobileQuickAddSheet({
       return;
     }
     try {
-      const amountFils = minor(evaluated.toFixed(2));
+      const origMinor = parseCurrencyMinor(
+        evaluated.toFixed(decimals),
+        activeCurrency,
+      );
+      let accMinor = origMinor;
+      let finalRate = 1;
+      let finalSource: FxSource = "same_currency";
+      let finalStatus: FxStatus = "exact";
+      let toAmount: number | undefined;
+
+      if (isForeign) {
+        if (fxRate && fxRate > 0) {
+          accMinor = convertMinor(origMinor, txCurrency, accCurr, fxRate);
+          finalRate = fxRate;
+          finalSource = fxSource;
+          finalStatus = fxStatus;
+        } else {
+          accMinor = 0;
+          finalRate = 1;
+          finalSource = "manual_rate";
+          finalStatus = "estimated";
+        }
+      } else if (type === "transfer" && toAccountId) {
+        const destAcc = ledger.accounts.find((a) => a.id === toAccountId);
+        const destCurr = accountCurrency(destAcc);
+        if (destCurr !== accCurr) {
+          const res = await fxRateService.getRate(accCurr, destCurr, date);
+          if (res.rate && res.rate > 0) {
+            toAmount = convertMinor(origMinor, accCurr, destCurr, res.rate);
+            finalRate = res.rate;
+            finalSource = res.source ?? "manual_rate";
+            finalStatus = res.status;
+          }
+        }
+      }
+
       const record: Omit<Transaction, "id"> = {
         type,
-        amount: amountFils,
+        amount: accMinor,
+        ...(toAmount !== undefined ? { to_amount: toAmount } : {}),
+        original_amount: origMinor,
+        original_currency: activeCurrency,
+        fx_rate: finalRate,
+        fx_rate_date: fxRateDate || date,
+        fx_source: finalSource,
+        fx_status: finalStatus,
         account_id: accountId,
         to_account_id: type === "transfer" ? toAccountId : null,
         category_id: type === "transfer" ? null : categoryId || null,
@@ -298,12 +423,40 @@ export function MobileQuickAddSheet({
 
       {/* Big Amount Display + Payee + Date */}
       <div className="m-qa-display">
-        <div className={`m-qa-amount-pill ${kindClass}`}>
-          <span className="m-qa-amount-cur">AED</span>
-          <span className="m-qa-amount-num m-num">{expr}</span>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+          }}
+        >
+          <div className={`m-qa-amount-pill ${kindClass}`}>
+            <span className="m-qa-amount-cur">{activeCurrency}</span>
+            <span className="m-qa-amount-num m-num">{expr}</span>
+          </div>
+          {type !== "transfer" && (
+            <div style={{ width: 92 }}>
+              <CurrencyPicker
+                value={txCurrency}
+                compact
+                disabled={busy}
+                onChange={(nextCurr) => setTxCurrency(nextCurr)}
+              />
+            </div>
+          )}
         </div>
         {hasOperator && evaluated !== null && (
-          <div className="m-qa-expr-preview m-num">= AED {displayEvaluated}</div>
+          <div className="m-qa-expr-preview m-num">
+            = {activeCurrency} {displayEvaluated}
+          </div>
+        )}
+        {isForeign && (
+          <div className="m-qa-expr-preview m-num">
+            {estAccountMinor !== null
+              ? `≈ ${formatCurrency(estAccountMinor, accCurr)}`
+              : uiText("Rate unavailable — will ask to confirm")}
+          </div>
         )}
         <div className="m-qa-meta-row">
           <input
@@ -486,14 +639,14 @@ export function MobileQuickAddSheet({
           {saving
             ? uiText("Saving…")
             : editingTx
-              ? `${uiText("Save Changes")} · AED ${displayEvaluated}`
+              ? `${uiText("Save Changes")} · ${activeCurrency} ${displayEvaluated}`
               : `${uiText("Add")} ${
                   type === "expense"
                     ? uiText("Expense")
                     : type === "income"
                       ? uiText("Income")
                       : uiText("Transfer")
-                } · AED ${displayEvaluated}`}
+                } · ${activeCurrency} ${displayEvaluated}`}
         </button>
       </div>
     </div>

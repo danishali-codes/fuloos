@@ -11,6 +11,13 @@ import {
   X,
 } from "lucide-react";
 import {
+  formatCurrencyInput,
+  normalizeCurrencyCode,
+  parseCurrencyMinor,
+} from "./currency.ts";
+import { CurrencyPicker } from "./CurrencyPicker";
+import {
+  accountCurrency,
   errorMessage,
   minor,
   money,
@@ -46,7 +53,7 @@ export function RecurringEditorModal({
   item?: RecurringSchedule;
   initialDraft?: Partial<Omit<RecurringSchedule, "id">>;
   ledger: Ledger;
-  concealed: (v: number) => string;
+  concealed: (v: number, currency?: string) => string;
   busy: boolean;
   onClose: () => void;
   onSave: (value: Omit<RecurringSchedule, "id">, id?: string) => Promise<void>;
@@ -57,6 +64,15 @@ export function RecurringEditorModal({
   );
   const [amountType, setAmountType] = useState<RecurringAmountType>(
     item?.amount_type ?? initialDraft?.amount_type ?? "fixed",
+  );
+  const defaultAccountId =
+    item?.account_id ?? initialDraft?.account_id ?? ledger.accounts[0]?.id ?? "";
+  const [scheduleCurrency, setScheduleCurrency] = useState<string>(() =>
+    normalizeCurrencyCode(
+      item?.currency ??
+        initialDraft?.currency ??
+        accountCurrency(ledger.accounts.find((a) => a.id === defaultAccountId)),
+    ),
   );
   const [error, setError] = useState("");
   const dialog = useRef<HTMLDialogElement>(null);
@@ -86,7 +102,8 @@ export function RecurringEditorModal({
       const value: Omit<RecurringSchedule, "id"> = {
         name: s("name"),
         type: kind,
-        amount: minor(s("amount")),
+        amount: parseCurrencyMinor(s("amount"), scheduleCurrency),
+        currency: scheduleCurrency,
         amount_type: amountType,
         account_id: s("account_id"),
         category_id: s("category_id") || null,
@@ -186,21 +203,30 @@ export function RecurringEditorModal({
             {amountType === "variable"
               ? uiText("Expected amount")
               : uiText("Amount")}{" "}
-            <span className="muted">AED</span>
+            <span className="muted">{scheduleCurrency}</span>
             <input
               name="amount"
               required
               inputMode="decimal"
-              placeholder="0.00"
+              placeholder={formatCurrencyInput(0, scheduleCurrency)}
               defaultValue={
                 item
-                  ? (item.amount / 100).toFixed(2)
+                  ? formatCurrencyInput(item.amount, scheduleCurrency)
                   : initialDraft?.amount !== undefined
-                    ? (initialDraft.amount / 100).toFixed(2)
+                    ? formatCurrencyInput(initialDraft.amount, scheduleCurrency)
                     : ""
               }
             />
           </label>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <span className="field-label">{uiText("Currency")}</span>
+            <CurrencyPicker
+              value={scheduleCurrency}
+              compact
+              disabled={busy}
+              onChange={setScheduleCurrency}
+            />
+          </div>
           <label>
             {" "}
             {uiText("Amount behaviour")}{" "}

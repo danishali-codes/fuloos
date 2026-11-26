@@ -11,11 +11,13 @@ export function AppTopbar({
   page,
   demo,
   session,
+  currency = "AED",
   onOpenSettings,
 }: {
   page: string;
   demo: boolean;
   session: Session | null;
+  currency?: string;
   onOpenSettings: () => void;
 }) {
   const { t } = useLocale();
@@ -29,7 +31,7 @@ export function AppTopbar({
         <LanguageToggle />
         <ThemeToggle />
         <span className="currency-pill">
-          AED <span>{t("topbar.country")}</span>
+          {currency} <span>{t("topbar.country")}</span>
         </span>
         <button
           type="button"

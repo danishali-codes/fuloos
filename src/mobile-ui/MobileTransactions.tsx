@@ -7,12 +7,15 @@ import {
   X,
 } from "lucide-react";
 import {
+  accountCurrency,
   money,
+  reportingCurrency,
   shiftMonth,
   type Ledger,
   type Transaction,
 } from "../domain";
 import { translateText as uiText } from "../i18n";
+import { convertTransactionToReporting } from "../multiCurrency";
 import {
   formatMonthShort,
   formatShortDate,
@@ -58,6 +61,7 @@ export function MobileTransactions({
     () => new Map(ledger.categories.map((c) => [c.id, c])),
     [ledger.categories],
   );
+  const repCurr = reportingCurrency(ledger);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -77,7 +81,7 @@ export function MobileTransactions({
             : "";
           const accName = accountsById.get(tx.account_id)?.name ?? "";
           const haystack =
-            `${tx.payee} ${tx.notes} ${catName} ${accName} ${(tx.tags ?? []).join(" ")}`.toLowerCase();
+            `${tx.payee} ${tx.notes} ${catName} ${accName} ${tx.original_currency ?? ""} ${(tx.tags ?? []).join(" ")}`.toLowerCase();
           if (!haystack.includes(q)) return false;
         }
         return true;
@@ -98,6 +102,7 @@ export function MobileTransactions({
   const selectedAccount = accountFilter
     ? accountsById.get(accountFilter)
     : undefined;
+  const dayNetCurr = selectedAccount ? accountCurrency(selectedAccount) : repCurr;
 
   return (
     <div className="m-page">
@@ -227,16 +232,15 @@ export function MobileTransactions({
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {groups.map(([dateIso, items]) => {
-            const dayNet = items.reduce(
-              (sum, tx) =>
-                sum +
-                (tx.type === "income"
+            const dayNet = items.reduce((sum, tx) => {
+              if (tx.type !== "income" && tx.type !== "expense") return sum;
+              const accCurr = accountCurrency(accountsById.get(tx.account_id));
+              const amt =
+                accCurr === dayNetCurr
                   ? tx.amount
-                  : tx.type === "expense"
-                    ? -tx.amount
-                    : 0),
-              0,
-            );
+                  : convertTransactionToReporting(tx, accCurr, dayNetCurr).amount;
+              return sum + (tx.type === "income" ? amt : -amt);
+            }, 0);
             return (
               <div
                 key={dateIso}
@@ -253,7 +257,7 @@ export function MobileTransactions({
                     >
                       {hidden
                         ? "••••"
-                        : `${dayNet > 0 ? "+" : "−"}${money(Math.abs(dayNet))}`}
+                        : `${dayNet > 0 ? "+" : "−"}${money(Math.abs(dayNet), dayNetCurr)}`}
                     </span>
                   )}
                 </div>

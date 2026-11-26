@@ -1,4 +1,6 @@
 import {
+  accountCurrency,
+  accountDelta,
   addDaysIso,
   isIsoCalendarDate,
   shiftMonth,
@@ -6,6 +8,12 @@ import {
   type Account,
   type Transaction,
 } from "./domain.ts";
+import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "./currency.ts";
+import {
+  convertAmountToReporting,
+  defaultRateLookup,
+  type RateLookupFn,
+} from "./multiCurrency.ts";
 
 export type NetWorthKind = "asset" | "liability";
 
@@ -51,6 +59,8 @@ export interface NetWorthSummary {
   totalAssets: number;
   totalLiabilities: number;
   netWorth: number;
+  currency?: string;
+  estimatedCount?: number;
 }
 
 export interface NetWorthSeriesPoint {
@@ -151,20 +161,9 @@ export const NET_WORTH_CATEGORIES: Record<
 
 const MAX_VALUE_FILS = 100_000_000_000;
 
-function accountDelta(t: Transaction, accountId: string): number {
-  return (
-    (t.to_account_id === accountId ? t.amount : 0) +
-    (t.account_id === accountId
-      ? t.type === "income"
-        ? t.amount
-        : -t.amount
-      : 0)
-  );
-}
-
 /**
  * Computes an account's closing balance at the end of `asOfDate` (YYYY-MM-DD),
- * anchored at `account.opening_balance` at the start of `account.opening_date`.
+ * in that account's own currency, anchored at `account.opening_balance`.
  */
 export function accountBalanceAsOf(
   account: Account,
@@ -197,22 +196,37 @@ function lastDayOfMonth(month: string): string {
 
 /**
  * Computes the current Net Worth summary across cash/credit accounts and
- * tracked non-cash assets and liabilities as of `asOfDate`.
+ * tracked non-cash assets and liabilities as of `asOfDate`, converted into
+ * `reportingCurrency`.
  */
 export function computeNetWorthSummary(
   accounts: readonly Account[],
   transactions: readonly Transaction[],
   items: readonly NetWorthItem[],
   asOfDate: string = today(),
+  options?: { reportingCurrency?: string; rateLookup?: RateLookupFn },
 ): NetWorthSummary {
+  const targetCurrency = normalizeCurrencyCode(
+    options?.reportingCurrency ?? DEFAULT_CURRENCY,
+  );
+  const rateLookup = options?.rateLookup ?? defaultRateLookup;
   let cashAssets = 0;
   let accountLiabilities = 0;
+  let estimatedCount = 0;
   for (const acc of accounts) {
-    const bal = accountBalanceAsOf(acc, transactions, asOfDate);
-    if (bal >= 0) {
-      cashAssets += bal;
+    const rawBal = accountBalanceAsOf(acc, transactions, asOfDate);
+    const conv = convertAmountToReporting(
+      rawBal,
+      accountCurrency(acc),
+      targetCurrency,
+      asOfDate,
+      rateLookup,
+    );
+    if (conv.estimated) estimatedCount++;
+    if (conv.amount >= 0) {
+      cashAssets += conv.amount;
     } else {
-      accountLiabilities += Math.abs(bal);
+      accountLiabilities += Math.abs(conv.amount);
     }
   }
 
@@ -237,6 +251,8 @@ export function computeNetWorthSummary(
     totalAssets,
     totalLiabilities,
     netWorth: totalAssets - totalLiabilities,
+    currency: targetCurrency,
+    estimatedCount,
   };
 }
 
@@ -272,9 +288,14 @@ export function buildNetWorthSeries(
   snapshots: readonly NetWorthSnapshot[],
   months: number = 12,
   asOfDate: string = today(),
+  options?: { reportingCurrency?: string; rateLookup?: RateLookupFn },
 ): NetWorthSeriesPoint[] {
   const count = Math.max(1, Math.min(60, Math.trunc(months)));
   const endMonth = asOfDate.slice(0, 7);
+  const targetCurrency = normalizeCurrencyCode(
+    options?.reportingCurrency ?? DEFAULT_CURRENCY,
+  );
+  const rateLookup = options?.rateLookup ?? defaultRateLookup;
 
   const byItem = new Map<string, NetWorthSnapshot[]>();
   for (const s of snapshots) {
@@ -300,11 +321,18 @@ export function buildNetWorthSeries(
     let cashAssets = 0;
     let accountLiabilities = 0;
     for (const acc of accounts) {
-      const bal = accountBalanceAsOf(acc, transactions, pointDate);
-      if (bal >= 0) {
-        cashAssets += bal;
+      const rawBal = accountBalanceAsOf(acc, transactions, pointDate);
+      const conv = convertAmountToReporting(
+        rawBal,
+        accountCurrency(acc),
+        targetCurrency,
+        pointDate,
+        rateLookup,
+      );
+      if (conv.amount >= 0) {
+        cashAssets += conv.amount;
       } else {
-        accountLiabilities += Math.abs(bal);
+        accountLiabilities += Math.abs(conv.amount);
       }
     }
 

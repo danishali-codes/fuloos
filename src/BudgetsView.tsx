@@ -17,9 +17,10 @@ import {
   validateBudget,
   type BudgetProgress,
 } from "./budgets";
+import { formatCurrencyInput, parseCurrencyMinor } from "./currency";
 import {
   errorMessage,
-  minor,
+  reportingCurrency,
   shiftMonth,
   today,
   type Budget,
@@ -135,9 +136,10 @@ export function BudgetsPage({
   onEdit: (budget: Budget) => void;
   onDelete: (budget: Budget) => void;
 }) {
+  const repCurr = reportingCurrency(ledger);
   const report = useMemo(
-    () => budgetReport(ledger, month, month),
-    [ledger, month],
+    () => budgetReport(ledger, month, month, { reportingCurrency: repCurr }),
+    [ledger, month, repCurr],
   );
   const unbudgeted = useMemo(
     () => unbudgetedCategories(ledger, month),
@@ -178,6 +180,8 @@ export function BudgetsPage({
         />
         <span className="muted">
           {uiText("Budgets compare against expenses only")}
+          {(report.estimatedCount ?? 0) > 0 &&
+            ` · includes ${report.estimatedCount} estimated ${report.estimatedCount === 1 ? "amount" : "amounts"}`}
         </span>
       </div>
       <section className="stats">
@@ -512,6 +516,7 @@ export function BudgetEditorModal({
           !budgetForMonth(ledger.budgets ?? [], c.id, initial.start_month),
       ) ?? ledger.categories[0]
     )?.id;
+  const repCurr = reportingCurrency(ledger);
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
@@ -520,7 +525,7 @@ export function BudgetEditorModal({
     try {
       const value: BudgetDraft = {
         category_id: s("category_id"),
-        amount: minor(s("amount")),
+        amount: parseCurrencyMinor(s("amount"), repCurr),
         start_month: s("start_month"),
         end_month: repeats ? null : s("end_month") || null,
       };
@@ -580,16 +585,16 @@ export function BudgetEditorModal({
         </label>
         <label>
           {" "}
-          {uiText("Monthly limit")} <span className="muted">AED</span>
+          {uiText("Monthly limit")} <span className="muted">{repCurr}</span>
           <input
             name="amount"
             required
             autoFocus
             inputMode="decimal"
-            placeholder="0.00"
+            placeholder={formatCurrencyInput(0, repCurr)}
             defaultValue={
               initial.amount !== undefined
-                ? (initial.amount / 100).toFixed(2)
+                ? formatCurrencyInput(initial.amount, repCurr)
                 : ""
             }
           />

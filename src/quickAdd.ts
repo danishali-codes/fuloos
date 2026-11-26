@@ -1,6 +1,11 @@
 import {
+  DEFAULT_CURRENCY,
+  normalizeCurrencyCode,
+  parseCurrencyMinor,
+} from "./currency.ts";
+import {
+  accountCurrency,
   isIsoCalendarDate,
-  minor,
   today,
   validateTransaction,
   type Account,
@@ -13,6 +18,7 @@ export type QuickAddKind = "expense" | "income";
 export interface QuickAddDraft {
   type: QuickAddKind;
   amount: string;
+  currency?: string;
   accountId: string;
   categoryId: string;
   payee: string;
@@ -80,20 +86,32 @@ function extractIsoDate(text: string): string | undefined {
   return undefined;
 }
 
-function extractAmount(text: string): string | undefined {
-  // Prefer explicit AED / Dhs currency patterns first.
-  const currencyFirst = text.match(
-    /(?:AED|Dhs\.?|د\.إ)\s*([0-9][0-9,]*(?:\.\d{1,2})?)/i,
+function extractAmountAndCurrency(
+  text: string,
+): { amount: string; currency?: string } | undefined {
+  const isoFirst = text.match(
+    /\b(AED|USD|EUR|GBP|SAR|QAR|BHD|OMR|KWD|INR|PKR|JPY|CHF|CAD|AUD|SGD|TRY|EGP|JOD|PHP|THB|MYR|CNY|HKD|NZD|ZAR|SEK|NOK|DKK|PLN|BRL|MXN|KRW)\s*([0-9][0-9,]*(?:\.\d{1,3})?)/i,
   );
-  if (currencyFirst) {
-    return currencyFirst[1].replace(/,/g, "");
+  if (isoFirst) {
+    return {
+      amount: isoFirst[2].replace(/,/g, ""),
+      currency: normalizeCurrencyCode(isoFirst[1]),
+    };
+  }
+  const dhsFirst = text.match(/(?:Dhs\.?|د\.إ)\s*([0-9][0-9,]*(?:\.\d{1,2})?)/i);
+  if (dhsFirst) {
+    return { amount: dhsFirst[1].replace(/,/g, ""), currency: DEFAULT_CURRENCY };
   }
 
   const currencyAfter = text.match(
-    /\b([0-9][0-9,]*(?:\.\d{1,2})?)\s*(?:AED|Dhs\.?)\b/i,
+    /\b([0-9][0-9,]*(?:\.\d{1,3})?)\s*(AED|USD|EUR|GBP|SAR|QAR|BHD|OMR|KWD|INR|PKR|JPY|Dhs\.?)\b/i,
   );
   if (currencyAfter) {
-    return currencyAfter[1].replace(/,/g, "");
+    const rawCode = currencyAfter[2].toUpperCase();
+    return {
+      amount: currencyAfter[1].replace(/,/g, ""),
+      currency: rawCode.startsWith("DHS") ? DEFAULT_CURRENCY : rawCode,
+    };
   }
 
   // Fallback: standalone decimal number (avoid matching dates or masked card digits).
@@ -101,18 +119,18 @@ function extractAmount(text: string): string | undefined {
     .replace(/\b\d{4}-\d{2}-\d{2}\b/g, " ")
     .replace(/\b\d{2}[/-]\d{2}[/-]\d{4}\b/g, " ")
     .replace(/[X*]{2,}\d{2,4}/gi, " ");
-  const decimalMatch = stripped.match(/\b([0-9][0-9,]*\.\d{1,2})\b/);
-  if (decimalMatch) return decimalMatch[1].replace(/,/g, "");
+  const decimalMatch = stripped.match(/\b([0-9][0-9,]*\.\d{1,3})\b/);
+  if (decimalMatch) return { amount: decimalMatch[1].replace(/,/g, "") };
 
   const intMatch = stripped.match(/\b([1-9][0-9,]{0,6})\b/);
-  if (intMatch) return intMatch[1].replace(/,/g, "");
+  if (intMatch) return { amount: intMatch[1].replace(/,/g, "") };
 
   return undefined;
 }
 
 function extractPayee(text: string, title?: string): string {
   const atMatch = text.match(
-    /\b(?:at|to|from|merchant)\s+([A-Za-z0-9&'.\- ]{2,60}?)(?=\s+(?:on|for|via|using|with|AED|Dhs|\d{4}-\d{2}-\d{2})\b|[.,;\n\r]|$)/i,
+    /\b(?:at|to|from|merchant)\s+([A-Za-z0-9&'.\- ]{2,60}?)(?=\s+(?:on|for|via|using|with|AED|USD|EUR|GBP|Dhs|\d{4}-\d{2}-\d{2})\b|[.,;\n\r]|$)/i,
   );
   if (atMatch) {
     return atMatch[1].trim().slice(0, 80);
@@ -128,11 +146,11 @@ function extractPayee(text: string, title?: string): string {
 
   // Strip currency/amount/date tokens to leave a readable merchant phrase.
   const cleaned = text
-    .replace(/(?:AED|Dhs\.?|د\.إ)\s*[0-9][0-9,]*(?:\.\d{1,2})?/gi, " ")
-    .replace(/\b[0-9][0-9,]*(?:\.\d{1,2})?\s*(?:AED|Dhs\.?)\b/gi, " ")
+    .replace(/(?:AED|USD|EUR|GBP|SAR|Dhs\.?|د\.إ)\s*[0-9][0-9,]*(?:\.\d{1,3})?/gi, " ")
+    .replace(/\b[0-9][0-9,]*(?:\.\d{1,3})?\s*(?:AED|USD|EUR|GBP|SAR|Dhs\.?)\b/gi, " ")
     .replace(/\b\d{4}-\d{2}-\d{2}\b/g, " ")
     .replace(/\b\d{2}[/-]\d{2}[/-]\d{4}\b/g, " ")
-    .replace(/\b[0-9][0-9,]*(?:\.\d{1,2})?\b/g, " ")
+    .replace(/\b[0-9][0-9,]*(?:\.\d{1,3})?\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
   return cleaned.slice(0, 80);
@@ -155,7 +173,7 @@ export function parseSharedTransactionText(
       rawText,
     ) && !/\bcredit\s+card\b/i.test(rawText);
 
-  const amount = extractAmount(rawText);
+  const extracted = extractAmountAndCurrency(rawText);
   const date = extractIsoDate(rawText) ?? defaultDate;
   const payee = extractPayee(text.trim() || rawText, title);
 
@@ -163,7 +181,8 @@ export function parseSharedTransactionText(
     type: isIncome ? "income" : "expense",
     date,
   };
-  if (amount) result.amount = amount;
+  if (extracted?.amount) result.amount = extracted.amount;
+  if (extracted?.currency) result.currency = extracted.currency;
   if (payee) result.payee = payee;
   return result;
 }
@@ -200,8 +219,12 @@ export function parseQuickAddUrl(
     draft.type = typeParam;
   }
   const amountParam = params.get("amount")?.trim();
-  if (amountParam && /^\d+(?:\.\d{1,2})?$/.test(amountParam)) {
+  if (amountParam && /^\d+(?:\.\d{1,3})?$/.test(amountParam)) {
     draft.amount = amountParam;
+  }
+  const currencyParam = params.get("currency")?.trim().toUpperCase();
+  if (currencyParam && /^[A-Z]{3}$/.test(currencyParam)) {
+    draft.currency = currencyParam;
   }
   const payeeParam = params.get("payee")?.trim();
   if (payeeParam) {
@@ -216,7 +239,7 @@ export function parseQuickAddUrl(
 }
 
 /**
- * Validates and builds an integer-fils transaction payload from Quick-Add fields.
+ * Validates and builds an integer minor-unit transaction payload from Quick-Add fields.
  */
 export function buildQuickAddTransaction(
   draft: QuickAddDraft,
@@ -224,12 +247,20 @@ export function buildQuickAddTransaction(
 ): Omit<Transaction, "id"> {
   const amountText = draft.amount.trim();
   if (!amountText) throw new Error("Enter an amount.");
-  const amount = minor(amountText);
+  const acc = ledger.accounts.find((a) => a.id === draft.accountId);
+  const accCurr = accountCurrency(acc);
+  const amount = parseCurrencyMinor(amountText, accCurr);
   if (amount <= 0) throw new Error("Enter an amount greater than zero.");
 
   const record: Omit<Transaction, "id"> = {
     type: draft.type,
     amount,
+    original_amount: amount,
+    original_currency: accCurr,
+    fx_rate: 1,
+    fx_rate_date: draft.date,
+    fx_source: "same_currency",
+    fx_status: "exact",
     account_id: draft.accountId,
     to_account_id: null,
     category_id: draft.categoryId || null,

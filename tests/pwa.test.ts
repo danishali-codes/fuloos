@@ -143,6 +143,12 @@ test("buildQuickAddTransaction converts AED to integer fils and validates", () =
   assert.deepEqual(tx, {
     type: "expense",
     amount: 2450,
+    original_amount: 2450,
+    original_currency: "AED",
+    fx_rate: 1,
+    fx_rate_date: "2026-11-13",
+    fx_source: "same_currency",
+    fx_status: "exact",
     account_id: "acc-1",
     to_account_id: null,
     category_id: "cat-food",

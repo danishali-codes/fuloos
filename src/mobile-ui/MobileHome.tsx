@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Eye,
   EyeOff,
+  Globe2,
   MessageSquareText,
   WifiOff,
 } from "lucide-react";
@@ -13,6 +14,7 @@ import { budgetReport } from "../budgets";
 import type { Session } from "../client";
 import {
   money,
+  reportingCurrency,
   shiftMonth,
   type Ledger,
   type Transaction,
@@ -57,6 +59,7 @@ export function MobileHome({
   hidden,
   pendingAlertCount,
   pendingAlertPreview,
+  estimatedCount = 0,
   error,
   onToggleHidden,
   onChangeMonth,
@@ -65,6 +68,7 @@ export function MobileHome({
   onOpenBudgets,
   onOpenMore,
   onOpenCaptureAlerts,
+  onOpenConfirmAmounts,
   onSelectTransaction,
   onExitDemo,
   onRetry,
@@ -75,11 +79,12 @@ export function MobileHome({
   online: boolean;
   month: string;
   net: number;
-  summary: { income: number; expense: number };
+  summary: { income: number; expense: number; estimatedCount?: number };
   monthly: Transaction[];
   hidden: boolean;
   pendingAlertCount: number;
   pendingAlertPreview: string;
+  estimatedCount?: number;
   error: string;
   onToggleHidden: () => void;
   onChangeMonth: (nextMonth: string) => void;
@@ -88,6 +93,7 @@ export function MobileHome({
   onOpenBudgets: () => void;
   onOpenMore: () => void;
   onOpenCaptureAlerts: () => void;
+  onOpenConfirmAmounts?: (txId?: string) => void;
   onSelectTransaction: (tx: Transaction) => void;
   onExitDemo: () => void;
   onRetry: () => void;
@@ -95,11 +101,14 @@ export function MobileHome({
   const { name, initials } = userDisplayName(demo, session);
   const accountsById = new Map(ledger.accounts.map((a) => [a.id, a]));
   const categoriesById = new Map(ledger.categories.map((c) => [c.id, c]));
+  const repCurr = reportingCurrency(ledger);
 
   const incomeCount = monthly.filter((t) => t.type === "income").length;
   const expenseCount = monthly.filter((t) => t.type === "expense").length;
 
-  const budgets = budgetReport(ledger, month, month);
+  const budgets = budgetReport(ledger, month, month, {
+    reportingCurrency: repCurr,
+  });
   const hasBudgets = budgets.totalBudget > 0;
   const budgetPct = hasBudgets
     ? Math.round((budgets.totalActual / budgets.totalBudget) * 100)
@@ -109,7 +118,8 @@ export function MobileHome({
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 6);
 
-  const fmt = (fils: number) => (hidden ? "••••••" : money(fils));
+  const fmt = (minorVal: number) =>
+    hidden ? "••••••" : money(minorVal, repCurr);
   const netDelta = summary.income - summary.expense;
   const netDeltaSign = netDelta >= 0 ? "+" : "−";
 
@@ -194,7 +204,9 @@ export function MobileHome({
       <section className="m-hero" aria-label={uiText("Total net balance")}>
         <div className="m-hero-orb" aria-hidden />
         <div className="m-hero-top">
-          <span className="m-hero-label">{uiText("Total Balance")}</span>
+          <span className="m-hero-label">
+            {uiText("Total Balance")} ({repCurr})
+          </span>
           <button
             type="button"
             className="m-hero-eye"
@@ -211,7 +223,9 @@ export function MobileHome({
             {ledger.accounts.length === 1 ? uiText("account") : uiText("accounts")}
           </span>
           <span className={`m-hero-delta m-num ${netDelta < 0 ? "is-neg" : ""}`}>
-            {hidden ? "••••" : `${netDeltaSign}${money(Math.abs(netDelta))} ${uiText("net")}`}
+            {hidden
+              ? "••••"
+              : `${netDeltaSign}${money(Math.abs(netDelta), repCurr)} ${uiText("net")}`}
           </span>
         </div>
       </section>
@@ -255,6 +269,32 @@ export function MobileHome({
           </div>
         </button>
       </div>
+
+      {/* Confirm Estimated FX Amounts Strip */}
+      {estimatedCount > 0 && onOpenConfirmAmounts && (
+        <div className="m-sms-banner">
+          <div className="m-sms-banner-icon" aria-hidden>
+            <Globe2 size={18} />
+          </div>
+          <div className="m-sms-banner-text">
+            <div className="m-sms-banner-title">
+              {estimatedCount === 1
+                ? "1 foreign amount to confirm"
+                : `${estimatedCount} foreign amounts to confirm`}
+            </div>
+            <div className="m-sms-banner-sub">
+              {uiText("Estimated FX rates — tap to enter real charged amount")}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="m-sms-banner-btn"
+            onClick={() => onOpenConfirmAmounts()}
+          >
+            {uiText("Confirm")}
+          </button>
+        </div>
+      )}
 
       {/* Actionable SMS Auto-Capture Alert Strip */}
       {pendingAlertCount > 0 && (

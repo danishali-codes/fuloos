@@ -27,7 +27,9 @@ import {
   type RecurringSchedule,
   type Transaction,
   type TransactionRule,
+  type UserSettings,
 } from "./domain";
+import { ConfirmAmountsModal } from "./ConfirmAmountsModal";
 import { Editor, type EditorModalState } from "./EditorModal";
 import { RulesManagerModal } from "./RulesManager";
 import { ConfirmOccurrenceModal, RecurringEditorModal } from "./RecurringView";
@@ -69,6 +71,11 @@ export function AppModals({
   save,
   settingsOpen,
   setSettingsOpen,
+  onSaveUserSettings,
+  confirmAmountsOpen = false,
+  confirmAmountsTxId,
+  setConfirmAmountsOpen,
+  onConfirmForeignAmount,
   deleteOpen,
   setDeleteOpen,
   accountToDelete,
@@ -130,7 +137,7 @@ export function AppModals({
   setLedger: (l: Ledger) => void;
   busy: boolean;
   hidden: boolean;
-  concealed: (v: number) => string;
+  concealed: (v: number, currency?: string) => string;
   load: () => Promise<void>;
   save: (
     table: "accounts" | "categories" | "transactions",
@@ -144,6 +151,14 @@ export function AppModals({
   deleteRule: (id: string) => Promise<void>;
   settingsOpen: boolean;
   setSettingsOpen: (v: boolean) => void;
+  onSaveUserSettings?: (next: UserSettings) => void;
+  confirmAmountsOpen?: boolean;
+  confirmAmountsTxId?: string | null;
+  setConfirmAmountsOpen?: (v: boolean) => void;
+  onConfirmForeignAmount?: (
+    tx: Transaction,
+    patch: Pick<Transaction, "amount" | "fx_rate" | "fx_source" | "fx_status">,
+  ) => Promise<void>;
   deleteOpen: boolean;
   setDeleteOpen: (v: boolean) => void;
   accountToDelete: Account | null;
@@ -249,6 +264,8 @@ export function AppModals({
           }}
           pendingAlertCount={pendingAlertCount}
           linkedSmsCount={smsLinks.length}
+          userSettings={ledger.user_settings}
+          onSaveUserSettings={onSaveUserSettings}
           security={security}
           notifications={
             <NotificationSettings
@@ -626,6 +643,17 @@ export function AppModals({
           }}
           onSaveRule={saveRule}
           onDeleteRule={deleteRule}
+        />
+      )}
+      {confirmAmountsOpen && onConfirmForeignAmount && setConfirmAmountsOpen && (
+        <ConfirmAmountsModal
+          ledger={ledger}
+          busy={busy}
+          initialTxId={confirmAmountsTxId}
+          onConfirm={onConfirmForeignAmount}
+          onClose={() => {
+            if (!busy) setConfirmAmountsOpen(false);
+          }}
         />
       )}
     </>

@@ -18,7 +18,11 @@ import {
 } from "lucide-react";
 import type { AppLockConfig } from "../appLock";
 import type { Session } from "../client";
-import { money, type Ledger } from "../domain";
+import {
+  money,
+  reportingCurrency,
+  type Ledger,
+} from "../domain";
 import { translateText as uiText, useLocale } from "../i18n";
 import type { SmsAccountLink } from "../mobile/smsLinks";
 import { useThemeMode } from "./useThemeMode";
@@ -31,10 +35,12 @@ export function MobileMore({
   hidden,
   lockConfig,
   pendingAlertCount,
+  estimatedCount = 0,
   smsLinks,
   onNavigate,
   onOpenSmsAutoCapture,
   onOpenCaptureAlerts,
+  onOpenConfirmAmounts,
   onOpenRules,
   onOpenImport,
   onOpenSettings,
@@ -47,10 +53,12 @@ export function MobileMore({
   hidden: boolean;
   lockConfig: AppLockConfig | null;
   pendingAlertCount: number;
+  estimatedCount?: number;
   smsLinks: SmsAccountLink[];
   onNavigate: (page: string) => void;
   onOpenSmsAutoCapture: () => void;
   onOpenCaptureAlerts: () => void;
+  onOpenConfirmAmounts?: (txId?: string) => void;
   onOpenRules: () => void;
   onOpenImport: () => void;
   onOpenSettings: () => void;
@@ -58,6 +66,7 @@ export function MobileMore({
 }) {
   const { locale, toggleLocale } = useLocale();
   const { theme, toggleTheme } = useThemeMode();
+  const repCurr = reportingCurrency(ledger);
 
   const email = demo ? uiText("Demo workspace") : session?.user.email ?? "Fuloos";
   const displayName = demo
@@ -114,7 +123,7 @@ export function MobileMore({
         goalsSaved > 0
           ? hidden
             ? "••••"
-            : money(goalsSaved)
+            : money(goalsSaved, repCurr)
           : uiText("Savings"),
       icon: Target,
     },
@@ -316,6 +325,23 @@ export function MobileMore({
           </span>
           <ChevronRight size={15} style={{ color: "var(--m-muted)" }} className="rtl-flip" />
         </button>
+
+        {onOpenConfirmAmounts && (
+          <button
+            type="button"
+            className="m-pref-row"
+            onClick={() => onOpenConfirmAmounts()}
+          >
+            <span className="m-pref-left">
+              <Globe size={17} />
+              <span>{uiText("Confirm amounts")}</span>
+            </span>
+            <span style={{ color: estimatedCount > 0 ? "var(--m-brand)" : "var(--m-muted)", fontWeight: 700, fontSize: 12.5, display: "inline-flex", alignItems: "center", gap: 4 }}>
+              {estimatedCount > 0 ? `${estimatedCount} pending` : uiText("All confirmed")}
+              <ChevronRight size={15} className="rtl-flip" />
+            </span>
+          </button>
+        )}
 
         <button type="button" className="m-pref-row" onClick={onOpenSettings}>
           <span className="m-pref-left">

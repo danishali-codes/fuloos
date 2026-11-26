@@ -6,7 +6,16 @@ import {
   ReceiptText,
   Trash2,
 } from "lucide-react";
-import { startingBalance, type Ledger, type Transaction } from "./domain";
+import {
+  formatOriginalCurrencyPill,
+  normalizeCurrencyCode,
+} from "./currency";
+import {
+  accountCurrency,
+  startingBalance,
+  type Ledger,
+  type Transaction,
+} from "./domain";
 
 export function Empty({ title, text }: { title: string; text: string }) {
   return (
@@ -32,7 +41,7 @@ export function TransactionList({
   onSelect?: (id: string) => void;
   items: Transaction[];
   ledger: Ledger;
-  concealed: (v: number) => string;
+  concealed: (v: number, currency?: string) => string;
   onEdit: (t: Transaction) => void;
   onDelete?: (t: Transaction) => void;
   busy?: boolean;
@@ -65,7 +74,7 @@ export function TransactionList({
       if (t.to_account_id)
         running.set(
           t.to_account_id,
-          (running.get(t.to_account_id) ?? 0) + t.amount,
+          (running.get(t.to_account_id) ?? 0) + (t.to_amount ?? t.amount),
         );
       result.set(t.id, {
         source: running.get(t.account_id) ?? 0,
@@ -84,6 +93,14 @@ export function TransactionList({
         const toAccount = t.to_account_id
           ? accountById.get(t.to_account_id)
           : undefined;
+        const accCurr = accountCurrency(account);
+        const toAccCurr = accountCurrency(toAccount);
+        const origCurr = t.original_currency
+          ? normalizeCurrencyCode(t.original_currency)
+          : accCurr;
+        const showForeignPill =
+          origCurr !== accCurr && t.original_amount !== undefined;
+        const isEst = t.fx_status === "estimated";
         return (
           <div
             className={`transaction-row ${selected?.has(t.id) ? "is-selected" : ""}`}
@@ -138,20 +155,31 @@ export function TransactionList({
               </span>
               <span className="transaction-value">
                 <small>
-                  {account?.name}: {concealed(balances.get(t.id)?.source ?? 0)}{" "}
+                  {account?.name}:{" "}
+                  {concealed(balances.get(t.id)?.source ?? 0, accCurr)}{" "}
                   {uiText("balance")}{" "}
                 </small>
                 {t.to_account_id && (
                   <small>
                     {toAccount?.name}:{" "}
-                    {concealed(balances.get(t.id)?.destination ?? 0)}{" "}
+                    {concealed(balances.get(t.id)?.destination ?? 0, toAccCurr)}{" "}
                     {uiText("balance")}{" "}
                   </small>
                 )}
                 <b className={t.type === "income" ? "green-text" : ""}>
+                  {isEst ? "≈ " : ""}
                   {t.type === "income" ? "+" : t.type === "expense" ? "−" : ""}
-                  {concealed(t.amount)}
+                  {concealed(t.amount, accCurr)}
                 </b>
+                {showForeignPill && (
+                  <small className="tag-badge fx-pill">
+                    {formatOriginalCurrencyPill(
+                      t.original_amount!,
+                      origCurr,
+                      t.fx_rate,
+                    )}
+                  </small>
+                )}
                 <small>
                   {new Date(t.date + "T12:00:00Z").toLocaleDateString("en-GB", {
                     day: "numeric",

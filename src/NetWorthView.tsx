@@ -14,7 +14,15 @@ import {
   X,
 } from "lucide-react";
 import { confirmDialog } from "./dialogStore";
-import { balance, errorMessage, minor, today, type Ledger } from "./domain";
+import {
+  accountCurrency,
+  balance,
+  errorMessage,
+  minor,
+  reportingCurrency,
+  today,
+  type Ledger,
+} from "./domain";
 import {
   NET_WORTH_ASSET_CATEGORIES,
   NET_WORTH_CATEGORIES,
@@ -226,7 +234,7 @@ export function NetWorthPage({
   onNavigateAccounts,
 }: {
   ledger: Ledger;
-  concealed: (v: number) => string;
+  concealed: (v: number, currency?: string) => string;
   busy: boolean;
   onAddItem: () => void;
   onEditItem: (item: NetWorthItem) => void;
@@ -242,6 +250,7 @@ export function NetWorthPage({
   const items = ledger.net_worth_items ?? [];
   const snapshots = ledger.net_worth_snapshots ?? [];
   const todayIso = today();
+  const repCurr = reportingCurrency(ledger);
 
   const summary = useMemo(
     () =>
@@ -250,8 +259,9 @@ export function NetWorthPage({
         ledger.transactions,
         items,
         todayIso,
+        { reportingCurrency: repCurr },
       ),
-    [ledger.accounts, ledger.transactions, items, todayIso],
+    [ledger.accounts, ledger.transactions, items, todayIso, repCurr],
   );
 
   const series = useMemo(
@@ -263,8 +273,9 @@ export function NetWorthPage({
         snapshots,
         months,
         todayIso,
+        { reportingCurrency: repCurr },
       ),
-    [ledger.accounts, ledger.transactions, items, snapshots, months, todayIso],
+    [ledger.accounts, ledger.transactions, items, snapshots, months, todayIso, repCurr],
   );
 
   const filteredItems = useMemo(() => {
@@ -609,7 +620,7 @@ export function NetWorthPage({
                     {acc.name}
                   </span>
                   <strong style={{ color: bal < 0 ? "#b5524a" : undefined }}>
-                    {concealed(bal)}
+                    {concealed(bal, accountCurrency(acc))}
                   </strong>
                 </div>
               );
@@ -627,10 +638,11 @@ export function DashboardNetWorth({
   onOpenNetWorth,
 }: {
   ledger: Ledger;
-  concealed: (v: number) => string;
+  concealed: (v: number, currency?: string) => string;
   onOpenNetWorth: () => void;
 }) {
   const items = ledger.net_worth_items ?? [];
+  const repCurr = reportingCurrency(ledger);
   const summary = useMemo(
     () =>
       computeNetWorthSummary(
@@ -638,8 +650,9 @@ export function DashboardNetWorth({
         ledger.transactions,
         items,
         today(),
+        { reportingCurrency: repCurr },
       ),
-    [ledger.accounts, ledger.transactions, items],
+    [ledger.accounts, ledger.transactions, items, repCurr],
   );
 
   return (

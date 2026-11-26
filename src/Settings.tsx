@@ -1,9 +1,19 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Inbox, MessageSquareText, Trash2, Wand2, X } from "lucide-react";
+import {
+  formatCurrencyInput,
+  parseCurrencyMinor,
+} from "./currency";
+import { CurrencyPicker } from "./CurrencyPicker";
 import { useDensity, type Density } from "./density";
+import {
+  defaultUserSettings,
+  type ConfirmForeignMode,
+  type UserSettings,
+} from "./domain";
 import { useLocale, type Locale } from "./i18n";
 
-/** Profile settings. Holds appearance, list layout, data & backup, and account deletion. */
+/** Profile settings. Holds appearance, currency, list layout, data & backup, and account deletion. */
 export function SettingsDialog({
   onClose,
   onDeleteAccount,
@@ -12,6 +22,8 @@ export function SettingsDialog({
   onOpenSmsAutoCapture,
   pendingAlertCount = 0,
   linkedSmsCount = 0,
+  userSettings,
+  onSaveUserSettings,
   security,
   notifications,
   household,
@@ -25,6 +37,8 @@ export function SettingsDialog({
   onOpenSmsAutoCapture?: () => void;
   pendingAlertCount?: number;
   linkedSmsCount?: number;
+  userSettings?: UserSettings;
+  onSaveUserSettings?: (next: UserSettings) => void;
   security?: ReactNode;
   notifications?: ReactNode;
   household?: ReactNode;
@@ -33,6 +47,24 @@ export function SettingsDialog({
   const dialog = useRef<HTMLDialogElement>(null);
   const [density, setDensity] = useDensity();
   const { locale, setLocale, t } = useLocale();
+  const activeSettings = userSettings ?? defaultUserSettings;
+  const [thresholdText, setThresholdText] = useState(() =>
+    formatCurrencyInput(
+      activeSettings.confirm_foreign_threshold,
+      activeSettings.reporting_currency,
+    ),
+  );
+  useEffect(() => {
+    setThresholdText(
+      formatCurrencyInput(
+        activeSettings.confirm_foreign_threshold,
+        activeSettings.reporting_currency,
+      ),
+    );
+  }, [
+    activeSettings.confirm_foreign_threshold,
+    activeSettings.reporting_currency,
+  ]);
   const choices: { value: Density; title: string; text: string }[] = [
     {
       value: "compact",
@@ -90,6 +122,95 @@ export function SettingsDialog({
           <X size={18} />
         </button>
       </div>
+      {onSaveUserSettings && (
+        <fieldset className="density-field">
+          <legend>{t("fx.reportingCurrency")}</legend>
+          <p className="muted small">{t("fx.reportingCurrencyHint")}</p>
+          <div style={{ marginTop: "8px", marginBottom: "14px" }}>
+            <CurrencyPicker
+              value={activeSettings.reporting_currency}
+              ariaLabel={t("fx.reportingCurrency")}
+              onChange={(nextCurr) =>
+                onSaveUserSettings({
+                  ...activeSettings,
+                  reporting_currency: nextCurr,
+                })
+              }
+            />
+          </div>
+          <label style={{ display: "block", marginBottom: "6px" }}>
+            <strong style={{ fontSize: "0.88rem" }}>
+              {t("fx.confirmMode")}
+            </strong>
+          </label>
+          <p className="muted small" style={{ marginTop: 0, marginBottom: "8px" }}>
+            {t("fx.confirmModeHint")}
+          </p>
+          <div className="language-options">
+            {(
+              [
+                ["always", t("fx.confirmAlways")],
+                ["above_threshold", t("fx.confirmAbove")],
+                ["never", t("fx.confirmNever")],
+              ] as Array<[ConfirmForeignMode, string]>
+            ).map(([modeVal, label]) => (
+              <label
+                key={modeVal}
+                className={`language-option ${activeSettings.confirm_foreign_mode === modeVal ? "is-selected" : ""}`}
+              >
+                <span>{label}</span>
+                <input
+                  type="radio"
+                  name="confirm_foreign_mode"
+                  value={modeVal}
+                  checked={activeSettings.confirm_foreign_mode === modeVal}
+                  onChange={() =>
+                    onSaveUserSettings({
+                      ...activeSettings,
+                      confirm_foreign_mode: modeVal,
+                    })
+                  }
+                />
+              </label>
+            ))}
+          </div>
+          {activeSettings.confirm_foreign_mode === "above_threshold" && (
+            <label style={{ display: "block", marginTop: "10px" }}>
+              <span className="muted small">
+                {t("fx.confirmThreshold")} ({activeSettings.reporting_currency})
+              </span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={thresholdText}
+                onChange={(e) => setThresholdText(e.target.value)}
+                onBlur={() => {
+                  try {
+                    const minorVal = parseCurrencyMinor(
+                      thresholdText,
+                      activeSettings.reporting_currency,
+                    );
+                    if (minorVal >= 0) {
+                      onSaveUserSettings({
+                        ...activeSettings,
+                        confirm_foreign_threshold: minorVal,
+                      });
+                    }
+                  } catch {
+                    setThresholdText(
+                      formatCurrencyInput(
+                        activeSettings.confirm_foreign_threshold,
+                        activeSettings.reporting_currency,
+                      ),
+                    );
+                  }
+                }}
+                style={{ marginTop: "4px", maxWidth: "180px" }}
+              />
+            </label>
+          )}
+        </fieldset>
+      )}
       <fieldset className="density-field">
         <legend>
           {t("settings.appearance")} · {t("settings.language")}

@@ -14,8 +14,18 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
-import { DEFAULT_CURRENCY, formatOriginalCurrencyPill } from "./currency";
-import { today, type Ledger, type Transaction } from "./domain";
+import {
+  formatCurrency,
+  formatOriginalCurrencyPill,
+  normalizeCurrencyCode,
+} from "./currency";
+import {
+  accountCurrency,
+  reportingCurrency,
+  today,
+  type Ledger,
+  type Transaction,
+} from "./domain";
 import { collectLedgerTags } from "./enrichment";
 import { downloadBlob, transactionsToCsv } from "./export";
 import {
@@ -36,10 +46,6 @@ import "./transactionTable.css";
 
 const DEFAULT_PAGE_SIZE = 100;
 const PAGE_SIZE_OPTIONS = [50, 100, 250] as const;
-const amountFormat = new Intl.NumberFormat("en-AE", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 const sortLabels: Record<SortKey, string> = {
   date: "Date",
   account: "Account",
@@ -80,6 +86,8 @@ export function TransactionsPanel({
   onImportSms,
   onImportPdf,
   pendingAlertCount = 0,
+  estimatedCount = 0,
+  onOpenConfirmAmounts,
   onOpenCaptureAlerts,
   onEditSelected,
   onDeleteSelected,
@@ -105,6 +113,8 @@ export function TransactionsPanel({
   onImportSms: () => void;
   onImportPdf: () => void;
   pendingAlertCount?: number;
+  estimatedCount?: number;
+  onOpenConfirmAmounts?: (txId?: string) => void;
   onOpenCaptureAlerts?: () => void;
   onEditSelected: (items: Transaction[]) => void;
   onDeleteSelected: (items: Transaction[]) => void;
@@ -123,6 +133,7 @@ export function TransactionsPanel({
   const [categorizing, setCategorizing] = useState<string | null>(null);
   const [density] = useDensity();
   const { t: tr } = useLocale();
+  const repCurr = reportingCurrency(ledger);
 
   useEffect(() => {
     setPage(1);
@@ -142,8 +153,8 @@ export function TransactionsPanel({
   const ledgerTags = useMemo(() => collectLedgerTags(ledger), [ledger]);
   const account = ledger.accounts.find((a) => a.id === accountFilter);
   const register = useMemo(
-    () => buildRegister(ledger, account?.id ?? ""),
-    [ledger, account?.id],
+    () => buildRegister(ledger, account?.id ?? "", { reportingCurrency: repCurr }),
+    [ledger, account?.id, repCurr],
   );
   const rows = useMemo(
     () =>
@@ -189,7 +200,8 @@ export function TransactionsPanel({
   );
   const selectedOnPage = pageIds.filter((id) => selected.has(id)).length;
   const showAccount = !account;
-  const fmt = (v: number) => (hidden ? "••••" : amountFormat.format(v / 100));
+  const fmt = (v: number, curr = repCurr) =>
+    hidden ? `${curr} ••••` : formatCurrency(v, curr);
 
   function toggleSort(key: SortKey) {
     setSort((s) =>
@@ -358,8 +370,8 @@ export function TransactionsPanel({
       )}
     </div>
   );
-  const signed = (v: number) =>
-    hidden ? "••••" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${fmt(Math.abs(v))}`;
+  const signed = (v: number, curr = repCurr) =>
+    hidden ? `${curr} ••••` : `${v > 0 ? "+" : v < 0 ? "−" : ""}${fmt(Math.abs(v), curr)}`;
   const card = (e: RegisterEntry) => {
     const t = e.tx;
     const label = t.payee || t.notes || "transaction";
@@ -368,7 +380,16 @@ export function TransactionsPanel({
     const category = e.direction
       ? undefined
       : ledger.categories.find((c) => c.id === t.category_id);
-    const accountName = ledger.accounts.find((a) => a.id === e.accountId)?.name;
+    const entryAcc = ledger.accounts.find((a) => a.id === e.accountId);
+    const accountName = entryAcc?.name;
+    const entryCurr = e.currency ?? accountCurrency(entryAcc);
+    const balCurr = e.balanceCurrency ?? repCurr;
+    const origCurr = t.original_currency
+      ? normalizeCurrencyCode(t.original_currency)
+      : entryCurr;
+    const showForeignPill =
+      origCurr !== entryCurr && t.original_amount !== undefined;
+    const isEst = t.fx_status === "estimated";
     const amount = e.deposit - e.payment;
     const Icon = e.direction
       ? ArrowLeftRight
@@ -438,22 +459,38 @@ export function TransactionsPanel({
           )}
         </span>
         <span className="tx-card-value">
-          <b className={amount > 0 ? "is-in" : ""}>{signed(amount)}</b>
-          {t.original_currency &&
-            t.original_currency !== DEFAULT_CURRENCY &&
-            t.original_amount !== undefined && (
-              <span className="tag-badge fx-pill">
-                {hidden
-                  ? `${t.original_currency} ••••`
-                  : formatOriginalCurrencyPill(
-                      t.original_amount,
-                      t.original_currency,
-                      t.fx_rate,
-                    )}
-              </span>
-            )}
+          <b className={amount > 0 ? "is-in" : ""}>
+            {isEst ? "≈ " : ""}
+            {signed(amount, entryCurr)}
+          </b>
+          {showForeignPill && (
+            <span className="tag-badge fx-pill">
+              {hidden
+                ? `${origCurr} ••••`
+                : formatOriginalCurrencyPill(
+                    t.original_amount!,
+                    origCurr,
+                    t.fx_rate,
+                  )}
+            </span>
+          )}
+          {isEst && onOpenConfirmAmounts && (
+            <button
+              type="button"
+              className="tag-badge fx-pill"
+              onClick={(ev) => {
+                ev.stopPropagation();
+                onOpenConfirmAmounts(t.id);
+              }}
+              title="Confirm real charged amount"
+              style={{ cursor: "pointer" }}
+            >
+              ≈ {tr("fx.estimated")}
+            </button>
+          )}
           <small className={e.balance < 0 ? "is-negative" : ""}>
-            {account ? uiText("Balance") : uiText("Total")} {fmt(e.balance)}
+            {account ? uiText("Balance") : uiText("Total")}{" "}
+            {fmt(e.balance, balCurr)}
           </small>
         </span>
         <span
@@ -522,7 +559,9 @@ export function TransactionsPanel({
           <section className="tx-day" key={g.date + g.entries[0].key}>
             <header className="tx-day-head">
               <h3>{dayLabel(g.date)}</h3>
-              <span className={g.net > 0 ? "is-in" : ""}>{signed(g.net)}</span>
+              <span className={g.net > 0 ? "is-in" : ""}>
+                {signed(g.net, account ? accountCurrency(account) : repCurr)}
+              </span>
             </header>
             <ul className="tx-cards">{g.entries.map(card)}</ul>
           </section>
@@ -537,6 +576,16 @@ export function TransactionsPanel({
   return (
     <section className="panel">
       <div className="filters">
+        {estimatedCount > 0 && onOpenConfirmAmounts && (
+          <button
+            type="button"
+            className="primary"
+            disabled={busy || loading}
+            onClick={() => onOpenConfirmAmounts()}
+          >
+            ≈ {tr("fx.confirmAmounts")} ({estimatedCount})
+          </button>
+        )}
         <button
           className="secondary"
           disabled={busy || loading || !ledger.accounts.length}
@@ -741,6 +790,15 @@ export function TransactionsPanel({
                 const label = t.payee || t.notes || "transaction";
                 const notes = entryNotes(e);
                 const isSelected = selected.has(t.id);
+                const entryAcc = ledger.accounts.find((a) => a.id === e.accountId);
+                const entryCurr = e.currency ?? accountCurrency(entryAcc);
+                const balCurr = e.balanceCurrency ?? repCurr;
+                const origCurr = t.original_currency
+                  ? normalizeCurrencyCode(t.original_currency)
+                  : entryCurr;
+                const showForeignPill =
+                  origCurr !== entryCurr && t.original_amount !== undefined;
+                const isEst = t.fx_status === "estimated";
                 return (
                   <tr
                     key={e.key}
@@ -765,8 +823,7 @@ export function TransactionsPanel({
                     </td>
                     {showAccount && (
                       <td className="tx-text tx-account">
-                        {ledger.accounts.find((a) => a.id === e.accountId)
-                          ?.name ?? ""}
+                        {entryAcc?.name ?? ""}
                       </td>
                     )}
                     <td
@@ -793,23 +850,38 @@ export function TransactionsPanel({
                     <td className="num">
                       {e.payment ? (
                         <>
-                          <span>{fmt(e.payment)}</span>
-                          {t.original_currency &&
-                            t.original_currency !== DEFAULT_CURRENCY &&
-                            t.original_amount !== undefined && (
-                              <span
-                                className="tag-badge fx-pill"
-                                style={{ marginLeft: 6 }}
-                              >
-                                {hidden
-                                  ? `${t.original_currency} ••••`
-                                  : formatOriginalCurrencyPill(
-                                      t.original_amount,
-                                      t.original_currency,
-                                      t.fx_rate,
-                                    )}
-                              </span>
-                            )}
+                          <span>
+                            {isEst ? "≈ " : ""}
+                            {fmt(e.payment, entryCurr)}
+                          </span>
+                          {showForeignPill && (
+                            <span
+                              className="tag-badge fx-pill"
+                              style={{ marginLeft: 6 }}
+                            >
+                              {hidden
+                                ? `${origCurr} ••••`
+                                : formatOriginalCurrencyPill(
+                                    t.original_amount!,
+                                    origCurr,
+                                    t.fx_rate,
+                                  )}
+                            </span>
+                          )}
+                          {isEst && onOpenConfirmAmounts && (
+                            <button
+                              type="button"
+                              className="tag-badge fx-pill"
+                              style={{ marginLeft: 4, cursor: "pointer" }}
+                              title="Confirm real charged amount"
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                onOpenConfirmAmounts(t.id);
+                              }}
+                            >
+                              ≈
+                            </button>
+                          )}
                         </>
                       ) : (
                         ""
@@ -818,23 +890,24 @@ export function TransactionsPanel({
                     <td className="num tx-deposit">
                       {e.deposit ? (
                         <>
-                          <span>{fmt(e.deposit)}</span>
-                          {t.original_currency &&
-                            t.original_currency !== DEFAULT_CURRENCY &&
-                            t.original_amount !== undefined && (
-                              <span
-                                className="tag-badge fx-pill"
-                                style={{ marginLeft: 6 }}
-                              >
-                                {hidden
-                                  ? `${t.original_currency} ••••`
-                                  : formatOriginalCurrencyPill(
-                                      t.original_amount,
-                                      t.original_currency,
-                                      t.fx_rate,
-                                    )}
-                              </span>
-                            )}
+                          <span>
+                            {isEst ? "≈ " : ""}
+                            {fmt(e.deposit, entryCurr)}
+                          </span>
+                          {showForeignPill && (
+                            <span
+                              className="tag-badge fx-pill"
+                              style={{ marginLeft: 6 }}
+                            >
+                              {hidden
+                                ? `${origCurr} ••••`
+                                : formatOriginalCurrencyPill(
+                                    t.original_amount!,
+                                    origCurr,
+                                    t.fx_rate,
+                                  )}
+                            </span>
+                          )}
                         </>
                       ) : (
                         ""
@@ -843,7 +916,7 @@ export function TransactionsPanel({
                     <td
                       className={`num tx-balance ${e.balance < 0 ? "is-negative" : ""}`}
                     >
-                      {fmt(e.balance)}
+                      {fmt(e.balance, balCurr)}
                     </td>
                     <td
                       className="tx-actions"

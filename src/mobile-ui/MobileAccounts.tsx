@@ -9,8 +9,10 @@ import {
 } from "lucide-react";
 import { computeCardSummary } from "../debtTools";
 import {
+  accountCurrency,
   balance,
   money,
+  reportingCurrency,
   today,
   type Account,
   type Ledger,
@@ -60,6 +62,7 @@ export function MobileAccounts({
 }) {
   const [selectedAcc, setSelectedAcc] = useState<Account | null>(null);
   const todayIso = today();
+  const repCurr = reportingCurrency(ledger);
 
   const linksByAccount = useMemo(() => {
     const map = new Map<string, SmsAccountLink[]>();
@@ -81,14 +84,15 @@ export function MobileAccounts({
       map.set(tx.account_id, from);
       if (tx.type === "transfer" && tx.to_account_id) {
         const to = map.get(tx.to_account_id) ?? { inflow: 0, outflow: 0 };
-        to.inflow += tx.amount;
+        to.inflow += tx.to_amount ?? tx.amount;
         map.set(tx.to_account_id, to);
       }
     }
     return map;
   }, [monthly]);
 
-  const fmt = (fils: number) => (hidden ? "••••••" : money(fils));
+  const fmt = (minorVal: number, curr = repCurr) =>
+    hidden ? "••••••" : money(minorVal, curr);
   const activeSmsCount = smsLinks.filter((l) => l.enabled).length;
 
   return (
@@ -98,7 +102,7 @@ export function MobileAccounts({
         <div>
           <h1 className="m-page-title">{uiText("Accounts")}</h1>
           <div className="m-page-sub m-num">
-            {uiText("Total")} {fmt(net)}
+            {uiText("Total")} {fmt(net, repCurr)}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -143,6 +147,7 @@ export function MobileAccounts({
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {ledger.accounts.map((acc) => {
             const bal = balance(acc, ledger.transactions);
+            const accCurr = accountCurrency(acc);
             const baseColor = acc.color || "#1b5a45";
             const endColor = lightenHex(baseColor, 20);
             const accLinks = linksByAccount.get(acc.id) ?? [];
@@ -175,7 +180,7 @@ export function MobileAccounts({
                   <div>
                     <div className="m-account-type">
                       {acc.emoji ? `${acc.emoji} ` : ""}
-                      {accountTypeLabel(acc.type)}
+                      {accountTypeLabel(acc.type)} · {accCurr}
                     </div>
                     <div className="m-account-name">{acc.name}</div>
                   </div>
@@ -191,14 +196,14 @@ export function MobileAccounts({
                   )}
                 </div>
 
-                <div className="m-account-bal m-num">{fmt(bal)}</div>
+                <div className="m-account-bal m-num">{fmt(bal, accCurr)}</div>
 
                 {cardSummary && cardSummary.creditLimitFils > 0 ? (
                   <div className="m-account-util">
                     <div className="m-account-util-row">
                       <span>
                         {uiText("Used")} · {Math.round(cardSummary.utilizationPct)}%{" "}
-                        {uiText("of")} {fmt(cardSummary.creditLimitFils)}
+                        {uiText("of")} {fmt(cardSummary.creditLimitFils, accCurr)}
                       </span>
                       {acc.payment_due_day && (
                         <strong>
@@ -220,13 +225,13 @@ export function MobileAccounts({
                     <span>
                       {uiText("In")}:{" "}
                       <strong className="m-num">
-                        {hidden ? "••••" : `+${money(flow.inflow)}`}
+                        {hidden ? "••••" : `+${money(flow.inflow, accCurr)}`}
                       </strong>
                     </span>
                     <span>
                       {uiText("Out")}:{" "}
                       <strong className="m-num">
-                        {hidden ? "••••" : `−${money(flow.outflow)}`}
+                        {hidden ? "••••" : `−${money(flow.outflow, accCurr)}`}
                       </strong>
                     </span>
                   </div>
@@ -268,7 +273,10 @@ export function MobileAccounts({
                   style={{ fontSize: 13, color: "var(--m-muted)" }}
                 >
                   {accountTypeLabel(selectedAcc.type)} ·{" "}
-                  {fmt(balance(selectedAcc, ledger.transactions))}
+                  {fmt(
+                    balance(selectedAcc, ledger.transactions),
+                    accountCurrency(selectedAcc),
+                  )}
                 </div>
               </div>
               <button

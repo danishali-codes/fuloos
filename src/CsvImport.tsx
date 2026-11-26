@@ -32,6 +32,7 @@ import {
 import { CsvPresetBar } from "./CsvPresetBar";
 import { CsvReviewSection } from "./CsvReviewSection";
 import { CsvMissingCategories } from "./CsvMissingCategories";
+import { findEstimatedStatementMatches } from "./multiCurrency";
 
 export function CsvImport({
   ledger,
@@ -87,6 +88,7 @@ export function CsvImport({
     amount: -1,
     debit: -1,
     credit: -1,
+    currency: -1,
     split: false,
     flip: false,
     decimal: ".",
@@ -318,7 +320,7 @@ export function CsvImport({
         if (m.field === "amount" && options.split) return false;
         if ((m.field === "debit" || m.field === "credit") && !options.split)
           return false;
-        return options[m.field] < 0;
+        return (options[m.field] ?? -1) < 0;
       })
     : [];
 
@@ -543,14 +545,21 @@ export function CsvImport({
   }
   function mapping(
     key:
-      "date" | "payee" | "notes" | "category" | "amount" | "debit" | "credit",
+      | "date"
+      | "payee"
+      | "notes"
+      | "category"
+      | "amount"
+      | "debit"
+      | "credit"
+      | "currency",
     label: string,
   ) {
     return (
       <label>
         {label}
         <select
-          value={options[key]}
+          value={options[key] ?? -1}
           onChange={(e) => change(key, Number(e.target.value))}
         >
           <option value={-1}>{uiText("Choose column…")}</option>
@@ -598,16 +607,35 @@ export function CsvImport({
       setReading(false);
     }
   }
+  const statementFxMatches = useMemo(
+    () => findEstimatedStatementMatches(selected, ledger),
+    [selected, ledger],
+  );
+
   async function submit() {
-    const creates = selected.filter(
-      (r) => appliedByIndex.get(r.index)?.kind !== "pair",
+    const fxMatchByRow = new Map(
+      statementFxMatches.map((m) => [m.rowIndex, m]),
     );
-    const paired = selected.flatMap((r) => {
-      const m = appliedByIndex.get(r.index);
-      return m?.kind === "pair" && m.counterpart
-        ? [pairedTransfer(m.counterpart, options.account)]
-        : [];
-    });
+    const creates = selected.filter(
+      (r) =>
+        appliedByIndex.get(r.index)?.kind !== "pair" &&
+        !fxMatchByRow.has(r.index),
+    );
+    const paired = [
+      ...selected.flatMap((r) => {
+        const m = appliedByIndex.get(r.index);
+        return m?.kind === "pair" && m.counterpart
+          ? [pairedTransfer(m.counterpart, options.account)]
+          : [];
+      }),
+      ...statementFxMatches.map((m): Transaction => ({
+        ...m.existingTx,
+        amount: m.statementAmount,
+        fx_rate: m.recomputedFxRate,
+        fx_source: "statement_match",
+        fx_status: "exact",
+      })),
+    ];
     setBusy(true);
     setTotal(creates.length);
     setProgress(0);
@@ -664,7 +692,7 @@ export function CsvImport({
         <p className="muted">
           {" "}
           {uiText(
-            "Choose a bank CSV, match its columns, then review before importing. Amounts are in AED. Mark transfers below and choose the other account. Positive amounts arrive in the import account; negative amounts leave it.",
+            "Choose a bank CSV, match its columns, then review before importing. Amounts use the selected account's currency (or a mapped Currency column). Mark transfers below and choose the other account. Positive amounts arrive in the import account; negative amounts leave it.",
           )}{" "}
         </p>
         <fieldset disabled={busy || done || reading}>
@@ -833,9 +861,17 @@ export function CsvImport({
               ) : (
                 mapping("amount", "Amount *")
               )}
+              {mapping("currency", "Currency (optional)")}
               {mapping("payee", "Payee / description")}
               {mapping("notes", "Notes")}
               {mapping("category", "Category")}
+            </div>
+          )}
+          {statementFxMatches.length > 0 && (
+            <div className="notice" style={{ marginTop: "8px" }}>
+              {statementFxMatches.length === 1
+                ? "1 row matches an estimated foreign-currency transaction and will confirm its exact charged amount instead of creating a duplicate."
+                : `${statementFxMatches.length} rows match estimated foreign-currency transactions and will confirm their exact charged amounts instead of creating duplicates.`}
             </div>
           )}
           <p className="muted small">
