@@ -17,11 +17,11 @@ import {
 } from "./ledger/learning";
 import { withConsent, type LearningStore } from "./ledger/learningStore";
 import {
-  BANK_NAMES,
   smsFromBackupXml,
   splitPastedSms,
   type RawSms,
 } from "./ledger/sms";
+import { ALL_SMS_BANKS as BANK_NAMES } from "./sms/bankTemplates";
 
 type Edit = Partial<Pick<ImportTransaction, "date" | "payee" | "category_id">>;
 

@@ -761,6 +761,8 @@ const SENDER_BANK: [RegExp, string][] = [
   [/mashreq|neo/i, "Mashreq"],
   [/\bfab\b|fabbank|first ?abu/i, "FAB"],
   [/adib/i, "ADIB"],
+  [/\bdib\b|dubai ?islamic/i, "DIB"],
+  [/\benbd\b|emirates ?nbd/i, "ENBD"],
 ];
 export function bankFromSender(
   address: string | null | undefined,

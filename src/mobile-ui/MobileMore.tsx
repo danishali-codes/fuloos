@@ -35,11 +35,13 @@ export function MobileMore({
   hidden,
   lockConfig,
   pendingAlertCount,
+  unparsedSmsCount = 0,
   estimatedCount = 0,
   smsLinks,
   onNavigate,
   onOpenSmsAutoCapture,
   onOpenCaptureAlerts,
+  onOpenUnparsedSms,
   onOpenConfirmAmounts,
   onOpenRules,
   onOpenImport,
@@ -53,11 +55,13 @@ export function MobileMore({
   hidden: boolean;
   lockConfig: AppLockConfig | null;
   pendingAlertCount: number;
+  unparsedSmsCount?: number;
   estimatedCount?: number;
   smsLinks: SmsAccountLink[];
   onNavigate: (page: string) => void;
   onOpenSmsAutoCapture: () => void;
   onOpenCaptureAlerts: () => void;
+  onOpenUnparsedSms?: () => void;
   onOpenConfirmAmounts?: (txId?: string) => void;
   onOpenRules: () => void;
   onOpenImport: () => void;
@@ -251,6 +255,16 @@ export function MobileMore({
           >
             {uiText("SMS & Backfill")}
           </button>
+          {onOpenUnparsedSms && (
+            <button
+              type="button"
+              className="is-glass"
+              onClick={onOpenUnparsedSms}
+            >
+              {uiText("Couldn't read")}
+              {unparsedSmsCount > 0 ? ` (${unparsedSmsCount})` : ""}
+            </button>
+          )}
         </div>
       </section>
 

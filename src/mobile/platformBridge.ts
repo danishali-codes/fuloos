@@ -23,6 +23,27 @@ export interface SmsPermissionStatus {
   ignoringBatteryOptimizations: boolean;
   supportsDirectSms: boolean;
   buildFlavor: BuildFlavor;
+  isDebugBuild?: boolean;
+}
+
+/** Local-only unparsed SMS entry stored strictly on-device (never synced to Supabase). */
+export interface UnparsedSmsItem {
+  id: number;
+  sender: string;
+  received_at: string;
+  sms_hash: string;
+  body: string;
+  created_at: number;
+  dismissed: boolean;
+}
+
+export interface InboxDryRunSenderStats {
+  sender: string;
+  total: number;
+  parsed: number;
+  review: number;
+  unparsed: number;
+  skipped: number;
 }
 
 export interface NativeDeepLinkEvent {
@@ -95,6 +116,16 @@ interface FuloosSmsPluginInterface {
       status: string;
     }>;
   }): Promise<{ ok: boolean }>;
+  getUnparsedSms(options?: {
+    ownerKey?: string;
+  }): Promise<{ items: UnparsedSmsItem[] }>;
+  dismissUnparsedSms(options: {
+    id: number;
+    ownerKey?: string;
+  }): Promise<{ ok: boolean }>;
+  runInboxDryRun(options?: {
+    ownerKey?: string;
+  }): Promise<{ supported: boolean; senders: InboxDryRunSenderStats[] }>;
   triggerCatchUpSync(): Promise<{ enqueued: boolean }>;
   openNotificationSettings(options?: { channelId?: string }): Promise<void>;
   openBatteryOptimizationSettings(): Promise<void>;
@@ -503,6 +534,93 @@ export const platformBridge = {
   ): Promise<PluginListenerHandle | null> {
     if (!isNativePlatform() || getPlatform() !== "android") return null;
     return FuloosSmsNative.addListener("deepLink", handler);
+  },
+
+  async getUnparsedSms(
+    ownerKey?: string,
+    demoFallback = false,
+  ): Promise<UnparsedSmsItem[]> {
+    if (isNativePlatform() && getPlatform() === "android") {
+      try {
+        const res = await FuloosSmsNative.getUnparsedSms({ ownerKey });
+        return res.items ?? [];
+      } catch {
+        return [];
+      }
+    }
+    if (!demoFallback) return [];
+    const dismissedRaw = window.localStorage.getItem("fuloos.demo.dismissedUnparsed");
+    const dismissed = new Set<number>(
+      dismissedRaw ? (JSON.parse(dismissedRaw) as number[]) : [],
+    );
+    const demoItems: UnparsedSmsItem[] = [
+      {
+        id: 1,
+        sender: "SAMPLE BANK",
+        received_at: "2026-11-12T08:40:00.000Z",
+        sms_hash: "demo-unparsed-1",
+        body: "SAMPLE BANK Alert: Card *0000 movement 74.50 AED | Ref: SAMPLE ROASTERY | 12-11-2026",
+        created_at: Date.parse("2026-11-12T08:40:00.000Z"),
+        dismissed: false,
+      },
+      {
+        id: 2,
+        sender: "DIB",
+        received_at: "2026-11-11T14:15:00.000Z",
+        sms_hash: "demo-unparsed-2",
+        body: "Your DIB A/C No. 0XX-XXXXXXX-01 Available Balance as of 11-NOV-2026 is AED 20,899.50.",
+        created_at: Date.parse("2026-11-11T14:15:00.000Z"),
+        dismissed: false,
+      },
+    ];
+    return demoItems.filter((item) => !dismissed.has(item.id));
+  },
+
+  async dismissUnparsedSms(
+    id: number,
+    ownerKey?: string,
+    demoFallback = false,
+  ): Promise<boolean> {
+    if (isNativePlatform() && getPlatform() === "android") {
+      try {
+        const res = await FuloosSmsNative.dismissUnparsedSms({ id, ownerKey });
+        return Boolean(res.ok);
+      } catch {
+        return false;
+      }
+    }
+    if (!demoFallback) return false;
+    try {
+      const key = "fuloos.demo.dismissedUnparsed";
+      const prev = JSON.parse(window.localStorage.getItem(key) || "[]") as number[];
+      if (!prev.includes(id)) prev.push(id);
+      window.localStorage.setItem(key, JSON.stringify(prev));
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  async runInboxDryRun(
+    ownerKey?: string,
+    demoFallback = false,
+  ): Promise<{ supported: boolean; senders: InboxDryRunSenderStats[] }> {
+    if (isNativePlatform() && getPlatform() === "android") {
+      try {
+        return await FuloosSmsNative.runInboxDryRun({ ownerKey });
+      } catch {
+        return { supported: false, senders: [] };
+      }
+    }
+    if (!demoFallback) return { supported: false, senders: [] };
+    return {
+      supported: true,
+      senders: [
+        { sender: "ADCB", total: 14, parsed: 11, review: 2, unparsed: 0, skipped: 1 },
+        { sender: "LIV", total: 9, parsed: 7, review: 1, unparsed: 0, skipped: 1 },
+        { sender: "DIB", total: 8, parsed: 6, review: 1, unparsed: 1, skipped: 0 },
+      ],
+    };
   },
 
   async onSmsProcessed(

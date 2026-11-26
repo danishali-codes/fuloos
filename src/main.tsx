@@ -2,6 +2,7 @@ import { translateText as uiText } from "./i18n";
 import React, {
   Suspense,
   lazy,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -82,7 +83,10 @@ import { AppPageHeader, AppTopbar } from "./AppHeader";
 import { pendingCapturedAlerts } from "./captureAlerts";
 import type { ImportTransaction } from "./csv";
 import type { CapturedAlert } from "./domain";
-import { platformBridge } from "./mobile/platformBridge";
+import {
+  platformBridge,
+  type UnparsedSmsItem,
+} from "./mobile/platformBridge";
 import type { SmsAccountLink } from "./mobile/smsLinks";
 import { useNativeMobile } from "./mobile/useNativeMobile";
 import { isMobileApkMode } from "./mobile-ui/isMobileApkMode";
@@ -205,6 +209,11 @@ function App() {
     string | undefined
   >(undefined);
   const [smsLinks, setSmsLinks] = useState<SmsAccountLink[]>([]);
+  const [unparsedSmsOpen, setUnparsedSmsOpen] = useState(false);
+  const [unparsedSmsItems, setUnparsedSmsItems] = useState<UnparsedSmsItem[]>(
+    [],
+  );
+  const [isDebugAndroid, setIsDebugAndroid] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(
     new Set(),
@@ -1657,10 +1666,20 @@ function App() {
       ? `${backend.url.trim().replace(/\/+$/, "")}|${session.user.id}`
       : "";
 
+  const refreshUnparsedSms = useCallback(async () => {
+    if (!smsOwnerKey) {
+      setUnparsedSmsItems([]);
+      return;
+    }
+    const items = await platformBridge.getUnparsedSms(smsOwnerKey, demo);
+    setUnparsedSmsItems(items);
+  }, [smsOwnerKey, demo]);
+
   useEffect(() => {
     let live = true;
     if (!smsOwnerKey) {
       setSmsLinks([]);
+      setUnparsedSmsItems([]);
       return () => {
         live = false;
       };
@@ -1668,10 +1687,32 @@ function App() {
     void platformBridge.getLinks(smsOwnerKey).then((loaded) => {
       if (live) setSmsLinks(loaded);
     });
+    void platformBridge.getUnparsedSms(smsOwnerKey, demo).then((items) => {
+      if (live) setUnparsedSmsItems(items);
+    });
+    void platformBridge.getPermissionStatus().then((status) => {
+      if (live) setIsDebugAndroid(Boolean(status.isDebugBuild));
+    });
     return () => {
       live = false;
     };
-  }, [smsOwnerKey]);
+  }, [smsOwnerKey, demo]);
+
+  async function handleDismissUnparsedSms(item: UnparsedSmsItem) {
+    const ok = await platformBridge.dismissUnparsedSms(
+      item.id,
+      smsOwnerKey || undefined,
+      demo,
+    );
+    if (ok) {
+      setUnparsedSmsItems((prev) => prev.filter((x) => x.id !== item.id));
+    }
+  }
+
+  const handleRunInboxDryRun =
+    demo || isDebugAndroid
+      ? () => platformBridge.runInboxDryRun(smsOwnerKey || undefined, demo)
+      : undefined;
 
   async function handleSmsLinksChange(next: SmsAccountLink[]) {
     setSmsLinks(next);
@@ -1698,6 +1739,7 @@ function App() {
   const hasOpenModal = Boolean(
     settingsOpen ||
       confirmAmountsOpen ||
+      unparsedSmsOpen ||
       rulesOpen ||
       smsAutoCaptureOpen ||
       captureAlertsOpen ||
@@ -1731,6 +1773,7 @@ function App() {
     hasOpenModal,
     onCloseTopModal: () => {
       if (confirmAmountsOpen) setConfirmAmountsOpen(false);
+      else if (unparsedSmsOpen) setUnparsedSmsOpen(false);
       else if (quickAdd) setQuickAdd(null);
       else if (mobileEditQuickTx) setMobileEditQuickTx(null);
       else if (mobileSelectedTx) setMobileSelectedTx(null);
@@ -1757,6 +1800,7 @@ function App() {
     onOpenSmsAutoCapture: () => openSmsAutoCapture(),
     onReloadLedger: () => {
       if (!demo && session) void load();
+      void refreshUnparsedSms();
     },
   });
 
@@ -1938,6 +1982,14 @@ function App() {
         confirmAmountsTxId={confirmAmountsTxId}
         setConfirmAmountsOpen={setConfirmAmountsOpen}
         onConfirmForeignAmount={handleConfirmForeignAmount}
+        unparsedSmsOpen={unparsedSmsOpen}
+        setUnparsedSmsOpen={(v) => {
+          setUnparsedSmsOpen(v);
+          if (v) void refreshUnparsedSms();
+        }}
+        unparsedSmsItems={unparsedSmsItems}
+        onDismissUnparsedSms={(item) => void handleDismissUnparsedSms(item)}
+        onRunInboxDryRun={handleRunInboxDryRun}
         deleteOpen={deleteOpen}
         setDeleteOpen={setDeleteOpen}
         accountToDelete={accountToDelete}
@@ -2117,6 +2169,11 @@ function App() {
           onEditBudget={(item) => setBudgetModal({ item })}
           onOpenSmsAutoCapture={(accountId) => openSmsAutoCapture(accountId)}
           onOpenCaptureAlerts={() => setCaptureAlertsOpen(true)}
+          unparsedSmsCount={unparsedSmsItems.length}
+          onOpenUnparsedSms={() => {
+            void refreshUnparsedSms();
+            setUnparsedSmsOpen(true);
+          }}
           estimatedCount={estimatedList.length}
           onOpenConfirmAmounts={openConfirmAmounts}
           onOpenRules={() => setRulesOpen(true)}

@@ -65,6 +65,8 @@ export function MobileAppShell({
   onEditBudget,
   onOpenSmsAutoCapture,
   onOpenCaptureAlerts,
+  onOpenUnparsedSms,
+  unparsedSmsCount = 0,
   onOpenConfirmAmounts,
   estimatedCount = 0,
   onOpenRules,
@@ -119,6 +121,8 @@ export function MobileAppShell({
   onEditBudget: (budget: Budget) => void;
   onOpenSmsAutoCapture: (accountId?: string) => void;
   onOpenCaptureAlerts: () => void;
+  onOpenUnparsedSms?: () => void;
+  unparsedSmsCount?: number;
   onOpenConfirmAmounts?: (txId?: string) => void;
   estimatedCount?: number;
   onOpenRules: () => void;
@@ -241,11 +245,13 @@ export function MobileAppShell({
           hidden={hidden}
           lockConfig={lockConfig}
           pendingAlertCount={pendingAlerts.length}
+          unparsedSmsCount={unparsedSmsCount}
           estimatedCount={estimatedCount}
           smsLinks={smsLinks}
           onNavigate={onNavigate}
           onOpenSmsAutoCapture={() => onOpenSmsAutoCapture()}
           onOpenCaptureAlerts={onOpenCaptureAlerts}
+          onOpenUnparsedSms={onOpenUnparsedSms}
           onOpenConfirmAmounts={onOpenConfirmAmounts}
           onOpenRules={onOpenRules}
           onOpenImport={onOpenImport}

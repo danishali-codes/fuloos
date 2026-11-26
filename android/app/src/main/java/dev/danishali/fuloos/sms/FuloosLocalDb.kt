@@ -45,6 +45,16 @@ class FuloosLocalDb private constructor(context: Context) :
         val fetchedAt: Long,
     )
 
+    data class UnparsedSmsEntry(
+        val id: Long,
+        val sender: String,
+        val receivedAt: String,
+        val smsHash: String,
+        val body: String,
+        val createdAt: Long,
+        val dismissed: Boolean,
+    )
+
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """
@@ -113,6 +123,28 @@ class FuloosLocalDb private constructor(context: Context) :
             ON fx_rates (base, quote, rate_date DESC)
             """.trimIndent(),
         )
+        // Local-only "Couldn't read" SMS list. Never synced to Supabase or any remote server.
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS unparsed_sms (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_key TEXT NOT NULL,
+                sender TEXT NOT NULL,
+                received_at TEXT NOT NULL,
+                sms_hash TEXT NOT NULL,
+                body TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                dismissed INTEGER NOT NULL DEFAULT 0,
+                UNIQUE (owner_key, sms_hash)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE INDEX IF NOT EXISTS idx_unparsed_sms_owner_active
+            ON unparsed_sms (owner_key, dismissed, created_at DESC)
+            """.trimIndent(),
+        )
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -123,7 +155,7 @@ class FuloosLocalDb private constructor(context: Context) :
             db.execSQL("DROP TABLE IF EXISTS offline_queue")
             db.execSQL("DELETE FROM engine_cache")
         }
-        // v2 -> v3 adds fx_rates non-destructively via CREATE TABLE IF NOT EXISTS in onCreate.
+        // v2 -> v3 adds fx_rates; v3 -> v4 adds unparsed_sms non-destructively via CREATE TABLE IF NOT EXISTS.
         onCreate(db)
     }
 
@@ -529,6 +561,80 @@ class FuloosLocalDb private constructor(context: Context) :
         return out
     }
 
+    @Synchronized
+    fun insertUnparsedSms(
+        ownerKey: String,
+        sender: String,
+        receivedAt: String,
+        smsHash: String,
+        body: String,
+    ) {
+        if (ownerKey.isBlank() || smsHash.isBlank() || body.isBlank()) return
+        val cv = ContentValues().apply {
+            put("owner_key", ownerKey)
+            put("sender", sender.take(64))
+            put("received_at", receivedAt)
+            put("sms_hash", smsHash)
+            put("body", body.take(2000))
+            put("created_at", System.currentTimeMillis())
+            put("dismissed", 0)
+        }
+        writableDatabase.insertWithOnConflict("unparsed_sms", null, cv, SQLiteDatabase.CONFLICT_IGNORE)
+    }
+
+    @Synchronized
+    fun getUnparsedSms(ownerKey: String = getActiveOwnerKey(), limit: Int = 100): List<UnparsedSmsEntry> {
+        if (ownerKey.isBlank()) return emptyList()
+        val result = mutableListOf<UnparsedSmsEntry>()
+        readableDatabase.rawQuery(
+            """
+            SELECT id, sender, received_at, sms_hash, body, created_at, dismissed
+            FROM unparsed_sms
+            WHERE owner_key = ? AND dismissed = 0
+            ORDER BY created_at DESC
+            LIMIT ?
+            """.trimIndent(),
+            arrayOf(ownerKey, limit.toString()),
+        ).use { c ->
+            while (c.moveToNext()) {
+                result.add(
+                    UnparsedSmsEntry(
+                        id = c.getLong(0),
+                        sender = c.getString(1),
+                        receivedAt = c.getString(2),
+                        smsHash = c.getString(3),
+                        body = c.getString(4),
+                        createdAt = c.getLong(5),
+                        dismissed = c.getInt(6) != 0,
+                    ),
+                )
+            }
+        }
+        return result
+    }
+
+    @Synchronized
+    fun dismissUnparsedSms(id: Long, ownerKey: String = getActiveOwnerKey()): Boolean {
+        if (ownerKey.isBlank() || id <= 0L) return false
+        val cv = ContentValues().apply { put("dismissed", 1) }
+        return writableDatabase.update(
+            "unparsed_sms",
+            cv,
+            "id = ? AND owner_key = ?",
+            arrayOf(id.toString(), ownerKey),
+        ) > 0
+    }
+
+    @Synchronized
+    fun deleteUnparsedSmsByHash(smsHash: String, ownerKey: String = getActiveOwnerKey()): Boolean {
+        if (ownerKey.isBlank() || smsHash.isBlank()) return false
+        return writableDatabase.delete(
+            "unparsed_sms",
+            "owner_key = ? AND sms_hash = ?",
+            arrayOf(ownerKey, smsHash),
+        ) > 0
+    }
+
     /**
      * Merges the latest saved links and locally cached FX rates into the cached
      * engine context so background workers always evaluate with up-to-date routing
@@ -579,7 +685,7 @@ class FuloosLocalDb private constructor(context: Context) :
 
     companion object {
         private const val DB_NAME = "fuloos_sms_local.db"
-        private const val DB_VERSION = 3
+        private const val DB_VERSION = 4
         private const val KEY_ACTIVE_OWNER = "active_owner_key"
         private const val KEY_SMS_LINKS = "sms_links"
         private const val KEY_ENGINE_CONTEXT = "engine_context"

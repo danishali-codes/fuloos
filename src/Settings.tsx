@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Inbox, MessageSquareText, Trash2, Wand2, X } from "lucide-react";
+import {
+  AlertCircle,
+  FlaskConical,
+  Inbox,
+  MessageSquareText,
+  Trash2,
+  Wand2,
+  X,
+} from "lucide-react";
 import {
   formatCurrencyInput,
   parseCurrencyMinor,
@@ -12,6 +20,7 @@ import {
   type UserSettings,
 } from "./domain";
 import { useLocale, type Locale } from "./i18n";
+import type { InboxDryRunSenderStats } from "./mobile/platformBridge";
 
 /** Profile settings. Holds appearance, currency, list layout, data & backup, and account deletion. */
 export function SettingsDialog({
@@ -20,13 +29,17 @@ export function SettingsDialog({
   onOpenRules,
   onOpenCaptureAlerts,
   onOpenSmsAutoCapture,
+  onOpenUnparsedSms,
+  onRunInboxDryRun,
   pendingAlertCount = 0,
+  unparsedSmsCount = 0,
   linkedSmsCount = 0,
   userSettings,
   onSaveUserSettings,
   security,
   notifications,
   household,
+  smsSection,
   dataBackup,
 }: {
   onClose: () => void;
@@ -35,13 +48,17 @@ export function SettingsDialog({
   onOpenRules?: () => void;
   onOpenCaptureAlerts?: () => void;
   onOpenSmsAutoCapture?: () => void;
+  onOpenUnparsedSms?: () => void;
+  onRunInboxDryRun?: () => Promise<{ supported: boolean; senders: InboxDryRunSenderStats[] }>;
   pendingAlertCount?: number;
+  unparsedSmsCount?: number;
   linkedSmsCount?: number;
   userSettings?: UserSettings;
   onSaveUserSettings?: (next: UserSettings) => void;
   security?: ReactNode;
   notifications?: ReactNode;
   household?: ReactNode;
+  smsSection?: ReactNode;
   dataBackup?: ReactNode;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -329,6 +346,29 @@ export function SettingsDialog({
           </button>
         </div>
       )}
+      {onOpenUnparsedSms && (
+        <div className="settings-danger">
+          <div>
+            <b>Couldn&apos;t read (on-device SMS)</b>
+            <p className="muted small">
+              Messages from linked banks that Fuloos couldn&apos;t read yet. Stored
+              only on this device.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="secondary"
+            onClick={onOpenUnparsedSms}
+          >
+            <AlertCircle size={15} /> Couldn&apos;t read
+            {unparsedSmsCount > 0 ? ` (${unparsedSmsCount})` : ""}
+          </button>
+        </div>
+      )}
+      {smsSection}
+      {onRunInboxDryRun && (
+        <InboxDryRunSection onRun={onRunInboxDryRun} />
+      )}
       {dataBackup}
       {onDeleteAccount && (
         <div className="settings-danger">
@@ -347,5 +387,99 @@ export function SettingsDialog({
         </button>
       </div>
     </dialog>
+  );
+}
+
+function InboxDryRunSection({
+  onRun,
+}: {
+  onRun: () => Promise<{ supported: boolean; senders: InboxDryRunSenderStats[] }>;
+}) {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{
+    supported: boolean;
+    senders: InboxDryRunSenderStats[];
+  } | null>(null);
+  const [err, setErr] = useState("");
+
+  async function handleRun() {
+    setRunning(true);
+    setErr("");
+    try {
+      const res = await onRun();
+      setResult(res);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Dry run failed");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div className="settings-danger" style={{ display: "grid", gap: "10px" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "12px",
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <b>Test parser on my inbox (debug)</b>
+          <p className="muted small">
+            Dry-runs the last 500 SMS from linked senders locally. Shows counts
+            only — no message text, no writes, nothing sent.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="secondary"
+          disabled={running}
+          onClick={() => void handleRun()}
+        >
+          <FlaskConical size={15} />{" "}
+          {running ? "Testing…" : "Test parser on my inbox"}
+        </button>
+      </div>
+      {err && <p className="error">{err}</p>}
+      {result && (
+        <div style={{ fontSize: "0.84rem" }}>
+          {!result.supported ? (
+            <p className="muted small">
+              Available in debug Android builds with SMS permission granted.
+            </p>
+          ) : result.senders.length === 0 ? (
+            <p className="muted small">
+              No messages found for your currently linked senders.
+            </p>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ textAlign: "left", borderBottom: "1px solid var(--border)" }}>
+                  <th style={{ padding: "4px 6px" }}>Sender</th>
+                  <th style={{ padding: "4px 6px", textAlign: "right" }}>Parsed</th>
+                  <th style={{ padding: "4px 6px", textAlign: "right" }}>Review</th>
+                  <th style={{ padding: "4px 6px", textAlign: "right" }}>Couldn&apos;t read</th>
+                  <th style={{ padding: "4px 6px", textAlign: "right" }}>Skipped</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.senders.map((s) => (
+                  <tr key={s.sender} style={{ borderBottom: "1px solid var(--border)" }}>
+                    <td style={{ padding: "4px 6px", fontWeight: 600 }}>{s.sender}</td>
+                    <td style={{ padding: "4px 6px", textAlign: "right" }}>{s.parsed}</td>
+                    <td style={{ padding: "4px 6px", textAlign: "right" }}>{s.review}</td>
+                    <td style={{ padding: "4px 6px", textAlign: "right" }}>{s.unparsed}</td>
+                    <td style={{ padding: "4px 6px", textAlign: "right" }}>{s.skipped}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
