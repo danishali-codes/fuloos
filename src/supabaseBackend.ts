@@ -81,6 +81,7 @@ const PAGE_SIZE = 500;
 const NULLABLE_TEXT_FIELDS = new Set([
   "to_account_id",
   "category_id",
+  "consent_at",
   "end_date",
   "match_source",
   "match_reason",

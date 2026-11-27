@@ -232,6 +232,31 @@ class FuloosLocalDb private constructor(context: Context) :
         putCache(scopedKey(ownerKey, KEY_ENGINE_CONTEXT), contextJson)
     }
 
+    /**
+     * The hashed Ledger model (about 1 MB) lives in its own row: together with the rest of the context it could pass
+     * Android's 2 MB cursor-window limit. Blank removes it.
+     */
+    @Synchronized
+    fun saveEngineModelJson(modelJson: String, ownerKey: String = getActiveOwnerKey()) {
+        if (ownerKey.isBlank()) return
+        val key = scopedKey(ownerKey, KEY_ENGINE_MODEL)
+        if (modelJson.isBlank()) {
+            writableDatabase.delete("engine_cache", "cache_key = ?", arrayOf(key))
+        } else {
+            putCache(key, modelJson)
+        }
+    }
+
+    @Synchronized
+    fun getEngineModelJson(ownerKey: String = getActiveOwnerKey()): String? {
+        if (ownerKey.isBlank()) return null
+        return try {
+            getCache(scopedKey(ownerKey, KEY_ENGINE_MODEL))
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     @Synchronized
     fun getLinksArray(ownerKey: String = getActiveOwnerKey()): JSONArray {
         return try {
@@ -784,10 +809,22 @@ class FuloosLocalDb private constructor(context: Context) :
             }
             ctx.put("fxRates", mergedFx)
             ctx.put("learnedTemplates", getLearnedTemplatesJson(ownerKey))
-            ctx.toString()
+            ctx.remove("baseModel")
+            withBaseModel(ctx.toString(), ownerKey)
         } catch (_: Exception) {
             rawCtx
         }
+    }
+
+    /** Splices the stored model back in as `baseModel` without re-parsing it (the engine rebuilds its lookups). */
+    private fun withBaseModel(ctxJson: String, ownerKey: String): String {
+        val model = getEngineModelJson(ownerKey)?.trim()
+        if (model.isNullOrEmpty() || !model.startsWith("{")) return ctxJson
+        val body = ctxJson.trimEnd()
+        if (!body.endsWith("}")) return ctxJson
+        val head = body.dropLast(1).trimEnd()
+        val sep = if (head.endsWith("{")) "" else ","
+        return "$head$sep\"baseModel\":$model}"
     }
 
     private fun scopedKey(ownerKey: String, key: String): String {
@@ -818,6 +855,7 @@ class FuloosLocalDb private constructor(context: Context) :
         private const val KEY_ACTIVE_OWNER = "active_owner_key"
         private const val KEY_SMS_LINKS = "sms_links"
         private const val KEY_ENGINE_CONTEXT = "engine_context"
+        private const val KEY_ENGINE_MODEL = "engine_model"
         private const val DEFAULT_CATCHUP_WINDOW_MS = 1000L * 60 * 60 * 48 // 48 hours
 
         @Volatile

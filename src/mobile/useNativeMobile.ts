@@ -124,7 +124,11 @@ export function useNativeMobile({
           userSettings: ledger.user_settings,
           learnedTemplates,
         };
-        await platformBridge.syncEngineContext(ctx, ownerKey);
+        await platformBridge.syncEngineContext(
+          ctx,
+          ownerKey,
+          modelState.status === "failed",
+        );
       } catch {
         /* ignore background sync errors */
       }

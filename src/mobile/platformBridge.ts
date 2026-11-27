@@ -18,7 +18,13 @@ import {
   saveWebLearnedTemplate,
 } from "../sms/learnedStore.ts";
 import type { LearnedTemplate } from "../sms/types.ts";
-import type { RawNativeSms, SmsEngineContext } from "./smsPipeline.ts";
+import {
+  splitEngineContext,
+  type RawNativeSms,
+  type SmsEngineContext,
+} from "./smsPipeline.ts";
+
+let lastSentModelKey: string | null = null;
 
 export type PlatformKind = "android" | "ios" | "web";
 export type BuildFlavor = "direct" | "play" | "web";
@@ -100,6 +106,8 @@ interface FuloosSmsPluginInterface {
   }): Promise<{ ok: boolean }>;
   syncEngineContext(options: {
     contextJson: string;
+    /** Hashed model JSON: omitted keeps the stored model, "" removes it. */
+    modelJson?: string;
     ownerKey?: string;
   }): Promise<{ ok: boolean }>;
   syncAuthSession(options: NativeAuthRegistration): Promise<{ ok: boolean }>;
@@ -407,16 +415,25 @@ export const platformBridge = {
     }
   },
 
+  /** keepStoredModel: the model could not be downloaded this time, so leave the copy on the phone as it is. */
   async syncEngineContext(
     ctx: SmsEngineContext,
     ownerKey?: string,
+    keepStoredModel = false,
   ): Promise<void> {
     if (!isNativePlatform() || getPlatform() !== "android") return;
     try {
+      const { contextJson, modelJson } = splitEngineContext(ctx);
+      // The model is about 1 MB and rarely changes, so it only crosses the bridge when it differs from the last send.
+      const modelKey = `${ownerKey ?? ""}|${ctx.baseModel?.meta.version ?? ""}|${ctx.baseModel?.meta.created ?? ""}`;
+      const sendModel =
+        modelKey !== lastSentModelKey && !(keepStoredModel && !ctx.baseModel);
       await FuloosSmsNative.syncEngineContext({
-        contextJson: JSON.stringify(ctx),
+        contextJson,
+        ...(sendModel ? { modelJson: modelJson ?? "" } : {}),
         ownerKey,
       });
+      if (sendModel) lastSentModelKey = modelKey;
     } catch {
       /* non-fatal if plugin unavailable */
     }

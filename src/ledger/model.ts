@@ -313,6 +313,13 @@ function prepare(H: HashedModel): LoadedModel {
   };
 }
 
+/** The hashed model without the lookup maps built at load time, ready for JSON.stringify (the Android background
+    engine gets the model this way and calls loadModel on it again, because Maps do not survive JSON). */
+export function toHashedModel(M: LoadedModel): HashedModel {
+  const { charIndex: _c, wordIndex: _w, nFeat: _n, order: _o, ...H } = M;
+  return H;
+}
+
 /** Validate a downloaded hashed model and run its self-check. Plain (readable) exports are refused. */
 export function loadModel(json: unknown): LoadedModel {
   const H = json as HashedModel;

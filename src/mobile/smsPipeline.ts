@@ -35,7 +35,7 @@ import {
   type PersonalModel,
 } from "../ledger/learning.ts";
 import type { CategoryMap } from "../ledger/mapping.ts";
-import type { LoadedModel } from "../ledger/model.ts";
+import { loadModel, toHashedModel, type LoadedModel } from "../ledger/model.ts";
 import {
   cleanName,
   dateInText,
@@ -98,6 +98,48 @@ export interface SmsEngineContext {
   userSettings?: UserSettings;
   /** Optional on-device learned SMS templates (Phase 3). */
   learnedTemplates?: LearnedTemplate[];
+}
+
+/**
+ * The engine context as it crosses to Android: `contextJson` without the model, and the hashed model on its own
+ * (`modelJson`, null when there is none). Native code stores them separately, because one row with both can pass the
+ * 2 MB SQLite cursor limit, and puts the model back as `baseModel` before calling the headless engine.
+ * The loaded model's lookup Maps do not survive JSON, so the engine must call reviveEngineContext on the result.
+ */
+export function splitEngineContext(ctx: SmsEngineContext): {
+  contextJson: string;
+  modelJson: string | null;
+} {
+  const { baseModel, ...rest } = ctx;
+  return {
+    contextJson: JSON.stringify(rest),
+    modelJson: baseModel ? JSON.stringify(toHashedModel(baseModel)) : null,
+  };
+}
+
+/** Same splice the Android side does (FuloosLocalDb.buildEffectiveEngineContextJson). */
+export function joinEngineContextJson(
+  contextJson: string,
+  modelJson: string | null,
+): string {
+  if (!modelJson) return contextJson;
+  const body = contextJson.trim().replace(/}\s*$/, "");
+  return `${body}${body.trim() === "{" ? "" : ","}"baseModel":${modelJson}}`;
+}
+
+/** Parses a context that came through JSON and rebuilds the model's lookup tables. A damaged model is dropped, so
+    background capture keeps working with rules only. */
+export function reviveEngineContext(contextJson: string): SmsEngineContext {
+  const ctx = JSON.parse(contextJson) as SmsEngineContext;
+  let baseModel: LoadedModel | null = null;
+  if (ctx.baseModel) {
+    try {
+      baseModel = loadModel(ctx.baseModel);
+    } catch {
+      baseModel = null;
+    }
+  }
+  return { ...ctx, baseModel };
 }
 
 export type SmsDecisionAction = "auto_add" | "needs_review" | "unparsed" | "skip";

@@ -191,6 +191,10 @@ class FuloosSmsPlugin : Plugin() {
         val ctxJson = call.getString("contextJson").orEmpty()
         if (ctxJson.isNotBlank() && ownerKey.isNotBlank()) {
             db.saveEngineContextJson(ctxJson, ownerKey)
+            // Omitted: keep the stored model. "": the model was switched off, remove it.
+            if (call.data.has("modelJson")) {
+                db.saveEngineModelJson(call.getString("modelJson").orEmpty(), ownerKey)
+            }
         }
         call.resolve(JSObject().put("ok", true))
     }
