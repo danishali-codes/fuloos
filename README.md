@@ -78,13 +78,7 @@ Privacy:
 - `src/ledger/rules.generated.ts` is produced by `scripts/ledger/import-rules.ts`, which copies only the generic tables (bank templates, public brands, keywords) and drops the Ledger project's merchant overrides because those came from contributors' own SMS.
 - No model file is committed. `scripts/ledger/hash-model.ts` converts the Ledger export into a hashed model: every character and word n-gram is replaced by a 24-bit FNV-1a bucket, so the file holds numbers only, and the converter fails if any vocabulary string survives. The app refuses plain exports and verifies a self-check built from public brand names. Hashing removes readable text but is not anonymisation on its own: someone can still test whether a guessed merchant name hashes to a bucket in the file, so the minimum-contributors rule in the Ledger export still matters.
 
-To enable the model, convert and host it, then set `VITE_LEDGER_MODEL_URL` for the build:
-
-```sh
-node --experimental-strip-types scripts/ledger/hash-model.ts path/to/ledger_web_model.json ledger-model-v1.json 1
-# upload ledger-model-v1.json to the model host (it must allow cross-origin GET), then:
-# VITE_LEDGER_MODEL_URL=https://<host>/ledger-model-v1.json
-```
+To enable the model on the web app and the Android app, follow [Turning on the Ledger model](docs/ledger-model-setup.md): build the hashed file, host it, set `VITE_LEDGER_MODEL_URL` in Vercel and the GitHub Actions variables, and apply the learning tables migration.
 
 Without the variable, SMS import works with the rules alone.
 

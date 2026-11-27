@@ -63,6 +63,17 @@ class HeadlessSmsEngine(private val context: Context) {
                 // Load the pure IIFE engine bundle into the isolate.
                 isolate.evaluateJavaScriptAsync(engineSource).await()
 
+                // Older WebView providers cap one evaluation at the ~1 MB Binder limit. The context then goes
+                // without the Ledger model (about 1 MB), and categorisation falls back to rules and corrections.
+                val unlimited = sandbox.isFeatureSupported(
+                    JavaScriptSandbox.JS_FEATURE_EVALUATE_WITHOUT_TRANSACTION_LIMIT,
+                )
+                val ctxJson = if (!unlimited && arg1Json.length + arg2Json.length > BINDER_SAFE_CHARS) {
+                    Log.w(TAG, "WebView cannot pass large scripts; running $methodName without the Ledger model")
+                    withoutBaseModel(arg2Json)
+                } else {
+                    arg2Json
+                }
                 // Pass large JSON strings safely via JSONObject.quote to prevent JS syntax injection.
                 val invocation = buildString {
                     append("globalThis.FuloosSmsEngine.")
@@ -70,7 +81,7 @@ class HeadlessSmsEngine(private val context: Context) {
                     append("(")
                     append(JSONObject.quote(arg1Json))
                     append(",")
-                    append(JSONObject.quote(arg2Json))
+                    append(JSONObject.quote(ctxJson))
                     append(");")
                 }
                 return isolate.evaluateJavaScriptAsync(invocation).await()
@@ -85,8 +96,15 @@ class HeadlessSmsEngine(private val context: Context) {
         }
     }
 
+    private fun withoutBaseModel(ctxJson: String): String = try {
+        JSONObject(ctxJson).apply { remove("baseModel") }.toString()
+    } catch (_: Exception) {
+        ctxJson
+    }
+
     companion object {
         private const val TAG = "HeadlessSmsEngine"
+        private const val BINDER_SAFE_CHARS = 400_000
         private const val ASSET_FILE = "fuloos-sms-engine.js"
     }
 }

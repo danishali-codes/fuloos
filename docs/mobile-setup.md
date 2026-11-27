@@ -78,7 +78,7 @@ Configure these under **GitHub → Settings → Secrets and variables → Action
 | `VITE_SUPABASE_URL` | Variable | Supabase project URL (with `VITE_BACKEND=supabase`). |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Variable | Supabase publishable (anon) key. `VITE_SUPABASE_ANON_KEY` also works. |
 | `VITE_POCKETBASE_URL` | Variable (or Secret) | Your live PocketBase URL baked into release APKs when not using Supabase. Without a backend, the APK runs in local demo mode. |
-| `VITE_LEDGER_MODEL_URL` | Variable (optional) | URL for the optional on-device ML model bundle. |
+| `VITE_LEDGER_MODEL_URL` | Variable (optional) | URL of the hashed Ledger categorisation model; see [Turning on the Ledger model](ledger-model-setup.md). |
 | `VITE_VAPID_PUBLIC_KEY` | Variable (optional) | Public VAPID key for Web Push notifications. |
 | `ANDROID_KEYSTORE_BASE64` | Secret (optional) | Base64-encoded `.jks` keystore (`base64 -w0 fuloos-release.jks`) so release APKs are signed consistently and upgrade in-place without uninstalling. |
 | `ANDROID_KEYSTORE_PASSWORD` | Secret (optional) | Keystore password. |

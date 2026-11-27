@@ -5,6 +5,8 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 import { transactionKey } from "../src/csv.ts";
 import { demoLedger } from "../src/demo.ts";
+import { CANONICAL } from "../src/ledger/categoriser.ts";
+import { hashModel, loadModel, type PlainModel } from "../src/ledger/model.ts";
 import type { CapturedAlert, TransactionRule } from "../src/domain.ts";
 import {
   createDefaultSmsLink,
@@ -20,6 +22,8 @@ import {
   collectExistingDedupeKeys,
   groupBackfillForReview,
   processSingleSms,
+  joinEngineContextJson,
+  splitEngineContext,
   sha256Hex,
   type RawNativeSms,
   type SmsEngineContext,
@@ -783,3 +787,77 @@ test("smsPipeline: multi-currency golden tests (GBP+limit, EUR, INR, JPY, KWD, u
 });
 
 
+
+function tinyHashedModel() {
+  const char = [" zy", "zyl", "ylo", " qw", "qwe"];
+  const word = ["zylo", "qwert", "zylo qwert"];
+  const n = char.length + word.length + 1;
+  let seed = 11;
+  const rand = () =>
+    ((seed = (seed * 16807) % 2147483647) / 2147483647) * 2 - 1;
+  const plain: PlainModel = {
+    categories: [...CANONICAL],
+    classes: [...CANONICAL],
+    char: { analyzer: "char_wb", ngram: [2, 5], vocab: char, idf: char.map(() => 1.5) },
+    word: { analyzer: "word", ngram: [1, 2], vocab: word, idf: word.map(() => 2) },
+    amount: { mean: 4, scale: 1.5 },
+    coef: CANONICAL.map((c) =>
+      Array.from({ length: n }, (_, j) =>
+        c === "Entertainment" && j < n - 1 ? 6 : rand(),
+      ),
+    ),
+    intercept: CANONICAL.map(() => rand()),
+    calibration: null,
+    review_threshold: 0.6,
+  };
+  return loadModel(JSON.parse(JSON.stringify(hashModel(plain, 24, "test"))));
+}
+
+test("headless bundle uses the base model after the context crosses the JSON bridge", async () => {
+  const bundleCode = await readFile(
+    new URL(
+      "../android/app/src/main/assets/fuloos-sms-engine.js",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const sandbox: Record<string, unknown> = {};
+  sandbox.globalThis = sandbox;
+  runInNewContext(bundleCode, sandbox);
+  const engine = sandbox.FuloosSmsEngine as {
+    processSmsJson: (raw: string, ctx: string) => string;
+    processBatchJson: (rawList: string, ctx: string) => string;
+  };
+
+  const ledger = demoLedger();
+  const link = makeLink("link-model", ledger.accounts[0]!.id, ["ADCB"], {
+    card_last4: "4512",
+  });
+  const model = tinyHashedModel();
+  const ctx = buildTestContext([link], { baseModel: model });
+  const raw: RawNativeSms = {
+    id: "m1",
+    sender: "ADCB",
+    timestampMs: Date.UTC(2026, 10, 15, 11, 0, 0),
+    body: "AED 65.00 spent on your ADCB Card XX4512 at ZYLO QWERT, DUBAI on 15/11/2026.",
+  };
+  const inProcess = processSingleSms(raw, ctx);
+  assert.match(inProcess.decidedBy, /model/i, "the base model decides in-process");
+
+  // What Android hands the engine: the stored context with the stored model spliced back in.
+  const { contextJson, modelJson } = splitEngineContext(ctx);
+  assert.equal(contextJson.includes("baseModel"), false);
+  assert.ok(modelJson && !modelJson.includes("charIndex"));
+  const wire = joinEngineContextJson(contextJson, modelJson);
+  const single = JSON.parse(
+    engine.processSmsJson(JSON.stringify(raw), wire),
+  ) as typeof inProcess;
+  assert.equal(single.decidedBy, inProcess.decidedBy);
+  assert.equal(single.confidence, inProcess.confidence);
+  assert.deepEqual(single.topSuggestions, inProcess.topSuggestions);
+  const batch = JSON.parse(
+    engine.processBatchJson(JSON.stringify([raw]), wire),
+  ) as { decisions: (typeof inProcess)[] };
+  assert.equal(batch.decisions[0]!.decidedBy, inProcess.decidedBy);
+  assert.deepEqual(batch.decisions[0]!.topSuggestions, inProcess.topSuggestions);
+});

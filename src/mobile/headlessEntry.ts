@@ -10,8 +10,8 @@ import {
   buildCapturedAlertDraft,
   prepareEngineState,
   processSingleSms,
+  reviveEngineContext,
   type RawNativeSms,
-  type SmsEngineContext,
 } from "./smsPipeline.ts";
 
 export interface HeadlessBatchResult {
@@ -24,7 +24,7 @@ export interface HeadlessBatchResult {
 
 function processSmsJson(rawSmsJson: string, contextJson: string): string {
   const raw = JSON.parse(rawSmsJson) as RawNativeSms;
-  const ctx = JSON.parse(contextJson) as SmsEngineContext;
+  const ctx = reviveEngineContext(contextJson);
   const decision = processSingleSms(raw, ctx);
   const capturedAlertDraft =
     decision.action === "needs_review"
@@ -35,7 +35,7 @@ function processSmsJson(rawSmsJson: string, contextJson: string): string {
 
 function processBatchJson(rawListJson: string, contextJson: string): string {
   const list = JSON.parse(rawListJson) as RawNativeSms[];
-  const ctx = JSON.parse(contextJson) as SmsEngineContext;
+  const ctx = reviveEngineContext(contextJson);
   const prepared = prepareEngineState(ctx);
   const decisions = list.map((raw) => {
     const decision = processSingleSms(raw, ctx, prepared);
